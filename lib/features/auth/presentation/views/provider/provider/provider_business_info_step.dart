@@ -289,7 +289,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
         ),
         SizeConfig.v(6),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           items: items
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),

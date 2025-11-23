@@ -28,7 +28,7 @@ class RatingFilter extends StatelessWidget {
         Text('التقييم الأدنى', style: TextStyle(fontSize: SizeConfig.ts(14), color: AppColors.textSecondary)),
         SizeConfig.v(8),
         DropdownButtonFormField<double>(
-          value: selectedRating,
+          initialValue: selectedRating,
           decoration: InputDecoration(
             contentPadding: SizeConfig.padding(horizontal: 16, vertical: 16),
             filled: true,

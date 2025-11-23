@@ -86,7 +86,7 @@ class _BrowseRequestRowState extends State<BrowseRequestRow> {
         SizeConfig.v(8),
         // المحافظة
         DropdownButtonFormField<String>(
-          value: _selectedGovernorate,
+          initialValue: _selectedGovernorate,
           hint: Text('اختر المحافظة', style: TextStyle(fontSize: SizeConfig.ts(14), color: AppColors.textSecondary)),
           items: _governorates.map((gov) => DropdownMenuItem(value: gov, child: Text(gov))).toList(),
           onChanged: (value) {

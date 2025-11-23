@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 /// نموذج طلب خدمة واحد (جاية من المستخدم)
 class ServiceRequest {

@@ -31,7 +31,7 @@ class CategoryFilter extends StatelessWidget {
         Text('الفئة', style: TextStyle(fontSize: SizeConfig.ts(14), color: AppColors.textSecondary)),
         SizeConfig.v(8),
         DropdownButtonFormField<String>(
-          value: selectedCategory,
+          initialValue: selectedCategory,
           decoration: InputDecoration(
             contentPadding: SizeConfig.padding(horizontal: 16, vertical: 16),
             filled: true,
