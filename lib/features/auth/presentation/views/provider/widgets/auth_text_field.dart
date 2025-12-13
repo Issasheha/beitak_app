@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class AuthTextField extends StatelessWidget {
@@ -38,20 +39,26 @@ class AuthTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hintColor = customHintColor ?? (onDarkBackground ? Colors.black87 : AppColors.textSecondary);
-    final textColor = customTextColor ?? (onDarkBackground ? AppColors.white : AppColors.textPrimary);
-    final iconColor = customIconColor ?? (onDarkBackground ? Colors.black87 : AppColors.primaryGreen);
-    final fillColor = customFillColor ?? (onDarkBackground ? Colors.white.withValues(alpha: 0.18): AppColors.background);
+    final hintColor =
+        customHintColor ?? (onDarkBackground ? Colors.black87 : AppColors.textSecondary);
+    final textColor =
+        customTextColor ?? (onDarkBackground ? AppColors.white : AppColors.textPrimary);
+    final iconColor =
+        customIconColor ?? (onDarkBackground ? Colors.black87 : AppColors.primaryGreen);
+    final fillColor =
+        customFillColor ?? (onDarkBackground ? Colors.white.withValues(alpha: 0.18) : AppColors.background);
+
+    final labelColor = customLabelColor ?? AppColors.textPrimary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: AppColors.textPrimary,
+          style: AppTextStyles.body14.copyWith(
+            color: labelColor,
             fontSize: SizeConfig.ts(14),
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w500, // نفس السابق
           ),
         ),
         SizeConfig.v(6),
@@ -60,15 +67,17 @@ class AuthTextField extends StatelessWidget {
           keyboardType: keyboardType,
           obscureText: obscureText,
           validator: validator,
-          style: TextStyle(
+          style: AppTextStyles.body14.copyWith(
             color: textColor,
             fontSize: SizeConfig.ts(14),
+            fontWeight: FontWeight.w400, // Regular افتراضي للنص
           ),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(
+            hintStyle: AppTextStyles.body14.copyWith(
               color: hintColor,
               fontSize: SizeConfig.ts(13),
+              fontWeight: FontWeight.w400,
             ),
             filled: true,
             fillColor: fillColor,

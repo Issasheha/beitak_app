@@ -7,7 +7,7 @@ import '../entities/auth_session_entity.dart';
 abstract class AuthRepository {
   /// تسجيل الدخول باستخدام إيميل أو رقم هاتف + كلمة سر.
   ///
-  /// - [identifier]: إيميل أو رقم هاتف (نفس الفكرة اللي عندك في LoginViewModel حالياً)
+  /// - [identifier]: إيميل أو رقم هاتف
   /// - [password]: كلمة المرور
   ///
   /// يرجع [AuthSessionEntity] تحتوي على:
@@ -17,6 +17,33 @@ abstract class AuthRepository {
   Future<AuthSessionEntity> loginWithIdentifier({
     required String identifier,
     required String password,
+  });
+
+  /// إنشاء حساب جديد (تسجيل جديد).
+  ///
+  /// يطابق الـ backend:
+  /// POST /api/auth/signup
+  ///
+  /// body:
+  /// {
+  ///   "first_name": "...",
+  ///   "last_name": "...",
+  ///   "phone": "...",
+  ///   "email": "...",
+  ///   "password": "...",
+  ///   "role": "customer" | "provider",
+  ///   "city_id": 1,
+  ///   "area_id": 1
+  /// }
+  Future<AuthSessionEntity> signup({
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String email,
+    required String password,
+    required int cityId,
+    required int areaId,
+    String role = 'customer',
   });
 
   /// إرسال كود إعادة تعيين كلمة السر إلى رقم هاتف (أو لاحقًا إيميل).

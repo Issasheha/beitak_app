@@ -1,20 +1,33 @@
+import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/profile/viewmodels/provider_profile_viewmodel.dart';
-import 'package:flutter/material.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/viewmodels/provider_profile_state.dart';
 
 class ProviderProfileHeaderCard extends StatelessWidget {
-  final ProviderProfileViewModel viewModel;
+  final ProviderProfileState state;
 
   const ProviderProfileHeaderCard({
     super.key,
-    required this.viewModel,
+    required this.state,
   });
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return '';
+    if (parts.length == 1) {
+      final s = parts.first;
+      return s.length >= 2 ? s.substring(0, 2).toUpperCase() : s.toUpperCase();
+    }
+    final a = parts[0].isNotEmpty ? parts[0][0] : '';
+    final b = parts[1].isNotEmpty ? parts[1][0] : '';
+    return ('$a$b').toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: SizeConfig.padding(all: 20),
+      padding: SizeConfig.padding(all: 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
@@ -25,103 +38,64 @@ class ProviderProfileHeaderCard extends StatelessWidget {
             offset: const Offset(0, 8),
           ),
         ],
+        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.4)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: SizeConfig.w(32),
-                backgroundColor: AppColors.lightGreen.withValues(alpha: 0.9),
-                child: Text(
-                  viewModel.initials,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: SizeConfig.ts(20),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+          CircleAvatar(
+            radius: SizeConfig.w(32),
+            backgroundColor: AppColors.lightGreen.withValues(alpha: 0.95),
+            child: Text(
+              _initials(state.displayName),
+              style: AppTextStyles.title18.copyWith(
+                fontSize: SizeConfig.ts(18),
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
               ),
-              SizeConfig.hSpace(16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      viewModel.businessName,
-                      style: TextStyle(
-                        fontSize: SizeConfig.ts(18),
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    SizeConfig.v(4),
-                    Text(
-                      viewModel.memberSinceLabel,
-                      style: TextStyle(
-                        fontSize: SizeConfig.ts(13),
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    SizeConfig.v(8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.lightGreen,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.star,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            viewModel.rating.toStringAsFixed(1),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: SizeConfig.ts(13),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '• ${viewModel.reviewsCount} تقييم',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: SizeConfig.ts(12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-          SizeConfig.v(16),
+          SizeConfig.v(10),
+          Text(
+            state.displayName,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body14.copyWith(
+              fontSize: SizeConfig.ts(16),
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizeConfig.v(4),
+          Text(
+            state.categoryLabel,
+            style: AppTextStyles.label12.copyWith(
+              fontSize: SizeConfig.ts(12.5),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizeConfig.v(6),
+          Text(
+            state.memberSinceLabel,
+            style: AppTextStyles.label12.copyWith(
+              fontSize: SizeConfig.ts(12),
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizeConfig.v(14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _HeaderStat(
-                label: 'الحجوزات',
-                value: viewModel.totalBookings.toString(),
+              _Stat(
+                value: state.completedBookings.toString(),
+                label: 'مكتملة',
               ),
-              _HeaderStat(
-                label: 'معدل الاستجابة',
-                value: '${viewModel.responseRate}٪',
+              _Stat(
+                value: state.rating.toStringAsFixed(1),
+                label: 'التقييم',
               ),
-              _HeaderStat(
-                label: 'متوسط الرد',
-                value: viewModel.avgResponseTimeLabel,
+              _Stat(
+                value: state.totalBookings.toString(),
+                label: 'إجمالي الحجوزات',
               ),
             ],
           ),
@@ -131,33 +105,30 @@ class ProviderProfileHeaderCard extends StatelessWidget {
   }
 }
 
-class _HeaderStat extends StatelessWidget {
-  final String label;
+class _Stat extends StatelessWidget {
   final String value;
+  final String label;
 
-  const _HeaderStat({
-    required this.label,
-    required this.value,
-  });
+  const _Stat({required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           value,
-          style: TextStyle(
+          style: AppTextStyles.title18.copyWith(
             fontSize: SizeConfig.ts(16),
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w900,
             color: AppColors.textPrimary,
           ),
         ),
-        SizeConfig.v(2),
+        SizeConfig.v(4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: SizeConfig.ts(12),
+          style: AppTextStyles.caption11.copyWith(
+            fontSize: SizeConfig.ts(11.5),
             color: AppColors.textSecondary,
           ),
         ),

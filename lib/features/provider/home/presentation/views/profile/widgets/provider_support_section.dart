@@ -1,53 +1,44 @@
-import 'package:beitak_app/core/constants/colors.dart';
-import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/profile_action_item.dart';
 import 'package:flutter/material.dart';
+import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/profile_action_item.dart';
 import 'package:go_router/go_router.dart';
 
 class ProviderSupportSection extends StatelessWidget {
   const ProviderSupportSection({super.key});
 
+  void _soon(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('قريبًا')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // تغيير كلمة المرور (تفتح نفس ChangePasswordView الموجودة عندك)
         ProfileActionItem(
-          label: 'تغيير كلمة المرور',
-          icon: Icons.lock_outline,
-          onTap: () => context.push(AppRoutes.changePassword),
+          label: 'إعدادات الحساب',
+          icon: Icons.settings_outlined,
+          onTap: () => context.push(AppRoutes.provideraccountSettings),
         ),
-        SizeConfig.v(12),
-
-        // مركز المساعدة
+        SizeConfig.v(6),
         ProfileActionItem(
-          label: 'مركز المساعدة',
+          label: 'الشروط والأحكام',
+          icon: Icons.description_outlined,
+          onTap: () => context.push(AppRoutes.providerTerms),
+        ),
+        SizeConfig.v(6),
+        ProfileActionItem(
+          label: 'المساعدة والدعم',
           icon: Icons.help_outline,
-          onTap: () => context.push(AppRoutes.helpCenter),
+          onTap: () => context.push(AppRoutes.providerHelpCenter),
         ),
-        SizeConfig.v(12),
-
-        // تسجيل الخروج
+        SizeConfig.v(6),
         ProfileActionItem(
-          label: 'تسجيل الخروج',
-          icon: Icons.logout,
-          color: AppColors.error,
-          onTap: () {
-            // TODO: هنا لاحقاً تضيف منطق تسجيل الخروج (مسح SharedPreferences مثلاً)
-            context.go(AppRoutes.login);
-          },
-        ),
-        SizeConfig.v(12),
-
-        // حذف الحساب
-        ProfileActionItem(
-          label: 'حذف الحساب',
-          icon: Icons.delete_forever,
-          color: AppColors.error,
-          onTap: () {
-            // TODO: فتح Dialog تأكيد وحذف الحساب من الـ backend
-          },
+          label: 'السجل',
+          icon: Icons.history,
+          onTap: () => context.push(AppRoutes.providerHistory),
         ),
       ],
     );

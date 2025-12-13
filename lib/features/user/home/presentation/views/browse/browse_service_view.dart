@@ -1,96 +1,108 @@
+// lib/features/user/home/presentation/views/browse/browse_service_view.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:beitak_app/features/user/home/domain/entities/service_entity.dart';
-import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/models/browse_filters_result.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/service_details_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_providers.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_state.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/widgets/filter_bottom_sheet.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/widgets/service_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class BrowseServiceView extends StatefulWidget {
-  const BrowseServiceView({super.key});
+class BrowseServiceView extends ConsumerStatefulWidget {
+  const BrowseServiceView({
+    super.key,
+    this.initialSearch,
+    this.initialCityId,
+    this.initialAreaId,
+    this.initialCategoryId, // legacy (ignored safely)
+  });
+
+  final String? initialSearch;
+  final int? initialCityId;
+  final int? initialAreaId;
+  final int? initialCategoryId;
 
   @override
-  State<BrowseServiceView> createState() => _BrowseServiceViewState();
+  ConsumerState<BrowseServiceView> createState() => _BrowseServiceViewState();
 }
 
-class _BrowseServiceViewState extends State<BrowseServiceView> {
-  late final BrowseServicesViewModel _viewModel;
-
-  bool _isLoading = false;
-  String? _errorMessage;
-
-  List<ServiceEntity> _services = [];
-  List<ServiceEntity> _filteredServices = [];
-
-  // نفس شكل الفلاتر السابق عشان تبقى متوافقة مع FilterBottomSheet
-  Map<String, dynamic> _filters = {
-    'category': 'الكل',
-    'minPrice': 0.0,
-    'maxPrice': 150.0,
-    'minRating': 0.0,
-  };
+class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
+  late final ScrollController _scrollController;
+  late final TextEditingController _searchController;
+  late final BrowseArgs _args;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = BrowseServicesViewModel();
-    _loadInitial();
-  }
 
-  Future<void> _loadInitial() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    _args = BrowseArgs(
+      initialSearch: widget.initialSearch,
+      initialCityId: widget.initialCityId,
+      initialAreaId: widget.initialAreaId,
+    );
 
-    await _viewModel.loadInitial();
+    _scrollController = ScrollController()..addListener(_onScroll);
+    _searchController = TextEditingController(text: widget.initialSearch ?? '');
 
-    setState(() {
-      _isLoading = false;
-      _errorMessage = _viewModel.errorMessage;
-      _services = List<ServiceEntity>.from(_viewModel.services);
-      _filteredServices = List<ServiceEntity>.from(_services);
+    // bootstrap once
+    Future.microtask(() {
+      ref.read(browseControllerProvider(_args).notifier).bootstrap();
     });
   }
 
-  void _applyFilters(Map<String, dynamic> newFilters) {
-    setState(() {
-      _filters = newFilters;
-
-      _filteredServices = _services.where((service) {
-        final categoryOk = newFilters['category'] == 'الكل' ||
-            (service.categoryName ?? '') == newFilters['category'];
-
-        final servicePrice =
-            service.minPrice ?? service.maxPrice ?? 0.0; // قيمة تقريبية
-        final priceOk = servicePrice >= (newFilters['minPrice'] as double) &&
-            servicePrice <= (newFilters['maxPrice'] as double);
-
-        final ratingOk =
-            (service.rating ?? 0.0) >= (newFilters['minRating'] as double);
-
-        return categoryOk && priceOk && ratingOk;
-      }).toList();
-    });
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
-  void _showFilterSheet() {
-    showModalBottomSheet(
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 220) {
+      ref.read(browseControllerProvider(_args).notifier).loadMore();
+    }
+  }
+
+  Future<void> _onRefresh() async {
+    await ref.read(browseControllerProvider(_args).notifier).refresh();
+  }
+
+  void _openFilters(BrowseState state) async {
+    final result = await showModalBottomSheet<BrowseFiltersResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => FilterBottomSheet(
-        currentFilters: _filters,
-        onApply: _applyFilters,
+        initialCategoryKey: state.categoryKey,
+        initialMinPrice: state.minPrice,
+        initialMaxPrice: state.maxPrice,
+        initialMinRating: state.minRating,
       ),
     );
+
+    if (result == null) return;
+
+    ref.read(browseControllerProvider(_args).notifier).applyFilters(
+          categoryKey: result.categoryKey,
+          minPrice: result.minPrice,
+          maxPrice: result.maxPrice,
+          minRating: result.minRating,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
+
+    final state = ref.watch(browseControllerProvider(_args));
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -99,105 +111,281 @@ class _BrowseServiceViewState extends State<BrowseServiceView> {
         appBar: AppBar(
           backgroundColor: AppColors.background,
           elevation: 0,
+          leadingWidth: 44,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new),
-            onPressed: () => context.go(AppRoutes.home),
-          ),
-          title: Text(
-            'جميع الخدمات',
-            style: TextStyle(
-              fontSize: SizeConfig.ts(20),
-              fontWeight: FontWeight.bold,
+            icon: const Icon(
+              Icons.arrow_back_ios_new,
               color: AppColors.textPrimary,
+              size: 20,
             ),
+            onPressed: () => context.pop(),
           ),
           centerTitle: true,
+          title: Text(
+            'الخدمات',
+            style: AppTextStyles.screenTitle.copyWith(
+              fontSize: SizeConfig.ts(18),
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.filter_list),
-              onPressed: _showFilterSheet,
+              onPressed: () => _openFilters(state),
+              icon: const Icon(Icons.tune, color: AppColors.textPrimary),
+              tooltip: 'فلترة',
             ),
           ],
         ),
         body: Padding(
-          padding: SizeConfig.padding(horizontal: 16, top: 8),
-          child: _buildBody(),
+          padding: SizeConfig.padding(horizontal: 16, top: 10),
+          child: Column(
+            children: [
+              _SearchBar(
+                controller: _searchController,
+                onSubmitted: (v) {
+                  ref
+                      .read(browseControllerProvider(_args).notifier)
+                      .submitSearch(v);
+                },
+                onClear: () {
+                  _searchController.clear();
+                  ref
+                      .read(browseControllerProvider(_args).notifier)
+                      .clearSearch();
+                },
+              ),
+              SizedBox(height: SizeConfig.h(10)),
+              Expanded(child: _buildBody(state)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+  Widget _buildBody(BrowseState state) {
+    if (state.isLoading) return const _GridSkeleton();
+
+    if (state.errorMessage != null) {
+      return _ErrorState(
+        message: state.errorMessage!,
+        onRetry: () => ref
+            .read(browseControllerProvider(_args).notifier)
+            .loadInitial(),
+      );
     }
 
-    if (_errorMessage != null) {
-      return Center(
+    if (state.visible.isEmpty) {
+      return const _EmptyState();
+    }
+
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: AppColors.lightGreen,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return GridView.builder(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: EdgeInsets.only(bottom: SizeConfig.h(16)),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: SizeConfig.w(185),
+              mainAxisExtent: SizeConfig.h(168),
+              crossAxisSpacing: SizeConfig.w(14),
+              mainAxisSpacing: SizeConfig.h(14),
+            ),
+            itemCount: state.visible.length + (state.isLoadingMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index >= state.visible.length) {
+                return const Center(
+                  child: CircularProgressIndicator(color: AppColors.lightGreen),
+                );
+              }
+
+              final s = state.visible[index];
+
+              final serviceMap = {
+                'id': s.id,
+                'title': s.title,
+                'provider':
+                    s.providerName.isNotEmpty ? s.providerName : 'مزود خدمة',
+                'rating': s.rating,
+                'price': s.price,
+              };
+
+              return ServiceCard(
+                service: serviceMap,
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ServiceDetailsView(
+                        serviceId: s.id,
+                        lockedCityId: widget.initialCityId,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SearchBar extends StatelessWidget {
+  const _SearchBar({
+    required this.controller,
+    required this.onSubmitted,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: controller,
+      builder: (_, __, ___) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(18),
+            border:
+                Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+          ),
+          child: TextField(
+            controller: controller,
+            textInputAction: TextInputAction.search,
+            onSubmitted: onSubmitted,
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textPrimary,
+            ),
+            decoration: InputDecoration(
+              hintText: 'ابحث عن خدمة…',
+              hintStyle: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
+              prefixIcon:
+                  const Icon(Icons.search, color: AppColors.textSecondary),
+              suffixIcon: controller.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.close,
+                          color: AppColors.textSecondary),
+                      onPressed: onClear,
+                    ),
+              filled: true,
+              fillColor: Colors.transparent,
+              border: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GridSkeleton extends StatelessWidget {
+  const _GridSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: EdgeInsets.only(bottom: SizeConfig.h(16)),
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: SizeConfig.w(185),
+        mainAxisExtent: SizeConfig.h(168),
+        crossAxisSpacing: SizeConfig.w(14),
+        mainAxisSpacing: SizeConfig.h(14),
+      ),
+      itemCount: 8,
+      itemBuilder: (_, __) {
+        return Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(18),
+            border:
+                Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        'لا توجد خدمات مطابقة',
+        style: AppTextStyles.semiBold.copyWith(
+          color: AppColors.textSecondary,
+          fontSize: SizeConfig.ts(15),
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Icon(Icons.error_outline,
+                color: Colors.redAccent, size: SizeConfig.ts(34)),
+            const SizedBox(height: 10),
             Text(
-              _errorMessage!,
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: AppTextStyles.semiBold.copyWith(
                 color: AppColors.textSecondary,
-                fontSize: SizeConfig.ts(16),
+                fontSize: SizeConfig.ts(14),
+                fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: SizeConfig.h(12)),
+            const SizedBox(height: 14),
             ElevatedButton(
-              onPressed: _loadInitial,
+              onPressed: onRetry,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.buttonBackground,
+                backgroundColor: AppColors.lightGreen,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               ),
-              child: const Text('إعادة المحاولة'),
+              child: Text(
+                'إعادة المحاولة',
+                style: AppTextStyles.semiBold.copyWith(
+                  color: Colors.white,
+                ),
+              ),
             ),
           ],
         ),
-      );
-    }
-
-    if (_filteredServices.isEmpty) {
-      return Center(
-        child: Text(
-          'لا توجد خدمات مطابقة للبحث الحالي.',
-          style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: SizeConfig.ts(16),
-          ),
-          textAlign: TextAlign.center,
-        ),
-      );
-    }
-
-    return GridView.builder(
-      physics: const BouncingScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.68,
-        crossAxisSpacing: SizeConfig.w(16),
-        mainAxisSpacing: SizeConfig.h(20),
       ),
-      itemCount: _filteredServices.length,
-      itemBuilder: (context, index) {
-        final service = _filteredServices[index];
-
-        // 👇 نرجّع Map بالـ keys التي يتوقعها ServiceCard
-        final double priceValue =
-            service.minPrice ?? service.maxPrice ?? 0.0;
-        final double ratingValue = service.rating ?? 0.0;
-
-        final serviceMap = {
-          'title': service.title,
-          'provider': service.categoryName ?? 'مزود خدمة',
-          'rating': ratingValue,
-          'price': priceValue,
-          'imageUrl': service.imageUrl ?? '',
-        };
-
-        return ServiceCard(service: serviceMap);
-      },
     );
   }
 }

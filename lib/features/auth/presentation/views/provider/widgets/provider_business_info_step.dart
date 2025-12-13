@@ -1,12 +1,32 @@
+// lib/features/auth/presentation/views/provider/widgets/provider_business_info_step.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/widgets/auth_text_field.dart';
 import 'package:flutter/material.dart';
 
 class ProviderBusinessInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
-  const ProviderBusinessInfoStep({super.key, required this.formKey});
+  final TextEditingController businessNameController;
+  final TextEditingController experienceYearsController;
+  final TextEditingController hourlyRateController;
+  final TextEditingController descriptionController;
+
+  final ValueChanged<Set<String>> onLanguagesChanged;
+  final ValueChanged<Set<String>> onServiceAreasChanged;
+
+  const ProviderBusinessInfoStep({
+    super.key,
+    required this.formKey,
+    required this.businessNameController,
+    required this.experienceYearsController,
+    required this.hourlyRateController,
+    required this.descriptionController,
+    required this.onLanguagesChanged,
+    required this.onServiceAreasChanged,
+  });
 
   @override
   State<ProviderBusinessInfoStep> createState() =>
@@ -49,6 +69,15 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
   final Set<String> _selectedServiceAreas = {};
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onLanguagesChanged(_selectedLanguages);
+      widget.onServiceAreasChanged(_selectedServiceAreas);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Form(
       key: widget.formKey,
@@ -57,27 +86,29 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
         children: [
           Text(
             'معلومات العمل',
-            style: TextStyle(
+            style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700, // كان bold
               color: AppColors.textPrimary,
             ),
           ),
           SizeConfig.v(4),
           Text(
             'أخبرنا عن عملك والخدمات التي تقدمها.',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
           ),
           SizeConfig.v(16),
 
           // اسم العمل
-          const AuthTextField(
+          AuthTextField(
             label: 'اسم العمل *',
             hint: 'اسم شركتك أو عملك',
             icon: Icons.business_center_outlined,
+            controller: widget.businessNameController,
             validator: _requiredValidator,
             onDarkBackground: false,
           ),
@@ -86,11 +117,11 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           // فئة الخدمة
           _buildDropdown(
             label: 'فئة الخدمة *',
-            hint: 'اختر فئة الخدمة',
+            hint: 'اختر فئة الخدمة (اختياري حالياً)',
             value: _selectedCategory,
             items: _serviceCategories,
             onChanged: (v) => setState(() => _selectedCategory = v),
-            validator: (v) => v == null ? 'فئة الخدمة مطلوبة' : null,
+            validator: (_) => null,
           ),
           SizeConfig.v(16),
 
@@ -100,6 +131,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             hint: 'مثال: 5',
             icon: Icons.timer_outlined,
             keyboardType: TextInputType.number,
+            controller: widget.experienceYearsController,
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'سنوات الخبرة مطلوبة';
@@ -120,6 +152,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             hint: 'مثال: 15',
             icon: Icons.monetization_on_outlined,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            controller: widget.hourlyRateController,
             validator: (value) {
               if (value == null || value.isEmpty) {
                 return 'السعر بالساعة مطلوب';
@@ -137,7 +170,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           // اللغات
           Text(
             'اللغات المتقنة *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -150,7 +183,14 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             children: _languages.map((lang) {
               final selected = _selectedLanguages.contains(lang);
               return FilterChip(
-                label: Text(lang),
+                label: Text(
+                  lang,
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: SizeConfig.ts(13),
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 selected: selected,
                 onSelected: (v) {
                   setState(() {
@@ -159,13 +199,13 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                     } else if (_selectedLanguages.length > 1) {
                       _selectedLanguages.remove(lang);
                     }
+                    widget.onLanguagesChanged(_selectedLanguages);
                   });
                 },
               );
             }).toList(),
           ),
           SizeConfig.v(4),
-          // validator للّغات
           TextFormField(
             validator: (_) {
               if (_selectedLanguages.isEmpty) {
@@ -184,7 +224,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           // مناطق الخدمة
           Text(
             'مناطق الخدمة *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -197,7 +237,14 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             children: _governorates.map((gov) {
               final selected = _selectedServiceAreas.contains(gov);
               return FilterChip(
-                label: Text(gov),
+                label: Text(
+                  gov,
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: SizeConfig.ts(13),
+                    fontWeight: FontWeight.w400,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 selected: selected,
                 onSelected: (v) {
                   setState(() {
@@ -206,6 +253,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                     } else {
                       _selectedServiceAreas.remove(gov);
                     }
+                    widget.onServiceAreasChanged(_selectedServiceAreas);
                   });
                 },
               );
@@ -230,7 +278,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           // وصف العمل
           Text(
             'وصف العمل *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -238,12 +286,14 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           ),
           SizeConfig.v(8),
           TextFormField(
+            controller: widget.descriptionController,
             maxLines: 4,
             decoration: InputDecoration(
               hintText: 'صف خدماتك وطريقة عملك بإيجاز.',
-              hintStyle: TextStyle(
+              hintStyle: AppTextStyles.body14.copyWith(
                 fontSize: SizeConfig.ts(13),
                 color: AppColors.textSecondary,
+                fontWeight: FontWeight.w400,
               ),
               filled: true,
               fillColor: AppColors.background,
@@ -281,7 +331,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(14),
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary,
@@ -289,17 +339,28 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
         ),
         SizeConfig.v(6),
         DropdownButtonFormField<String>(
-          initialValue: value,
+          value: value,
           items: items
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .map((e) => DropdownMenuItem(
+                    value: e,
+                    child: Text(
+                      e,
+                      style: AppTextStyles.body14.copyWith(
+                        fontSize: SizeConfig.ts(13.5),
+                        fontWeight: FontWeight.w400,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ))
               .toList(),
           onChanged: onChanged,
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(
+            hintStyle: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
             filled: true,
             fillColor: AppColors.background,

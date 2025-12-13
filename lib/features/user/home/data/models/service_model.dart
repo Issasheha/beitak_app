@@ -35,32 +35,80 @@ class ServiceModel {
   });
 
   factory ServiceModel.fromJson(Map<String, dynamic> json) {
-    // نحاول نقرأ أكثر من شكل متوقّع من الـ backend (مرن قدر الإمكان)
+    // id
     final rawId = json['id'] ?? json['service_id'];
-    final rawTitle = json['title'] ?? json['name'] ?? json['title_ar'];
-    final rawDescription =
-        json['description'] ?? json['details'] ?? json['description_ar'];
 
-    // صور ممكن تكون image / image_url / thumbnail
+    // العنوان والوصف (نفضّل الـ localized لو موجود)
+    final rawTitle = json['name_localized'] ??
+        json['title'] ??
+        json['name'] ??
+        json['name_ar'] ??
+        json['title_ar'];
+
+    final rawDescription = json['description_localized'] ??
+        json['description'] ??
+        json['details'] ??
+        json['description_ar'];
+
+    // 🔹 الصور:
+    // أولاً: image / image_url / thumbnail / icon
     final rawImage =
         json['image_url'] ?? json['image'] ?? json['thumbnail'] ?? json['icon'];
 
-    // موقع
+    String? imageUrl;
+    if (rawImage != null && rawImage.toString().isNotEmpty) {
+      imageUrl = rawImage.toString();
+    } else {
+      // ثانياً: لو في مصفوفة images: [url1, url2, ...]
+      final images = json['images'];
+      if (images is List && images.isNotEmpty) {
+        imageUrl = images.first.toString();
+      }
+    }
+
+    // 🔹 الموقع
     final city = json['city_name'] ?? json['city'];
     final area = json['area_name'] ?? json['area'];
 
-    // أسعار
-    final minPrice = _toDouble(json['min_price'] ?? json['price_min']);
-    final maxPrice = _toDouble(json['max_price'] ?? json['price_max']);
+    // 🔹 الأسعار
+    double? minPrice = _toDouble(json['min_price'] ?? json['price_min']);
+    double? maxPrice = _toDouble(json['max_price'] ?? json['price_max']);
 
-    // تقييم
-    final rating = _toDouble(json['rating'] ?? json['avg_rating']);
-    final ratingCount = (json['rating_count'] ?? json['reviews_count']) as int?;
+    // بعض الـ APIs ترجع سعر واحد: base_price / hourly_rate / starting_price
+    final basePrice = _toDouble(
+      json['base_price'] ?? json['starting_price'] ?? json['hourly_rate'],
+    );
 
-    // Category ممكن تجي كـ object أو كـ اسم/معرّف مفصول
+    // لو ما في min/max نستخدم basePrice كقيمة وحيدة
+    minPrice ??= basePrice;
+    maxPrice ??= basePrice;
+
+    // 🔹 التقييم
+    final provider = json['provider'];
+
+    double? rating = _toDouble(
+      json['rating'] ??
+          json['avg_rating'] ??
+          json['rating_avg'] ??
+          (provider is Map<String, dynamic> ? provider['rating_avg'] : null),
+    );
+
+    int? ratingCount;
+    final rawRatingCount = json['rating_count'] ??
+        json['reviews_count'] ??
+        (provider is Map<String, dynamic> ? provider['rating_count'] : null);
+
+    if (rawRatingCount is num) {
+      ratingCount = rawRatingCount.toInt();
+    } else if (rawRatingCount != null) {
+      ratingCount = int.tryParse(rawRatingCount.toString());
+    }
+
+    // 🔹 الـ Category: ممكن تجي object أو حقول منفصلة
     CategoryModel? category;
     if (json['category'] is Map<String, dynamic>) {
-      category = CategoryModel.fromJson(json['category'] as Map<String, dynamic>);
+      category =
+          CategoryModel.fromJson(json['category'] as Map<String, dynamic>);
     } else if (json['category_id'] != null || json['category_name'] != null) {
       category = CategoryModel(
         id: (json['category_id'] as num?)?.toInt() ?? 0,
@@ -81,7 +129,7 @@ class ServiceModel {
       id: (rawId as num?)?.toInt() ?? 0,
       title: (rawTitle ?? '').toString(),
       description: rawDescription?.toString(),
-      imageUrl: rawImage?.toString(),
+      imageUrl: imageUrl,
       category: category,
       cityName: city?.toString(),
       areaName: area?.toString(),
@@ -92,30 +140,15 @@ class ServiceModel {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'description': description,
-      'image_url': imageUrl,
-      'category': category?.toJson(),
-      'city_name': cityName,
-      'area_name': areaName,
-      'min_price': minPrice,
-      'max_price': maxPrice,
-      'rating': rating,
-      'rating_count': ratingCount,
-    };
-  }
-
+  /// تحويل الـ Model إلى Entity تستخدمه الـ Domain / UI
   ServiceEntity toEntity() {
     return ServiceEntity(
       id: id,
       title: title,
       description: description,
       imageUrl: imageUrl,
-      categoryId: category?.id,
       categoryName: category?.displayName,
+      categoryId: category?.id,
       cityName: cityName,
       areaName: areaName,
       minPrice: minPrice,

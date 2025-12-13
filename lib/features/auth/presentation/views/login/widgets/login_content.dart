@@ -1,4 +1,5 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/continue_as_guest_button.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/email_password_section.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/login_header.dart';
@@ -68,15 +69,19 @@ class _LoginContentState extends State<LoginContent> {
         slivers: [
           SliverSafeArea(
             sliver: SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: _padding)
-                  .copyWith(top: _sectionGap, bottom: mediaQuery.viewInsets.bottom + _gap),
+              padding: const EdgeInsets.symmetric(horizontal: _padding).copyWith(
+                top: _sectionGap,
+                bottom: mediaQuery.viewInsets.bottom + _gap,
+              ),
               sliver: SliverList.list(children: [
                 // 1. Header
                 LoginHeader(fontScale: scale),
                 const SizedBox(height: _gap),
+
                 // 3. Description
                 _DescriptionText(scale: scale),
                 const SizedBox(height: _sectionGap),
+
                 // 4. Input Section (Animated)
                 EmailPasswordSection(
                   key: const ValueKey('email'),
@@ -89,6 +94,7 @@ class _LoginContentState extends State<LoginContent> {
                   onPasswordSubmitted: widget.onMainActionPressed, // إرسال النموذج عند Enter في كلمة المرور
                 ),
                 const SizedBox(height: _sectionGap),
+
                 // 5. Main Action Button
                 SendCodeButton(
                   onPressed: widget.isLoading ? null : widget.onMainActionPressed,
@@ -96,6 +102,7 @@ class _LoginContentState extends State<LoginContent> {
                   isLoading: widget.isLoading,
                 ),
                 const SizedBox(height: _gap),
+
                 // 6. Continue as Guest
                 ContinueAsGuestButton(
                   onPressed: widget.isLoading ? null : widget.onContinueAsGuest,
@@ -113,17 +120,18 @@ class _LoginContentState extends State<LoginContent> {
 class _DescriptionText extends StatelessWidget {
   final double scale;
   const _DescriptionText({required this.scale});
+
   @override
   Widget build(BuildContext context) {
     return Text(
       'سجل دخولك باستخدام البريد الإلكتروني أو رقم الهاتف وكلمة المرور',
       textAlign: TextAlign.center,
-      style: TextStyle(
+      style: AppTextStyles.body14.copyWith(
         color: AppColors.textSecondary,
-        fontSize: 15 * scale,
+        fontSize: 15 * scale, // نفس الحجم اللي كان موجود
         height: 1.5,
         letterSpacing: 0.2,
-        fontWeight: FontWeight.bold
+        fontWeight: FontWeight.w700, // كان Bold، نخليه Bold حقيقي
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class SendCodeButton extends StatelessWidget {
@@ -26,10 +27,10 @@ class SendCodeButton extends StatelessWidget {
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radius), // تحديد الدائرية
+            borderRadius: BorderRadius.circular(radius),
             side: const BorderSide(
-              color: AppColors.buttonBackground, // تحديد لون الحد
-              width: 2, // تحديد سماكة الحد
+              color: AppColors.buttonBackground,
+              width: 2,
             ),
           ),
           elevation: 4,
@@ -45,10 +46,10 @@ class SendCodeButton extends StatelessWidget {
               )
             : Text(
                 text,
-                style: TextStyle(
+                style: AppTextStyles.body16.copyWith(
                   color: AppColors.lightGreen,
-                  fontSize: SizeConfig.ts(15),
-                  fontWeight: FontWeight.bold,
+                  fontSize: SizeConfig.ts(15), // نفس السابق
+                  fontWeight: FontWeight.w700, // كان bold
                 ),
               ),
       ),

@@ -1,24 +1,28 @@
-// lib/features/home/presentation/views/request_widgets/request_text_field.dart
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class RequestTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final String hint;
+  final String? Function(String?)? validator;
+  final TextInputType? keyboardType;
   final int maxLines;
-  final TextInputType keyboardType;
-  final bool required;
+  final bool enabled;
+  final Widget? suffix;
 
   const RequestTextField({
     super.key,
     required this.controller,
     required this.label,
     required this.hint,
+    this.validator,
+    this.keyboardType,
     this.maxLines = 1,
-    this.keyboardType = TextInputType.text,
-    this.required = true,
+    this.enabled = true,
+    this.suffix,
   });
 
   @override
@@ -26,25 +30,36 @@ class RequestTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: SizeConfig.ts(14), color: AppColors.textPrimary, fontWeight: FontWeight.w600),
-            ),
-            if (!required)
-              Text(' (اختياري)', style: TextStyle(fontSize: SizeConfig.ts(12), color: AppColors.textSecondary)),
-          ],
+        Text(
+          label,
+          style: AppTextStyles.semiBold.copyWith(
+            fontSize: SizeConfig.ts(13),
+            fontWeight: FontWeight.w900,
+            color: AppColors.textPrimary,
+          ),
         ),
-        SizeConfig.v(8),
+        SizedBox(height: SizeConfig.h(8)),
         TextFormField(
           controller: controller,
-          maxLines: maxLines,
+          enabled: enabled,
+          validator: validator,
           keyboardType: keyboardType,
+          maxLines: maxLines,
+          textDirection: TextDirection.rtl,
+          style: AppTextStyles.body14.copyWith(
+            fontSize: SizeConfig.ts(13),
+            color: AppColors.textPrimary,
+          ),
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: AppTextStyles.body14.copyWith(
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+              fontSize: SizeConfig.ts(13),
+            ),
+            suffixIcon: suffix,
             filled: true,
-            fillColor: Colors.white,
+            fillColor: AppColors.white,
+            contentPadding: SizeConfig.padding(horizontal: 14, vertical: 14),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: AppColors.borderLight),
@@ -53,9 +68,12 @@ class RequestTextField extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: AppColors.borderLight),
             ),
-            contentPadding: SizeConfig.padding(horizontal: 16, vertical: 14),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide:
+                  const BorderSide(color: AppColors.lightGreen, width: 1.2),
+            ),
           ),
-          validator: required ? (v) => v!.trim().isEmpty ? 'هذا الحقل مطلوب' : null : null,
         ),
       ],
     );

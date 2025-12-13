@@ -1,12 +1,30 @@
+// lib/features/auth/presentation/views/provider/widgets/provider_personal_info_step.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/widgets/auth_text_field.dart';
 import 'package:flutter/material.dart';
 
 class ProviderPersonalInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
-  const ProviderPersonalInfoStep({super.key, required this.formKey});
+  // ✅ Controllers نمررهم من الشاشة الرئيسية
+  final TextEditingController firstNameController;
+  final TextEditingController lastNameController;
+  final TextEditingController phoneController;
+  final TextEditingController emailController;
+  final TextEditingController passwordController;
+
+  const ProviderPersonalInfoStep({
+    super.key,
+    required this.formKey,
+    required this.firstNameController,
+    required this.lastNameController,
+    required this.phoneController,
+    required this.emailController,
+    required this.passwordController,
+  });
 
   @override
   State<ProviderPersonalInfoStep> createState() =>
@@ -17,7 +35,8 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
   bool _obscurePass = true;
   bool _obscureConfirm = true;
 
-  final _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
 
   String? _selectedCity;
   String? _selectedArea;
@@ -66,7 +85,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
 
   @override
   void dispose() {
-    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -79,39 +98,43 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
         children: [
           Text(
             'المعلومات الشخصية',
-            style: TextStyle(
+            style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700, // كان bold
               color: AppColors.textPrimary,
             ),
           ),
           SizeConfig.v(4),
           Text(
             'لنبدأ بمعلوماتك الأساسية.',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
           ),
           SizeConfig.v(14),
 
+          // الاسم الأول + اسم العائلة
           Row(
             children: [
-           const    Expanded(
-                child:  AuthTextField(
+              Expanded(
+                child: AuthTextField(
                   label: 'الاسم الأول *',
                   hint: 'أحمد',
                   icon: Icons.person_outline,
+                  controller: widget.firstNameController,
                   validator: _requiredValidator,
                   onDarkBackground: false,
                 ),
               ),
               SizeConfig.hSpace(10),
-             const  Expanded(
+              Expanded(
                 child: AuthTextField(
                   label: 'اسم العائلة *',
                   hint: 'محمد',
                   icon: Icons.person_outline,
+                  controller: widget.lastNameController,
                   validator: _requiredValidator,
                   onDarkBackground: false,
                 ),
@@ -120,21 +143,25 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
-          const AuthTextField(
+          // رقم الجوال
+          AuthTextField(
             label: 'رقم الجوال *',
             hint: '077 123 4567',
             icon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
+            controller: widget.phoneController,
             validator: _phoneValidator,
             onDarkBackground: false,
           ),
           SizeConfig.v(14),
 
+          // الإيميل (اختياري)
           AuthTextField(
             label: 'البريد الإلكتروني (اختياري)',
             hint: 'ahmad@example.com',
             icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
+            controller: widget.emailController,
             validator: (value) {
               if (value == null || value.isEmpty) return null;
               final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
@@ -145,12 +172,13 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
+          // كلمة المرور
           AuthTextField(
             label: 'كلمة المرور *',
             hint: 'أدنى 8 أحرف',
             icon: Icons.lock_outline,
             obscureText: _obscurePass,
-            controller: _passwordController,
+            controller: widget.passwordController,
             suffixIcon: IconButton(
               icon: Icon(
                 _obscurePass ? Icons.visibility_off : Icons.visibility,
@@ -167,11 +195,13 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
+          // تأكيد كلمة المرور
           AuthTextField(
             label: 'تأكيد كلمة المرور *',
             hint: 'أعد كتابة كلمة المرور',
             icon: Icons.lock_outline,
             obscureText: _obscureConfirm,
+            controller: _confirmPasswordController,
             suffixIcon: IconButton(
               icon: Icon(
                 _obscureConfirm ? Icons.visibility_off : Icons.visibility,
@@ -184,7 +214,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
               if (value == null || value.isEmpty) {
                 return 'تأكيد كلمة المرور مطلوب';
               }
-              if (value != _passwordController.text) {
+              if (value != widget.passwordController.text) {
                 return 'كلمتا المرور غير متطابقتين';
               }
               return null;
@@ -193,6 +223,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
+          // المحافظة
           _buildDropdown(
             label: 'المحافظة *',
             hint: 'اختر المحافظة',
@@ -208,6 +239,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
+          // المنطقة
           _buildDropdown(
             label: 'المنطقة *',
             hint: 'اختر المنطقة',
@@ -234,7 +266,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(14),
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary,
@@ -242,17 +274,30 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
         ),
         SizeConfig.v(6),
         DropdownButtonFormField<String>(
-          initialValue: value,
+          value: value,
           items: items
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(
+                    e,
+                    style: AppTextStyles.body14.copyWith(
+                      fontSize: SizeConfig.ts(13.5),
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              )
               .toList(),
           onChanged: onChanged,
           validator: validator,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(
+            hintStyle: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
             filled: true,
             fillColor: AppColors.background,

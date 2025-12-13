@@ -1,11 +1,24 @@
+// lib/features/auth/presentation/views/provider/widgets/provider_availability_step.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class ProviderAvailabilityStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
-  const ProviderAvailabilityStep({super.key, required this.formKey});
+  final ValueChanged<Set<String>> onDaysChanged;
+  final ValueChanged<TimeOfDay> onStartChanged;
+  final ValueChanged<TimeOfDay> onEndChanged;
+
+  const ProviderAvailabilityStep({
+    super.key,
+    required this.formKey,
+    required this.onDaysChanged,
+    required this.onStartChanged,
+    required this.onEndChanged,
+  });
 
   @override
   State<ProviderAvailabilityStep> createState() =>
@@ -37,6 +50,16 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
   final _cancellationController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onDaysChanged(_selectedDays);
+      widget.onStartChanged(_startTime);
+      widget.onEndChanged(_endTime);
+    });
+  }
+
+  @override
   void dispose() {
     _cancellationController.dispose();
     super.dispose();
@@ -51,18 +74,19 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
         children: [
           Text(
             'التوفر',
-            style: TextStyle(
+            style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w700, // كان bold
               color: AppColors.textPrimary,
             ),
           ),
           SizeConfig.v(4),
           Text(
             'حدد أيام وساعات العمل.',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
           ),
           SizeConfig.v(16),
@@ -70,7 +94,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           // الأيام المتاحة
           Text(
             'الأيام المتاحة *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -83,7 +107,14 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
             children: _days.map((day) {
               final selected = _selectedDays.contains(day);
               return FilterChip(
-                label: Text(day),
+                label: Text(
+                  day,
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: SizeConfig.ts(13),
+                    fontWeight: FontWeight.w400, // Regular
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 selected: selected,
                 onSelected: (v) {
                   setState(() {
@@ -92,6 +123,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
                     } else {
                       _selectedDays.remove(day);
                     }
+                    widget.onDaysChanged(_selectedDays);
                   });
                 },
               );
@@ -116,7 +148,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           // ساعات العمل
           Text(
             'ساعات العمل *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -163,7 +195,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           // سياسة الإلغاء
           Text(
             'سياسة الإلغاء *',
-            style: TextStyle(
+            style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
@@ -174,11 +206,11 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
             controller: _cancellationController,
             maxLines: 4,
             decoration: InputDecoration(
-              hintText:
-                  'مثال: يمكن إلغاء الموعد مجانًا قبل 24 ساعة من وقت الحجز.',
-              hintStyle: TextStyle(
+              hintText: 'مثال: يمكن إلغاء الموعد مجانًا قبل 24 ساعة من وقت الحجز.',
+              hintStyle: AppTextStyles.body14.copyWith(
                 fontSize: SizeConfig.ts(13),
                 color: AppColors.textSecondary,
+                fontWeight: FontWeight.w400,
               ),
               filled: true,
               fillColor: AppColors.background,
@@ -216,7 +248,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
       children: [
         Text(
           label,
-          style: TextStyle(
+          style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(13),
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary,
@@ -244,9 +276,10 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
               children: [
                 Text(
                   formatted,
-                  style: TextStyle(
+                  style: AppTextStyles.body14.copyWith(
                     fontSize: SizeConfig.ts(13),
                     color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
                 Icon(
@@ -272,8 +305,10 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
       setState(() {
         if (isStart) {
           _startTime = picked;
+          widget.onStartChanged(_startTime);
         } else {
           _endTime = picked;
+          widget.onEndChanged(_endTime);
         }
       });
     }

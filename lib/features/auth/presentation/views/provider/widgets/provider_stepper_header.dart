@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class ProviderStepperHeader extends StatelessWidget {
@@ -38,9 +39,7 @@ class ProviderStepperHeader extends StatelessWidget {
               return Expanded(
                 child: Container(
                   height: SizeConfig.h(3),
-                  margin: EdgeInsets.symmetric(
-                    horizontal: SizeConfig.w(2),
-                  ),
+                  margin: EdgeInsets.symmetric(horizontal: SizeConfig.w(2)),
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(999),
@@ -53,15 +52,18 @@ class ProviderStepperHeader extends StatelessWidget {
           Row(
             children: List.generate(steps.length, (index) {
               final isActive = index == currentStep;
+
               return Expanded(
                 child: Text(
                   steps[index],
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: SizeConfig.ts(10),
-                    fontWeight: isActive ? FontWeight.bold : FontWeight.w400,
-                    color:
-                        isActive ? AppColors.primaryGreen : AppColors.textSecondary,
+                  style: AppTextStyles.overline10.copyWith(
+                    fontSize: SizeConfig.ts(10), // نفس السابق
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                    color: isActive
+                        ? AppColors.primaryGreen
+                        : AppColors.textSecondary,
+                    letterSpacing: 0, // نلغي الزيادة الموجودة في overline10
                   ),
                 ),
               );

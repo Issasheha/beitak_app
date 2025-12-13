@@ -1,5 +1,6 @@
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';  // إضافة استيراد لـ flutter_svg
+import 'package:flutter_svg/flutter_svg.dart';
 
 class OnboardingSinglePage extends StatelessWidget {
   final String title;
@@ -20,28 +21,21 @@ class OnboardingSinglePage extends StatelessWidget {
           SizedBox(
             width: 140,
             height: 140,
-            // decoration: BoxDecoration(
-            //   shape: BoxShape.circle,
-            //   color: AppColors.white.withOpacity(0.1), // خلفية فاتحة إذا رغبت
-            //   boxShadow: [AppColors.primaryShadow],
-            // ),
             child: SvgPicture.asset(
-              'assets/images/Baitak white.svg',  // استبدال الأيقونة بالشعار
-              width: 80,  // تحديد عرض الشعار
-              height: 80,  // تحديد ارتفاع الشعار
+              'assets/images/Baitak white.svg',
+              width: 80,
+              height: 80,
             ),
           ),
-
           const SizedBox(height: 60),
 
-          // العنوان بالعربي
+          // العنوان
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontFamily: 'Cairo',
-              fontSize: 30,
-              fontWeight: FontWeight.w900,
+            style: AppTextStyles.display32.copyWith(
+              fontSize: 30, // نفس السابق
+              fontWeight: FontWeight.w700, // بدل w900 (Poppins غالبًا ما فيه 900 إذا انت محمّل Regular فقط)
               color: Colors.white,
               height: 1.3,
             ),
@@ -55,9 +49,8 @@ class OnboardingSinglePage extends StatelessWidget {
             child: Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontFamily: 'Cairo',
-                fontSize: 19,
+              style: AppTextStyles.body16.copyWith(
+                fontSize: 19, // نفس السابق
                 color: Colors.white70,
                 height: 1.7,
                 letterSpacing: 0.5,

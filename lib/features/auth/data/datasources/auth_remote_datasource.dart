@@ -1,8 +1,7 @@
-// lib/features/auth/data/datasources/auth_remote_datasource.dart
-
 import 'package:dio/dio.dart';
 
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/network/api_constants.dart';
 import '../models/auth_session_model.dart';
 
 /// العقد (interface) بين الريبو وبين الـ API.
@@ -14,25 +13,30 @@ abstract class AuthRemoteDataSource {
     required String password,
   });
 
+  /// إنشاء حساب جديد (تسجيل مستخدم جديد).
+  Future<AuthSessionModel> signup({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+    required int cityId,
+    required int areaId,
+    required String role,
+  });
+
   /// إرسال كود لإعادة تعيين كلمة المرور (OTP) على رقم الجوال.
   Future<void> sendResetCode({
     required String phone,
   });
 
   /// التحقق من كود إعادة التعيين (OTP).
-  ///
-  /// حالياً الباك إند يرجّع token + user، لكن
-  /// الـ Domain عندنا معرفها كـ void، فإحنا نتجاهل الداتا هنا.
   Future<void> verifyResetCode({
     required String phone,
     required String code,
   });
 
   /// تعيين كلمة سر جديدة بعد التحقق.
-  ///
-  /// ⚠️ ملاحظة مهمة:
-  /// الباك إند الحالي ما فيه Endpoint جاهز صريح لـ reset password
-  /// باستخدام OTP، لذلك رح نخليها مؤقتاً "غير مفعّلة".
   Future<void> resetPassword({
     required String phone,
     required String code,
@@ -41,12 +45,16 @@ abstract class AuthRemoteDataSource {
 }
 
 /// الـ implementation الفعلي باستخدام Dio.
-/// يفضّل إن الـ Dio يكون مهيّأ بـ baseUrl = 'https://your-domain.com/api'
-/// عشان نستخدم فقط '/auth/...'
+///
+/// مهم:
+/// - الـ Dio اللي ييجي هنا يفضّل يكون من `ApiClient.dio`
+///   اللي baseUrl تبعه = `ApiConstants.apiBase`
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio _dio;
 
   AuthRemoteDataSourceImpl(this._dio);
+
+  // ================== LOGIN ==================
 
   @override
   Future<AuthSessionModel> loginWithIdentifier({
@@ -54,7 +62,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String password,
   }) async {
     try {
-      // نقرر هل الـ identifier إيميل ولا جوال
       final bool isEmail = identifier.contains('@');
 
       final body = <String, dynamic>{
@@ -63,32 +70,93 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       };
 
       final response = await _dio.post(
-        '/auth/login',
+        ApiConstants.login,
         data: body,
       );
 
-      final data = _extractDataOrThrow(response);
+      // ✅ نحافظ على نفس منطق success/errors الحالي
+      _extractDataOrThrow(response);
 
-      // الـ backend يرجّع:
-      // { token, user, provider_profile? }
-      return AuthSessionModel.fromJson(data as Map<String, dynamic>);
+      // ✅ التعديل المهم: مرّر الـ BODY كامل للموديل
+      // لأن بعض الباك يرجّع token/access_token داخل body أو داخل data أو nested
+      final raw = response.data;
+      if (raw is! Map<String, dynamic>) {
+        throw ServerException(
+          message: 'Invalid response format',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+
+      return AuthSessionModel.fromJson(raw);
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }
   }
 
+  // ================== SIGNUP ==================
+
+  @override
+  Future<AuthSessionModel> signup({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String phone,
+    required String password,
+    required int cityId,
+    required int areaId,
+    required String role,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'first_name': firstName.trim(),
+        'last_name': lastName.trim(),
+        'email': email.trim().isEmpty ? null : email.trim(),
+        'phone': phone.trim().isEmpty ? null : phone.trim(),
+        'password': password,
+        'city_id': cityId,
+        'area_id': areaId,
+
+        // ✅ مهم جداً: نعلّم الباك إند أن هذا الحساب هو "مستخدم عادي"
+        'role': 'customer',
+      };
+
+      final response = await _dio.post(
+        ApiConstants.signup,
+        data: body,
+      );
+
+      // ✅ نحافظ على نفس منطق success/errors الحالي
+      _extractDataOrThrow(response);
+
+      // ✅ التعديل المهم: مرّر الـ BODY كامل للموديل
+      final raw = response.data;
+      if (raw is! Map<String, dynamic>) {
+        throw ServerException(
+          message: 'Invalid response format',
+          statusCode: response.statusCode ?? 0,
+        );
+      }
+
+      return AuthSessionModel.fromJson(raw);
+    } on DioException catch (e) {
+      throw _mapDioErrorToServerException(e);
+    }
+  }
+
+  // ================== RESET PASSWORD FLOW (OTP) ==================
+
   @override
   Future<void> sendResetCode({required String phone}) async {
     try {
       final response = await _dio.post(
-        '/auth/send-otp',
+        ApiConstants.sendOtp,
         data: {
           'phone': phone.trim(),
           'purpose': 'reset_password',
         },
       );
 
-      _extractDataOrThrow(response); // لو في خطأ رح يرمي Exception
+      _extractDataOrThrow(response);
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }
@@ -101,7 +169,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   }) async {
     try {
       final response = await _dio.post(
-        '/auth/verify-otp',
+        ApiConstants.verifyOtp,
         data: {
           'phone': phone.trim(),
           'otp': code.trim(),
@@ -109,8 +177,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         },
       );
 
-      // هنا الباك إند يرجع token + user، لكن
-      // حسب الـ Domain إحنا مش محتاجين نستخدم الداتا حالياً.
       _extractDataOrThrow(response);
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
@@ -123,13 +189,6 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String code,
     required String newPassword,
   }) async {
-    // ⚠️ مهم:
-    // من مراجعة الباك إند، ما فيه Endpoint واضح لتنفيذ
-    // reset password عن طريق OTP فقط.
-    // تقدر لاحقاً:
-    // - إمّا تعدّل الـ backend
-    // - أو تغيّر الـ Domain / UseCases عشان تستخدم change-password
-    //   بعد تسجيل الدخول.
     throw const ServerException(
       message:
           'resetPassword is not implemented yet. Please implement the backend endpoint or adjust the flow.',
@@ -149,10 +208,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
     }
 
-    final success = body['success'] as bool? ?? (statusCode >= 200 && statusCode < 300);
+    final success =
+        body['success'] as bool? ?? (statusCode >= 200 && statusCode < 300);
+
     if (!success) {
       final message = body['message']?.toString() ?? 'Request failed';
-      final errors = body['errors'] is Map<String, dynamic> ? body['errors'] as Map<String, dynamic> : null;
+      final errors = body['errors'] is Map<String, dynamic>
+          ? body['errors'] as Map<String, dynamic>
+          : null;
 
       throw ServerException(
         message: message,
@@ -161,7 +224,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
     }
 
-    // في responseHelper الباك إند عادة يرجّع data تحت key 'data'
+    // الباك إند عادة يرجّع الداتا تحت key 'data'
     return body['data'];
   }
 

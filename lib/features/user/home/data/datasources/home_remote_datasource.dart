@@ -33,19 +33,35 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
   @override
   Future<List<CategoryModel>> getCategories() async {
     try {
-      // ✳️ عدّل المسار هنا حسب الـ backend عندكم إذا لزم
+      // /api (من ApiClient) + /categories = /api/categories
       final response = await _dio.get('/categories');
 
       final data = _extractDataOrThrow(response);
 
+      List<dynamic>? rawList;
+
+      // أحياناً ممكن تكون data نفسها List
       if (data is List) {
-        return data
-            .whereType<Map<String, dynamic>>()
-            .map(CategoryModel.fromJson)
-            .toList();
+        rawList = data;
+      }
+      // وفي حالة الباك إند الحالي: data = { categories: [...] }
+      else if (data is Map<String, dynamic>) {
+        final nested = data['categories'];
+        if (nested is List) {
+          rawList = nested;
+        }
       }
 
-      throw const ServerException(message: 'Invalid categories response format');
+      if (rawList == null) {
+        throw const ServerException(
+          message: 'Invalid categories response format',
+        );
+      }
+
+      return rawList
+          .whereType<Map<String, dynamic>>()
+          .map(CategoryModel.fromJson)
+          .toList();
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }
@@ -72,11 +88,22 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
         if (minPrice != null) 'min_price': minPrice,
         if (maxPrice != null) 'max_price': maxPrice,
         if (minRating != null) 'min_rating': minRating,
-        if (city != null && city.isNotEmpty) 'city': city,
-        if (area != null && area.isNotEmpty) 'area': area,
+        // city/area: إن كانت أرقام نرسلها كـ user_city_id / user_area_id (الـ backend يعتمدها).
+        if (city != null && city.trim().isNotEmpty) ...() {
+          final v = city.trim();
+          final asInt = int.tryParse(v);
+          if (asInt != null) return {'user_city_id': asInt};
+          return {'city': v}; // fallback لو كان الباك اند يقبل الاسم/slug
+        }(),
+        if (area != null && area.trim().isNotEmpty) ...() {
+          final v = area.trim();
+          final asInt = int.tryParse(v);
+          if (asInt != null) return {'user_area_id': asInt};
+          return {'area': v};
+        }(),
       };
 
-      // ✳️ عدّل المسار هنا حسب الـ backend عندكم إذا لزم
+      // /api (من ApiClient) + /services = /api/services
       final response = await _dio.get(
         '/services',
         queryParameters: queryParams,
@@ -84,14 +111,30 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
 
       final data = _extractDataOrThrow(response);
 
+      List<dynamic>? rawList;
+
+      // لو الـ backend رجع data مباشرة كـ List
       if (data is List) {
-        return data
-            .whereType<Map<String, dynamic>>()
-            .map(ServiceModel.fromJson)
-            .toList();
+        rawList = data;
+      }
+      // في تطبيقك الحالي: data = { services: [...], pagination: {...} }
+      else if (data is Map<String, dynamic>) {
+        final nested = data['services'];
+        if (nested is List) {
+          rawList = nested;
+        }
       }
 
-      throw const ServerException(message: 'Invalid services response format');
+      if (rawList == null) {
+        throw const ServerException(
+          message: 'Invalid services response format',
+        );
+      }
+
+      return rawList
+          .whereType<Map<String, dynamic>>()
+          .map(ServiceModel.fromJson)
+          .toList();
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }

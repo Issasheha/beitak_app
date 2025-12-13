@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class ContinueAsGuestButton extends StatelessWidget {
@@ -16,10 +17,10 @@ class ContinueAsGuestButton extends StatelessWidget {
       onPressed: onPressed,
       child: Text(
         'متابعة كزائر',
-        style: TextStyle(
-          fontWeight: FontWeight.w300,
-            color: AppColors.textPrimary,
-          fontSize: SizeConfig.ts(21), // Adjusted font size for consistency
+        style: AppTextStyles.body16.copyWith(
+          fontSize: SizeConfig.ts(21), // نفس اللي كان موجود
+          fontWeight: FontWeight.w300, // نفس الوزن
+          color: AppColors.textPrimary,
         ),
       ),
     );

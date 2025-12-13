@@ -1,6 +1,7 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:go_router/go_router.dart';
@@ -32,7 +33,7 @@ class LoginHeader extends StatelessWidget {
       children: [
         // اللوجو
         SvgPicture.asset(
-          'assets/images/Baitak Logo.svg',  
+          'assets/images/Baitak Logo.svg',
           width: logoWidth,
         ),
 
@@ -42,9 +43,9 @@ class LoginHeader extends StatelessWidget {
         // العنوان
         Text(
           'مرحبا بعودتك',
-          style: TextStyle(
+          style: AppTextStyles.title18.copyWith(
             fontSize: titleSize,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w900, // نفس السابق
             color: AppColors.textSecondary,
           ),
         ),
@@ -54,35 +55,32 @@ class LoginHeader extends StatelessWidget {
 
         // جملة التسجيل
         GestureDetector(
-  onTap: () => context.push(AppRoutes.register),
-  child: RichText(
-    text: TextSpan(
-      style: TextStyle(
-        fontSize: subtitleSize,
-        fontFamily: 'Cairo', // أو أي خط تستخدمه في التطبيق
-        height: 1.4,
-      ),
-      children: [
-        const TextSpan(
-          text: 'ما عندك حساب؟ ',
-          style: TextStyle(
-            color: AppColors.textSecondary, // اللون الرمادي الفاتح العادي
+          onTap: () => context.push(AppRoutes.register),
+          child: RichText(
+            text: TextSpan(
+              style: AppTextStyles.body14.copyWith(
+                fontSize: subtitleSize,
+                height: 1.4,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w400, // Regular default
+              ),
+              children: [
+                const TextSpan(text: 'ما عندك حساب؟ '),
+                TextSpan(
+                  text: 'سجّل من هنا',
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: subtitleSize,
+                    color: AppColors.lightGreen,
+                    fontWeight: FontWeight.w700, // Bold مثل السابق
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.darkGreen,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        TextSpan(
-          text: 'سجّل من هنا',
-          style: TextStyle(
-            color: AppColors.lightGreen,           // لون أخضر قوي وواضح (أو استخدم goldAccent لو حابب ذهبي)
-            fontSize: subtitleSize,         // أكبر شوي من باقي النص
-            fontWeight: FontWeight.bold,          // جريء عشان يبرز أكثر
-            decoration: TextDecoration.underline, // خط تحت الكلمة (اختياري)
-            decorationColor: AppColors.darkGreen,
-          ),
-        ),
-      ],
-    ),
-  ),
-),
       ],
     );
   }

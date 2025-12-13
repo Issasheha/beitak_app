@@ -1,122 +1,93 @@
-import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/my_service/viewmodels/provider_my_service_viewmodel.dart';
+import 'package:beitak_app/core/routes/app_routes.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/my_service/providers/provider_my_services_provider.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_empty_services_state.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_service_card.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_service_filter_menu.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_my_service_background_decoration.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_my_service_card.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/my_service/widgets/provider_my_service_header.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class ProviderMyServiceView extends StatefulWidget {
+class ProviderMyServiceView extends ConsumerWidget {
   const ProviderMyServiceView({super.key});
 
   @override
-  State<ProviderMyServiceView> createState() => _ProviderMyServiceViewState();
-}
-
-class _ProviderMyServiceViewState extends State<ProviderMyServiceView>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  late final ProviderMyServiceViewModel _viewModel;
-  String _selectedFilter = 'الكل';
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _viewModel = ProviderMyServiceViewModel();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     SizeConfig.init(context);
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar:  AppBar(
-  backgroundColor: Colors.transparent,
-  elevation: 0,
-  leading: Padding(
-    padding: const EdgeInsets.only(right: 12),
-    child: ProviderServiceFilterMenu(
-      selectedFilter: _selectedFilter,
-      onFilterChanged: (v) => setState(() => _selectedFilter = v),
-    ),
-  ),
-  actions: [
-    IconButton(
-      icon: const Icon(
-        Icons.arrow_forward_ios, // لاحظ تغيير الاتجاه
-        color: AppColors.textPrimary,
-      ),
-      onPressed: () => context.go(AppRoutes.providerHome),
-    ),
-  ],
-  title: const Text(
-    'خدماتي كمزوّد',
-    style: TextStyle(fontWeight: FontWeight.bold),
-  ),
-  centerTitle: true,
-),
+    final async = ref.watch(providerMyServicesProvider);
 
-      body: Column(
-        children: [
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: Colors.white.withValues(alpha: 0.1),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              labelColor: AppColors.lightGreen,
-              unselectedLabelColor: AppColors.textSecondary,
-              indicator: BoxDecoration(
-                color: AppColors.lightGreen.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              tabs: const [
-                Tab(text: 'الكل'),
-                Tab(text: 'قيد التأكيد'),
-                Tab(text: 'مكتملة'),
-              ],
-            ),
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+          // ✅ سهم رجوع RTL صحيح + على اليمين (لأن leading = start و start في RTL = يمين)
+          leading: IconButton(
+            icon: const BackButtonIcon(), // ✅ يعكس تلقائياً حسب RTL
+            color: AppColors.textPrimary,
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go(AppRoutes.providerHome);
+              }
+            },
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+          // title: const Text(
+          //   'خدماتي',
+          //   style: TextStyle(fontWeight: FontWeight.bold),
+          // ),
+        ),
+        body: Stack(
+          children: [
+            const ProviderMyServicesBackground(),
+            Column(
               children: [
-                _buildTab(null),
-                _buildTab('Pending'),
-                _buildTab('Completed'),
+                // ✅ الهيدر (لوغو + عنوان + وصف)
+                const ProviderMyServiceHeader(),
+
+                Expanded(
+                  child: Padding(
+                    padding: SizeConfig.padding(horizontal: 16, vertical: 8),
+                    child: async.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => Center(
+                        child: Text(
+                          'حدث خطأ:\n$e',
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      data: (services) {
+                        if (services.isEmpty) {
+                          return const ProviderEmptyServicesState(
+                            message: 'لا توجد خدمات منشورة حالياً',
+                          );
+                        }
+
+                        return RefreshIndicator(
+                          onRefresh: () async => ref.invalidate(providerMyServicesProvider),
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            itemCount: services.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 14),
+                            itemBuilder: (_, i) => ProviderServiceCard(service: services[i]),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildTab(String? status) {
-    final jobs = _viewModel.getFilteredJobs(
-      statusFilter: status,
-      filter: _selectedFilter,
-    );
-
-    if (jobs.isEmpty) {
-      return const ProviderEmptyServicesState(message: 'لا توجد خدمات حالياً');
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: jobs.length,
-      itemBuilder: (context, i) => ProviderServiceCard(job: jobs[i]),
     );
   }
 }
+

@@ -5,6 +5,8 @@ import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:beitak_app/core/utils/app_text_styles.dart';
+
 class ProviderQuickActionsRow extends StatelessWidget {
   const ProviderQuickActionsRow({super.key});
 
@@ -23,9 +25,9 @@ class ProviderQuickActionsRow extends StatelessWidget {
             children: [
               Text(
                 'إجراءات سريعة',
-                style: TextStyle(
+                style: AppTextStyles.title18.copyWith(
                   fontSize: SizeConfig.ts(18),
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w900,
                   color: AppColors.textPrimary,
                 ),
               ),
@@ -79,10 +81,11 @@ class ProviderQuickActionsRow extends StatelessWidget {
           SizeConfig.v(8),
           Text(
             label,
-            style: TextStyle(
+            textAlign: TextAlign.center,
+            style: AppTextStyles.body16.copyWith(
               fontSize: SizeConfig.ts(13.5),
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

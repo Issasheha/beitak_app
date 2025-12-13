@@ -1,6 +1,7 @@
 // onboarding_next_button.dart
 
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 // widgets/onboarding_next_button.dart
@@ -20,7 +21,6 @@ class OnboardingNextButton extends StatelessWidget {
     );
   }
 }
-
 
 class OnboardingStartButton extends StatelessWidget {
   final VoidCallback onPressed;
@@ -50,7 +50,6 @@ class _GradientButton extends StatelessWidget {
       child: Ink(
         decoration: BoxDecoration(
           color: AppColors.buttonBackground,
-          // gradient: const LinearGradient(colors: [Color(0xFF64AB68), Color(0xFF12332C)]),
           borderRadius: BorderRadius.circular(30),
         ),
         child: Container(
@@ -58,7 +57,15 @@ class _GradientButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(
+                text,
+                style: AppTextStyles.body16.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.0,
+                ),
+              ),
               const SizedBox(width: 8),
               const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 18),
             ],

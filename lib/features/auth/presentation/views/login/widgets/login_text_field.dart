@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class LoginTextField extends StatelessWidget {
@@ -39,18 +40,19 @@ class LoginTextField extends StatelessWidget {
         keyboardType: keyboardType,
         obscureText: obscureText,
         validator: validator,
-        focusNode: focusNode, // مرر إلى TextFormField
-        onFieldSubmitted: onFieldSubmitted, // مرر إلى TextFormField
-        style: TextStyle(
+        focusNode: focusNode,
+        onFieldSubmitted: onFieldSubmitted,
+        style: AppTextStyles.body14.copyWith(
           color: AppColors.textPrimary,
           fontSize: SizeConfig.ts(14.5),
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w500, // نفس السابق
         ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(
+          hintStyle: AppTextStyles.body14.copyWith(
             color: AppColors.textPrimary.withValues(alpha: 0.5),
             fontSize: SizeConfig.ts(14),
+            fontWeight: FontWeight.w400, // hint غالبًا Regular
           ),
           prefixIcon: Icon(
             prefixIcon,

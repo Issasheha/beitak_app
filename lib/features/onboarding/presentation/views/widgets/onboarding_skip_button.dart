@@ -1,4 +1,6 @@
 // widgets/onboarding_skip_button.dart
+
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class OnboardingSkipButton extends StatelessWidget {
@@ -9,9 +11,13 @@ class OnboardingSkipButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton(
       onPressed: onPressed,
-      child: const Text(
+      child: Text(
         'تخطي',
-        style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600),
+        style: AppTextStyles.body14.copyWith(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.white70,
+        ),
       ),
     );
   }

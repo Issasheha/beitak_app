@@ -1,5 +1,7 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'onboarding_single_page.dart';
 import 'onboarding_dots_indicator.dart';
 import 'onboarding_action_buttons.dart';
@@ -21,15 +23,13 @@ class _OnboardingViewBodyState extends State<OnboardingViewBody> {
       decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
       child: Stack(
         children: [
-          // const OnboardingBackground(),
           PageView(
             controller: _pageController,
             onPageChanged: (value) => setState(() => _currentPage = value),
             children: const [
               OnboardingSinglePage(
                 title: "انضم لمجتمع المزودين الموثوقين",
-                subtitle:
-                    "كل مزودي الخدمة تم فحص خلفيتهم وتقييمهم من عملاء حقيقيين",
+                subtitle: "كل مزودي الخدمة تم فحص خلفيتهم وتقييمهم من عملاء حقيقيين",
               ),
               OnboardingSinglePage(
                 title: "احجز وتابع فوراً",
@@ -37,8 +37,7 @@ class _OnboardingViewBodyState extends State<OnboardingViewBody> {
               ),
               OnboardingSinglePage(
                 title: "ابحث عن خدمات منزلية موثوقة في منطقتك",
-                subtitle:
-                    "تصفح مئات المزودين المحليين الموثوقين لكل احتياجات منزلك",
+                subtitle: "تصفح مئات المزودين المحليين الموثوقين لكل احتياجات منزلك",
               ),
             ],
           ),
@@ -53,8 +52,7 @@ class _OnboardingViewBodyState extends State<OnboardingViewBody> {
                 OnboardingActionButtons(
                   currentPage: _currentPage,
                   pageController: _pageController,
-                  onFinish: () =>
-                      Navigator.pushReplacementNamed(context, '/login'),
+                  onFinish: () => context.go(AppRoutes.login),
                 ),
               ],
             ),

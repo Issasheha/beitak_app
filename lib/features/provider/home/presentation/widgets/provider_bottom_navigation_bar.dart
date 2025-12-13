@@ -1,190 +1,258 @@
 import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/features/provider/home/presentation/widgets/provider_quick_actions_row.dart';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-class ProviderBottomNavigationBar extends StatefulWidget {
+class ProviderBottomNavigationBar extends StatelessWidget {
   const ProviderBottomNavigationBar({super.key});
 
-  @override
-  State<ProviderBottomNavigationBar> createState() =>
-      _ProviderBottomNavigationBarState();
-}
+  int _indexFromLocation(String location) {
+    if (location.startsWith(AppRoutes.providerHome)) return 0;
+    if (location.startsWith(AppRoutes.providerMarketplace)) return 1;
+    if (location.startsWith(AppRoutes.providerBrowse)) return 2;
+    if (location.startsWith(AppRoutes.providerMyService)) return 3;
+    return 0;
+  }
 
-class _ProviderBottomNavigationBarState
-    extends State<ProviderBottomNavigationBar> {
-  int _selectedIndex = 0;
-
-  void _onItemTapped(int index) {
-    if (_selectedIndex == index) return;
-
-    setState(() {
-      _selectedIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        context.go(AppRoutes.providerHome);
-        break;
-      case 1:
-        context.go(AppRoutes.providerBrowse);
-        break;
-      case 2:
-        context.go(AppRoutes.providerMyService);
-        break;
-      case 3:
-        context.go(AppRoutes.providerProfile);
-        break;
-    }
+  void _go(BuildContext context, String route) {
+    // ✅ بدل GoRouter.of(context).location
+    final current = GoRouterState.of(context).uri.toString();
+    if (current.startsWith(route)) return;
+    context.go(route);
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 90,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // ===== الشريط السفلي الزجاجي =====
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(SizeConfig.radius(24)),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withValues(alpha: 0.25),
-                    border: Border(
-                      top: BorderSide(
-                        color: AppColors.borderLight.withValues(alpha: 0.6),
-                        width: 1,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildNavItem(
-                        icon: Icons.home_outlined,
-                        activeIcon: Icons.home,
-                        label: 'الرئيسية',
-                        index: 0,
-                      ),
-                      _buildNavItem(
-                        icon: Icons.search,
-                        activeIcon: Icons.manage_search_rounded,
-                        label: 'الاستكشاف',
-                        index: 1,
-                      ),
-                      const SizedBox(width: 80), // فراغ للزر الأوسط
-                      _buildNavItem(
-                        icon: Icons.event_note_outlined,
-                        activeIcon: Icons.event_available,
-                        label: 'الحجوزات',
-                        index: 2,
-                      ),
-                      _buildNavItem(
-                        icon: Icons.person_outline,
-                        activeIcon: Icons.person,
-                        label: 'الحساب',
-                        index: 3,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+    // ✅ بدل GoRouter.of(context).location
+    final location = GoRouterState.of(context).uri.toString();
+    final selectedIndex = _indexFromLocation(location);
 
-          // ===== زر الإضافة (+) في المنتصف =====
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: GestureDetector(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: AppColors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(SizeConfig.radius(24)),
-                      ),
-                    ),
-                    builder: (_) => const ProviderQuickActionsRow(),
-                  );
-                },
-                child: Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.lightGreen,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.lightGreen.withValues(alpha: 0.6),
-                        blurRadius: 25,
-                        spreadRadius: 8,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(Icons.add, size: 38, color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-        ],
+    final items = <_NavConfig>[
+      const _NavConfig(
+        label: 'الرئيسية',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home,
+        route: AppRoutes.providerHome,
       ),
-    );
-  }
+      const _NavConfig(
+        label: 'السوق',
+        icon: Icons.storefront_outlined,
+        activeIcon: Icons.storefront,
+        route: AppRoutes.providerMarketplace,
+      ),
+      const _NavConfig(
+        label: 'الحجوزات',
+        icon: Icons.event_note_outlined,
+        activeIcon: Icons.event_available,
+        route: AppRoutes.providerBrowse,
+      ),
+      const _NavConfig(
+        label: 'خدماتي',
+        icon: Icons.design_services_outlined,
+        activeIcon: Icons.design_services,
+        route: AppRoutes.providerMyService,
+      ),
+    ];
 
-  // ===== عنصر في شريط التنقل السفلي =====
-  Widget _buildNavItem({
-    required IconData icon,
-    required IconData activeIcon,
-    required String label,
-    required int index,
-  }) {
-    final bool isActive = _selectedIndex == index;
-
-    return GestureDetector(
-      onTap: () => _onItemTapped(index),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SizedBox(
+        height: SizeConfig.h(90),
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            Icon(
-              isActive ? activeIcon : icon,
-              color:
-                  isActive ? AppColors.primaryGreen : AppColors.textSecondary,
-              size: 26,
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _GlassNavBar(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _NavItem(
+                      config: items[0],
+                      isActive: selectedIndex == 0,
+                      onTap: () => _go(context, items[0].route),
+                    ),
+                    _NavItem(
+                      config: items[1],
+                      isActive: selectedIndex == 1,
+                      onTap: () => _go(context, items[1].route),
+                    ),
+
+                    // فراغ لزر +
+                    SizedBox(width: SizeConfig.w(80)),
+
+                    _NavItem(
+                      config: items[2],
+                      isActive: selectedIndex == 2,
+                      onTap: () => _go(context, items[2].route),
+                    ),
+                    _NavItem(
+                      config: items[3],
+                      isActive: selectedIndex == 3,
+                      onTap: () => _go(context, items[3].route),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: isActive
-                    ? AppColors.primaryGreen
-                    : AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
+
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _CenterFab(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: AppColors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(SizeConfig.radius(24)),
+                        ),
+                      ),
+                      builder: (_) => const ProviderQuickActionsRow(),
+                    );
+                  },
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+@immutable
+class _NavConfig {
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final String route;
+
+  const _NavConfig({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    required this.route,
+  });
+}
+
+class _GlassNavBar extends StatelessWidget {
+  const _GlassNavBar({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(24))),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          height: SizeConfig.h(76),
+          decoration: BoxDecoration(
+            color: AppColors.white.withValues(alpha: 0.25),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 18,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.config,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final _NavConfig config;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? AppColors.primaryGreen : AppColors.textSecondary;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          vertical: SizeConfig.h(8),
+          horizontal: SizeConfig.w(10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isActive ? config.activeIcon : config.icon,
+              color: color,
+              size: SizeConfig.ts(26),
+            ),
+            SizedBox(height: SizeConfig.h(4)),
+            Text(
+              config.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: SizeConfig.ts(11),
+                color: color,
+                fontWeight: FontWeight.w600,
+                height: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CenterFab extends StatelessWidget {
+  const _CenterFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = SizeConfig.w(68);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.lightGreen,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.lightGreen.withValues(alpha: 0.60),
+              blurRadius: 25,
+              spreadRadius: 8,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Icon(Icons.add, size: SizeConfig.ts(38), color: Colors.white),
       ),
     );
   }

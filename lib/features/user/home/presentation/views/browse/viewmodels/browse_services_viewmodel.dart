@@ -1,224 +1,202 @@
-// lib/features/user/home/presentation/viewmodels/browse_services_viewmodel.dart
+// lib/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart
 
-import 'package:beitak_app/core/error/exceptions.dart';
-import 'package:beitak_app/features/user/home/data/datasources/home_remote_datasource.dart';
-import 'package:beitak_app/features/user/home/data/repositories/home_repository_impl.dart';
-import 'package:beitak_app/features/user/home/domain/entities/category_entity.dart';
-import 'package:beitak_app/features/user/home/domain/entities/service_entity.dart';
-import 'package:beitak_app/features/user/home/domain/usecases/get_categories_usecase.dart';
-import 'package:beitak_app/features/user/home/domain/usecases/get_services_usecase.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/network/api_client.dart';
+import 'package:beitak_app/core/network/api_constants.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/models/service_summary.dart';
 import 'package:dio/dio.dart';
 
-
-
-/// ViewModel خاص بشاشة "تصفّح الخدمات" (BrowseServiceView).
-///
-/// مسؤول عن:
-/// - تحميل الفئات (Categories)
-/// - تحميل الخدمات (Services)
-/// - إدارة الفلاتر (السعر، التقييم، الفئة، البحث)
-/// - إدارة الباجينيشن (load more) مستقبلاً لو حبّينا
 class BrowseServicesViewModel {
-  late final GetServicesUseCase _getServicesUseCase;
-  late final GetCategoriesUseCase _getCategoriesUseCase;
+  final Dio _dio = ApiClient.dio;
 
-  // ======= حالة عامة =======
-  bool isLoading = false;
+  final List<ServiceSummary> services = [];
+
+  int _page = 1;
+  final int _limit = 20;
+
   bool isLoadingMore = false;
-  String? errorMessage;
   bool hasMore = true;
 
-  // ======= بيانات من الـ API =======
-  List<CategoryEntity> categories = [];
-  List<ServiceEntity> services = [];
-  List<ServiceEntity> filteredServices = [];
+  Future<void> loadInitialServices({
+    String? searchTerm,
+    String? categoryKey, // ✅ بدل categoryId
+    double? minPrice,
+    double? maxPrice,
+    int? userCityId,
+    int? userAreaId,
+    String? sortBy,
+  }) async {
+    _page = 1;
+    hasMore = true;
+    services.clear();
 
-  // ======= حالة الباجينشن =======
-  int _currentPage = 1;
-  final int _pageSize;
-
-  // ======= حالة الفلاتر =======
-  int? selectedCategoryId;
-  double minPrice = 0.0;
-  double maxPrice = 150.0;
-  double minRating = 0.0;
-  String? searchTerm;
-
-  BrowseServicesViewModel({int pageSize = 20})
-      : _pageSize = pageSize {
-    // إعداد الـ dependencies بنفس أسلوب LoginViewModel
-    final dio = Dio(
-      BaseOptions(
-        // 👈 غيّر الـ baseUrl لما تربط فعلياً مع الـ backend (أو اسحبه من مكان مركزي)
-        baseUrl: 'http://192.168.1.87:3026/api',
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ),
+    final result = await _fetchPage(
+      page: _page,
+      searchTerm: searchTerm,
+      categoryKey: categoryKey,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      userCityId: userCityId,
+      userAreaId: userAreaId,
+      sortBy: sortBy,
     );
 
-    final remote = HomeRemoteDataSourceImpl(dio);
-    final repo = HomeRepositoryImpl(remote: remote);
-    _getServicesUseCase = GetServicesUseCase(repo);
-    _getCategoriesUseCase = GetCategoriesUseCase(repo);
+    services.addAll(result.items);
+    hasMore = result.hasMore;
   }
 
-  // =====================================================
-  //                    Public API
-  // =====================================================
-
-  /// تحميل أولي للبيانات (يُستدعى مثلاً في initState في BrowseServiceView)
-  Future<void> loadInitial() async {
-    isLoading = true;
-    errorMessage = null;
-    hasMore = true;
-    _currentPage = 1;
-
-    try {
-      // 1) جلب الفئات
-      categories = await _getCategoriesUseCase();
-
-      // 2) جلب الصفحة الأولى من الخدمات
-      final result = await _getServicesUseCase(
-        GetServicesParams(
-          page: _currentPage,
-          limit: _pageSize,
-          categoryId: selectedCategoryId,
-          search: searchTerm,
-          minPrice: minPrice,
-          maxPrice: maxPrice,
-          minRating: minRating,
-        ),
-      );
-
-      services = result;
-      filteredServices = List<ServiceEntity>.from(services);
-
-      // لو أقل من pageSize نعتبر أنه ما في صفحات أكثر
-      hasMore = result.length == _pageSize;
-    } on ServerException catch (e) {
-      errorMessage = e.message;
-      services = [];
-      filteredServices = [];
-    } catch (_) {
-      errorMessage = 'حدث خطأ أثناء تحميل الخدمات، حاول مرة أخرى.';
-      services = [];
-      filteredServices = [];
-    } finally {
-      isLoading = false;
-    }
-  }
-
-  /// إعادة تحميل (Pull-to-refresh مثلاً)
-  Future<void> refresh() async {
-    _currentPage = 1;
-    hasMore = true;
-    await loadInitial();
-  }
-
-  /// تحميل صفحة إضافية (لو حبيت تدعم infinite scroll لاحقاً)
-  Future<void> loadMore() async {
-    if (isLoadingMore || !hasMore) return;
-
+  Future<void> loadMoreServices({
+    String? searchTerm,
+    String? categoryKey,
+    double? minPrice,
+    double? maxPrice,
+    int? userCityId,
+    int? userAreaId,
+    String? sortBy,
+  }) async {
+    if (!hasMore || isLoadingMore) return;
     isLoadingMore = true;
-    errorMessage = null;
 
     try {
-      final nextPage = _currentPage + 1;
-      final result = await _getServicesUseCase(
-        GetServicesParams(
-          page: nextPage,
-          limit: _pageSize,
-          categoryId: selectedCategoryId,
-          search: searchTerm,
-          minPrice: minPrice,
-          maxPrice: maxPrice,
-          minRating: minRating,
-        ),
+      final nextPage = _page + 1;
+      final result = await _fetchPage(
+        page: nextPage,
+        searchTerm: searchTerm,
+        categoryKey: categoryKey,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        userCityId: userCityId,
+        userAreaId: userAreaId,
+        sortBy: sortBy,
       );
 
-      if (result.isEmpty) {
-        hasMore = false;
-      } else {
-        _currentPage = nextPage;
-        services = [...services, ...result];
-        _recalculateFiltered();
-      }
-    } on ServerException catch (e) {
-      errorMessage = e.message;
-    } catch (_) {
-      errorMessage = 'تعذر تحميل المزيد من الخدمات حالياً.';
+      _page = nextPage;
+      services.addAll(result.items);
+      hasMore = result.hasMore;
     } finally {
       isLoadingMore = false;
     }
   }
 
-  /// تحديث الفلاتر وإعادة تصفية القائمة الحالية (دون ضرب API جديدة مباشرة)
-  ///
-  /// بإمكانك استدعاء هذا من `_applyFilters` في `BrowseServiceView`
-  /// أو لاحقاً تربطه مباشرة مع FilterBottomSheet.
-  void updateFilters({
-    int? categoryId,
+  int? _extractProviderCityId(Map<String, dynamic> m) {
+    final provider = m['provider'];
+    if (provider is Map) {
+      final p = provider.cast<String, dynamic>();
+
+      // 1) provider.user.city_id
+      final user = p['user'];
+      if (user is Map) {
+        final u = user.cast<String, dynamic>();
+        final v = u['city_id'];
+        if (v is num) return v.toInt();
+      }
+
+      // 2) fallback: provider.city_id
+      final v2 = p['city_id'];
+      if (v2 is num) return v2.toInt();
+    }
+
+    // 3) fallback عام
+    final v3 = m['city_id'];
+    if (v3 is num) return v3.toInt();
+
+    return null;
+  }
+
+  Future<_PageResult> _fetchPage({
+    required int page,
+    String? searchTerm,
+    String? categoryKey,
     double? minPrice,
     double? maxPrice,
-    double? minRating,
-    String? search,
-  }) {
-    if (categoryId != null) selectedCategoryId = categoryId;
-    if (minPrice != null) this.minPrice = minPrice;
-    if (maxPrice != null) this.maxPrice = maxPrice;
-    if (minRating != null) this.minRating = minRating;
-    if (search != null) searchTerm = search;
+    int? userCityId,
+    int? userAreaId,
+    String? sortBy,
+  }) async {
+    final qp = <String, dynamic>{
+      'page': page,
+      'limit': _limit,
 
-    _recalculateFiltered();
-  }
+      // search / q
+      if (searchTerm != null && searchTerm.trim().isNotEmpty) ...{
+        'search': searchTerm.trim(),
+        'q': searchTerm.trim(),
+      },
 
-  /// لو حبيت تاخذ الفلاتر بنفس شكل الـ Map اللي تستخدمه الآن في الـ UI
-  Map<String, dynamic> get currentFiltersMap {
-    return {
-      'categoryId': selectedCategoryId,
-      'minPrice': minPrice,
-      'maxPrice': maxPrice,
-      'minRating': minRating,
-      'search': searchTerm ?? '',
+      if (minPrice != null) 'min_price': minPrice,
+      if (maxPrice != null) 'max_price': maxPrice,
+
+      // city/area (حاول أسماء محتملة)
+      if (userCityId != null) ...{
+        'city_id': userCityId,
+        'user_city_id': userCityId,
+        'provider_city_id': userCityId,
+      },
+      if (userAreaId != null) ...{
+        'area_id': userAreaId,
+        'user_area_id': userAreaId,
+        'provider_area_id': userAreaId,
+      },
+
+      if (sortBy != null && sortBy.trim().isNotEmpty) 'sort_by': sortBy.trim(),
     };
+
+    final res = await _dio.get(ApiConstants.services, queryParameters: qp);
+    final raw = res.data;
+
+    if (raw is! Map) throw Exception('Invalid services response');
+
+    final map = raw.cast<String, dynamic>();
+    if (map['success'] != true) {
+      throw Exception((map['message'] ?? 'unknown_error').toString());
+    }
+
+    final data = map['data'];
+    if (data is! Map) throw Exception('Invalid services data');
+
+    final dataMap = data.cast<String, dynamic>();
+    final itemsRaw = dataMap['services'] ?? dataMap['items'] ?? dataMap['data'];
+    if (itemsRaw is! List) throw Exception('Invalid services list');
+
+    final rawMaps = itemsRaw
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+
+    // ✅ فلترة مدينة محلياً
+    Iterable<Map<String, dynamic>> filtered = rawMaps;
+    if (userCityId != null) {
+      filtered = filtered.where((m) => _extractProviderCityId(m) == userCityId);
+    }
+
+    // ✅ فلترة فئة محلياً (أفضل حل مع category_id = null)
+    if (categoryKey != null && categoryKey.trim().isNotEmpty) {
+      final want = categoryKey.trim().toLowerCase();
+      filtered = filtered.where((m) {
+        final k = FixedServiceCategories.keyFromServiceJson(m);
+        return (k ?? '').toLowerCase() == want;
+      });
+    }
+
+    final items = filtered.map((m) => ServiceSummary.fromJson(m)).toList();
+
+    // hasMore من pagination (أصح من length)
+    bool hasMoreCalc = items.length == _limit;
+    final pagination = dataMap['pagination'];
+    if (pagination is Map) {
+      final p = pagination.cast<String, dynamic>();
+      final current = (p['current_page'] as num?)?.toInt() ?? page;
+      final total = (p['total_pages'] as num?)?.toInt();
+      if (total != null) hasMoreCalc = current < total;
+    }
+
+    return _PageResult(items: items, hasMore: hasMoreCalc);
   }
+}
 
-  // =====================================================
-  //                    Helpers
-  // =====================================================
+class _PageResult {
+  final List<ServiceSummary> items;
+  final bool hasMore;
 
-  void _recalculateFiltered() {
-    filteredServices = services.where((service) {
-      final categoryOk = selectedCategoryId == null ||
-          service.categoryId == selectedCategoryId;
-
-      final priceOk = (() {
-        final min = minPrice;
-        final max = maxPrice;
-        // لو الخدمة ما لها سعر → نعتبرها ضمن النتائج
-        if (service.minPrice == null && service.maxPrice == null) return true;
-
-        final serviceMin = service.minPrice ?? service.maxPrice ?? 0;
-        final serviceMax = service.maxPrice ?? service.minPrice ?? serviceMin;
-
-        // تداخل الباند مع [min, max]
-        final overlaps = serviceMax >= min && serviceMin <= max;
-        return overlaps;
-      })();
-
-      final ratingOk = (service.rating ?? 0) >= minRating;
-
-      final searchOk = (() {
-        if (searchTerm == null || searchTerm!.trim().isEmpty) return true;
-        final q = searchTerm!.toLowerCase();
-        return service.title.toLowerCase().contains(q) ||
-            (service.description ?? '').toLowerCase().contains(q) ||
-            (service.categoryName ?? '').toLowerCase().contains(q) ||
-            (service.cityName ?? '').toLowerCase().contains(q) ||
-            (service.areaName ?? '').toLowerCase().contains(q);
-      })();
-
-      return categoryOk && priceOk && ratingOk && searchOk;
-    }).toList();
-  }
+  const _PageResult({required this.items, required this.hasMore});
 }

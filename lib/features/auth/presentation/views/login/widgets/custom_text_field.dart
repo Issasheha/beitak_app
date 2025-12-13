@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class CustomTextField extends StatelessWidget {
@@ -37,20 +38,21 @@ class CustomTextField extends StatelessWidget {
       keyboardType: keyboardType,
       obscureText: obscureText,
       validator: validator,
-      style: TextStyle(
+      style: AppTextStyles.body14.copyWith(
         color: AppColors.textSecondary, // اللون الأساسي للنص
-        fontSize: SizeConfig.ts(13.5),
+        fontSize: SizeConfig.ts(13.5), // نفس الحجم
+        fontWeight: FontWeight.w400, // Regular (حسب توجه المصممة)
       ),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(
-          color: AppColors.textPrimary.withValues(alpha: 0.6), // بدل الأبيض الشفاف
-          fontSize: SizeConfig.ts(12.75),
+        hintStyle: AppTextStyles.body14.copyWith(
+          color: AppColors.textPrimary.withValues(alpha: 0.6),
+          fontSize: SizeConfig.ts(12.75), // نفس الحجم
+          fontWeight: FontWeight.w400, // Regular
         ),
         prefixIcon: Icon(
           prefixIcon,
-          color:
-              AppColors.textPrimary, // لون الأيقونة الآن نفس لون النص الأساسي
+          color: AppColors.textPrimary,
           size: SizeConfig.w(22.5),
         ),
         suffixIcon: suffixIcon != null
@@ -61,9 +63,10 @@ class CustomTextField extends StatelessWidget {
         filled: true,
         fillColor: AppColors.darkGreen,
         errorText: errorText,
-        errorStyle: TextStyle(
+        errorStyle: AppTextStyles.caption11.copyWith(
           color: AppColors.goldAccent,
-          fontSize: SizeConfig.ts(11.25),
+          fontSize: SizeConfig.ts(11.25), // نفس الحجم
+          fontWeight: FontWeight.w400,
         ),
         contentPadding: EdgeInsets.symmetric(
           vertical: vertical,

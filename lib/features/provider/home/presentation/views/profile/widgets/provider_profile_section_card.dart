@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class ProviderProfileSectionCard extends StatelessWidget {
@@ -41,9 +42,9 @@ class ProviderProfileSectionCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: TextStyle(
+                style: AppTextStyles.title18.copyWith(
                   fontSize: SizeConfig.ts(16),
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),

@@ -1,25 +1,21 @@
-// lib/features/auth/presentation/views/login_view_body.dart
-
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:beitak_app/features/auth/presentation/viewmodels/login_view_model.dart';
+import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/login_content.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class LoginViewBody extends StatefulWidget {
+class LoginViewBody extends ConsumerStatefulWidget {
   const LoginViewBody({super.key});
 
   @override
-  State<LoginViewBody> createState() => _LoginViewBodyState();
+  ConsumerState<LoginViewBody> createState() => _LoginViewBodyState();
 }
 
-class _LoginViewBodyState extends State<LoginViewBody> {
-  final TextEditingController _identifierCtrl = TextEditingController(); // إيميل أو هاتف
+class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
+  final TextEditingController _identifierCtrl = TextEditingController();
   final TextEditingController _passCtrl = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final LoginViewModel _viewModel = LoginViewModel();
 
   bool _isLoading = false;
 
@@ -44,8 +40,8 @@ class _LoginViewBodyState extends State<LoginViewBody> {
               emailController: _identifierCtrl,
               passwordController: _passCtrl,
               formKey: _formKey,
-              onMainActionPressed: _handleMainActionPressed,
-              onContinueAsGuest: _handleContinueAsGuest,
+              onMainActionPressed: _handleLogin,
+              onContinueAsGuest: _handleGuest,
             ),
           ),
         ],
@@ -53,52 +49,74 @@ class _LoginViewBodyState extends State<LoginViewBody> {
     );
   }
 
-  Future<void> _handleMainActionPressed() async {
+  Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-    final success = await _viewModel.loginWithIdentifier(
-      identifier: _identifierCtrl.text.trim(),
-      password: _passCtrl.text,
-    );
-    if (mounted) setState(() => _isLoading = false);
 
-    if (success) {
-      _goToHomeOrPrevious();
-    } else if (_viewModel.lastErrorMessage != null && mounted) {
+    try {
+      // Validation بسيط قبل الإرسال (مثل ما كنت عامل سابقًا)
+      var identifier = _identifierCtrl.text.trim();
+      final password = _passCtrl.text;
+
+      final isEmail = identifier.contains('@');
+      if (!isEmail) {
+        final normalized = identifier.replaceAll(RegExp(r'\D'), '');
+        if (normalized.length != 10 ||
+            !normalized.startsWith('07') ||
+            !['5', '7', '8', '9'].contains(normalized[2])) {
+          throw Exception('رقم الهاتف غير صالح');
+        }
+        identifier = normalized;
+      } else {
+        final emailRegex =
+            RegExp(r'^[^.][\w\-.]+@([\w-]+\.)+[\w-]{2,4}[^.]$');
+        if (!emailRegex.hasMatch(identifier) ||
+            identifier.contains('..') ||
+            identifier.contains('@@') ||
+            identifier.contains(' ') ||
+            !identifier.contains('.') ||
+            identifier.startsWith('.') ||
+            identifier.endsWith('.')) {
+          throw Exception('البريد الإلكتروني غير صالح');
+        }
+      }
+
+      final trimmedPassword = password.trim();
+      if (trimmedPassword.length < 6 || trimmedPassword.isEmpty || password.contains(' ')) {
+        throw Exception('كلمة المرور غير صالحة');
+      }
+
+      await ref.read(authControllerProvider.notifier).loginWithIdentifier(
+            identifier: identifier,
+            password: password,
+          );
+
+      // ✅ لا تعمل Navigation هنا
+      // الراوتر سيعمل redirect تلقائيًا حسب AuthState (+ from لو موجود)
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_viewModel.lastErrorMessage!)),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _handleContinueAsGuest() async {
+  Future<void> _handleGuest() async {
     setState(() => _isLoading = true);
-    await _viewModel.continueAsGuest();
-    if (mounted) setState(() => _isLoading = false);
-    _goToHomeOrPrevious();
-  }
 
-  /// بدلاً من الذهاب دائماً إلى الـ Home، نحاول أولاً
-  /// أن نرجع المستخدم إلى الصفحة التي جاء منها (from)
-  /// إذا كانت موجودة في query params.
-  void _goToHomeOrPrevious() {
-    if (!mounted) return;
-
-    // نقرأ الـ URI الحالي من GoRouterState بدل GoRouter
-    final uri = GoRouterState.of(context).uri;
-    final from = uri.queryParameters['from'];
-
-    if (from != null &&
-        from.isNotEmpty &&
-        from != AppRoutes.login &&
-        from != AppRoutes.splash &&
-        from != AppRoutes.onboarding) {
-      // رجّعه للصفحة التي كان ناوي يفتحها
-      context.go(from);
-    } else {
-      // لا يوجد from → نستخدم السلوك الطبيعي: الذهاب للـ Home
-      context.go(AppRoutes.home);
+    try {
+      await ref.read(authControllerProvider.notifier).continueAsGuest();
+      // ✅ بدون Navigation
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 }

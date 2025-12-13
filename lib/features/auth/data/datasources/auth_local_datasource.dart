@@ -26,24 +26,46 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   static const _isGuestKey = 'is_guest';
   static const _seenOnboardingKey = 'seen_onboarding';
 
+  // 🔹 مفتاح جديد لتخزين role المستخدم (customer / provider / ..)
+  static const _userRoleKey = 'user_role';
+
   @override
-  Future<void> cacheAuthSession(AuthSessionModel session) async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = jsonEncode(session.toJson());
+Future<void> cacheAuthSession(AuthSessionModel session) async {
+  final prefs = await SharedPreferences.getInstance();
 
-    final success = await prefs.setString(_sessionKey, jsonString);
-    if (!success) {
-      throw const CacheException('Failed to cache auth session');
-    }
+  // ✅ تنظيف التوكن + تحديد guest بناءً على وجود token
+  final raw = (session.token ?? '').trim();
+  final clean = raw.toLowerCase().startsWith('bearer ') ? raw.substring(7).trim() : raw;
+  final hasToken = clean.isNotEmpty;
 
-    // ✅ مهم جداً: نحافظ على نفس سلوك التطبيق السابق + منطق الضيف
-    // أي جلسة (ضيف أو مستخدم حقيقي) نعتبره "داخل التطبيق"
-    await prefs.setBool(_isLoggedInKey, true);
-    // بما إن المستخدم دخل بعد الـ Onboarding، نضمن إنه ما يرجع لها
-    await prefs.setBool(_seenOnboardingKey, true);
-    // نحدد إذا كان ضيف أو لا بناءً على الـ session
-    await prefs.setBool(_isGuestKey, session.isGuest);
+  final fixedSession = AuthSessionModel(
+    token: hasToken ? clean : null,
+    user: session.user,
+    isGuest: !hasToken,
+    isNewUser: session.isNewUser,
+    expiresAt: session.expiresAt,
+  );
+
+  final jsonString = jsonEncode(fixedSession.toJson());
+
+  final success = await prefs.setString(_sessionKey, jsonString);
+  if (!success) {
+    throw const CacheException('Failed to cache auth session');
   }
+
+  // ✅ أي جلسة (ضيف أو مستخدم حقيقي) نعتبره "داخل التطبيق"
+  await prefs.setBool(_isLoggedInKey, true);
+  await prefs.setBool(_seenOnboardingKey, true);
+  await prefs.setBool(_isGuestKey, fixedSession.isGuest);
+
+  // 🔹 نخزّن الـ role لو موجود
+  final role = fixedSession.user?.role;
+  if (role != null && role.isNotEmpty) {
+    await prefs.setString(_userRoleKey, role);
+  } else {
+    await prefs.remove(_userRoleKey);
+  }
+}
 
   @override
   Future<AuthSessionModel?> getCachedAuthSession() async {
@@ -69,5 +91,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     await prefs.setBool(_isLoggedInKey, false);
     await prefs.setBool(_isGuestKey, false);
     // ما بنرجّع الـ onboarding، نخلي seen_onboarding زي ما هو (غالباً true)
+
+    // 🔹 نمسح الـ role كمان
+    await prefs.remove(_userRoleKey);
   }
 }

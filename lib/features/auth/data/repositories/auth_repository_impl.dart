@@ -16,6 +16,8 @@ class AuthRepositoryImpl implements AuthRepository {
   })  : _remote = remote,
         _local = local;
 
+  // ================== Login ==================
+
   @override
   Future<AuthSessionEntity> loginWithIdentifier({
     required String identifier,
@@ -30,6 +32,38 @@ class AuthRepositoryImpl implements AuthRepository {
 
     return sessionModel.toEntity();
   }
+
+  // ================== Signup ==================
+
+  @override
+  Future<AuthSessionEntity> signup({
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String email,
+    required String password,
+    required int cityId,
+    required int areaId,
+    String role = 'customer',
+  }) async {
+    final AuthSessionModel sessionModel = await _remote.signup(
+      firstName: firstName,
+      lastName: lastName,
+      phone: phone,
+      email: email,
+      password: password,
+      role: role,
+      cityId: cityId,
+      areaId: areaId,
+    );
+
+    // نحفظ الجلسة (token + user) تماماً مثل تسجيل الدخول
+    await _local.cacheAuthSession(sessionModel);
+
+    return sessionModel.toEntity();
+  }
+
+  // ================== Reset Password / OTP ==================
 
   @override
   Future<void> sendResetCode({required String phone}) {
@@ -58,6 +92,8 @@ class AuthRepositoryImpl implements AuthRepository {
       newPassword: newPassword,
     );
   }
+
+  // ================== Session / Logout / Guest ==================
 
   @override
   Future<AuthSessionEntity?> loadSavedSession() async {

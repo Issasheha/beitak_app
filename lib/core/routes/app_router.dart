@@ -1,109 +1,231 @@
 // lib/core/routes/app_router.dart
 
-import 'package:beitak_app/features/auth/presentation/views/login/login_view.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
+import 'package:beitak_app/core/routes/router_refresh_notifier.dart';
+import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/providers/auth_state.dart';
+
+import 'package:beitak_app/features/auth/presentation/views/login/login_view.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/provider_application_view.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/register_view.dart';
+
+import 'package:beitak_app/features/onboarding/presentation/views/onboarding_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/provider_edit_account_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account_settings_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/documents/provider_documents_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/help_center_provider_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/history/provider_history_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/reviews/provider_reviews_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/terms_and_conditions_view.dart';
+import 'package:beitak_app/features/splash/presentation/views/splash_view.dart';
+
 import 'package:beitak_app/features/provider/home/presentation/views/add_package_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/add_service_view.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/browse/browse_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/bookings/browse_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/marketplace_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/my_service/provider_my_service.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/profile_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/provider_home_view.dart';
-import 'package:beitak_app/features/user/home/presentation/views/browse/browse_service_view.dart';
-import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/change_password_view.dart';
-import 'package:beitak_app/features/user/home/presentation/views/profile/support_widgets/help_center_view.dart';
+
 import 'package:beitak_app/features/user/home/presentation/home_view.dart';
+import 'package:beitak_app/features/user/home/presentation/search_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/browse_service_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
+import 'package:beitak_app/features/user/home/presentation/views/my_service/service_details_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/my_service_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/profile_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/profile/support_widgets/help_center_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/change_password_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/request_service/request_service_view.dart';
 import 'package:beitak_app/features/user/notifications/presentation/views/notifications_view.dart';
-import 'package:beitak_app/features/onboarding/presentation/views/onboarding_view.dart';
-import 'package:beitak_app/features/splash/presentation/views/splash_view.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class AppRouter {
-  static final GoRouter router = GoRouter(
+final goRouterProvider = Provider<GoRouter>((ref) {
+  final refresh = RouterRefreshNotifier();
+
+  final sub = ref.listen<AuthState>(
+    authControllerProvider,
+    (_, __) => refresh.ping(),
+  );
+
+  ref.onDispose(() {
+    sub.close();
+    refresh.dispose();
+  });
+
+  // ========= Route groups =========
+
+  const publicRoutes = <String>{
+    AppRoutes.splash,
+    AppRoutes.onboarding,
+    AppRoutes.login,
+    AppRoutes.register,
+    AppRoutes.providerApplication,
+  };
+
+  // صفحات تتطلب حساب حقيقي (مش ضيف)
+  const authOnlyRoutes = <String>{
+    AppRoutes.myServices,
+    AppRoutes.profile,
+    AppRoutes.changePassword,
+    AppRoutes.notifications,
+  };
+
+  // صفحات Provider فقط
+  const providerOnlyRoutes = <String>{
+    AppRoutes.providerHome,
+    AppRoutes.providerProfile,
+    AppRoutes.providerBrowse,
+    AppRoutes.providerMyService,
+    AppRoutes.providerAddService,
+    AppRoutes.providerAddPackage,
+    AppRoutes.providerMarketplace,
+  };
+
+  // صفحات User فقط (نترك HelpCenter متاح للجميع لو حبيت، بس خلّيه هنا إذا بدك ينعزل)
+  const userOnlyRoutes = <String>{
+    AppRoutes.home,
+    AppRoutes.profile,
+    AppRoutes.browseServices,
+    AppRoutes.requestService,
+    AppRoutes.myServices,
+    AppRoutes.notifications,
+    AppRoutes.changePassword,
+    AppRoutes.helpCenter,
+    AppRoutes.search,
+    AppRoutes.serviceDetail,
+  };
+
+  String _encodeFrom(GoRouterState state) {
+    final full = state.uri.toString(); // يشمل query
+    return Uri.encodeComponent(full);
+  }
+
+  bool _isSafeFromRaw(String fromRaw) {
+    if (!fromRaw.startsWith('/')) return false;
+
+    const blocked = <String>{
+      AppRoutes.login,
+      AppRoutes.splash,
+      AppRoutes.onboarding,
+      AppRoutes.register,
+    };
+
+    // ممنوع يرجع لصفحات بتعمل loops
+    if (blocked.contains(fromRaw)) return false;
+
+    return true;
+  }
+
+  /// يرجّع from مناسب حسب الدور (وإلا null)
+  String? _safeFromForRole({
+    required String decodedFrom,
+    required bool isProvider,
+  }) {
+    if (!_isSafeFromRaw(decodedFrom)) return null;
+
+    // نقرأ path فقط (بدون query)
+    final path = Uri.parse(decodedFrom).path;
+
+    // ✅ لو Provider وجاي يروح لمسار User → امنعه
+    if (isProvider && userOnlyRoutes.contains(path)) return null;
+
+    // ✅ لو User وجاي يروح لمسار Provider → امنعه
+    if (!isProvider && providerOnlyRoutes.contains(path)) return null;
+
+    return decodedFrom;
+  }
+
+  return GoRouter(
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
+    refreshListenable: refresh,
     redirect: (context, state) async {
       final prefs = await SharedPreferences.getInstance();
 
-      final bool seenSplash = prefs.getBool('seen_splash') ?? false;
-      final bool seenOnboarding = prefs.getBool('seen_onboarding') ?? false;
-      final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
-      final bool isGuest = prefs.getBool('is_guest') ?? false;
+      final seenSplash = prefs.getBool('seen_splash') ?? false;
+      final seenOnboarding = prefs.getBool('seen_onboarding') ?? false;
 
-      final String location = state.matchedLocation;
+      // الأفضل نستخدم path للمقارنات
+      final path = state.uri.path;
 
-      // 🔒 المسارات التي تتطلب "مستخدم حقيقي" وليس ضيف
-      // ✅ شلنا منها browseServices عشان الضيف يقدر يتصفح الخدمات
-      const authOnlyRoutes = <String>{
-        // AppRoutes.requestService,
-        AppRoutes.myServices,
-        AppRoutes.profile,
-        AppRoutes.changePassword,
-        AppRoutes.notifications,
-      };
-
-      // 1) أول تشغيل: روح على Splash
+      // 1) Splash أول مرة
       if (!seenSplash) {
-        await prefs.setBool('seen_splash', true);
-        if (location != AppRoutes.splash) return AppRoutes.splash;
-        return null;
+        return path == AppRoutes.splash ? null : AppRoutes.splash;
       }
 
-      // 2) لم يرَ الـ Onboarding بعد → يجب أن يمر عليها
+      // 2) Onboarding أول مرة
       if (!seenOnboarding) {
-        if (location != AppRoutes.onboarding && location != AppRoutes.splash) {
-          return AppRoutes.onboarding;
+        if (path == AppRoutes.onboarding || path == AppRoutes.splash)
+          return null;
+        return AppRoutes.onboarding;
+      }
+
+      // 3) AuthState مصدر الحقيقة
+      final auth = ref.read(authControllerProvider);
+
+      // أثناء التحميل الأولي للجلسة
+      if (auth.status == AuthStatus.loading) return null;
+
+      // 4) غير مسجل
+      if (auth.status == AuthStatus.unauthenticated) {
+        if (publicRoutes.contains(path)) return null;
+        return '${AppRoutes.login}?from=${_encodeFrom(state)}';
+      }
+
+      // 5) ضيف
+      if (auth.status == AuthStatus.guest) {
+        // ممنوع على صفحات الحساب الحقيقي
+        if (authOnlyRoutes.contains(path)) {
+          return '${AppRoutes.login}?from=${_encodeFrom(state)}';
         }
+
+        // ممنوع يفتح صفحات Provider
+        if (providerOnlyRoutes.contains(path)) {
+          return AppRoutes.home;
+        }
+
+        // لو ضيف وواقف على login → وديه Home
+        if (path == AppRoutes.login) return AppRoutes.home;
+
         return null;
       }
 
-      // 3) ليس "داخل التطبيق" بعد (لا ضيف ولا مستخدم مسجَّل)
-      if (!isLoggedIn) {
-        // يُسمح له فقط:
-        // - splash
-        // - onboarding
-        // - login
-        // - register
-        // - providerApplication
-        // - providerHome (مؤقتاً للتجربة)
-        if (location != AppRoutes.login &&
-            location != AppRoutes.register &&
-            location != AppRoutes.providerApplication &&
-            location != AppRoutes.onboarding &&
-            location != AppRoutes.splash &&
-            location != AppRoutes.providerHome &&
-            location != AppRoutes.providerProfile &&
-            location != AppRoutes.providerBrowse &&
-            location != AppRoutes.providerMyService &&
-            location != AppRoutes.providerAddPackage &&
-            location != AppRoutes.providerAddService) {
-          return AppRoutes.login;
+      // 6) مسجّل دخول
+      if (auth.status == AuthStatus.authenticated) {
+        // ✅ Role Guards: امنع الدخول لصفحات الطرف الآخر
+        if (auth.isProvider && userOnlyRoutes.contains(path)) {
+          return AppRoutes.providerHome;
         }
-        return null;
+        if (!auth.isProvider && providerOnlyRoutes.contains(path)) {
+          return AppRoutes.home;
+        }
+
+        // لو جاي من login ومعه from → رجّعه بشرط يكون مناسب للدور
+        if (path == AppRoutes.login) {
+          final from = state.uri.queryParameters['from'];
+          if (from != null && from.isNotEmpty) {
+            final decoded = Uri.decodeComponent(from);
+            final safe = _safeFromForRole(
+              decodedFrom: decoded,
+              isProvider: auth.isProvider,
+            );
+            if (safe != null) return safe;
+          }
+
+          // لو ما في from صالح → وجهة افتراضية حسب الدور
+          return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
+        }
+
+        // لا يرجع للـ public routes
+        if (publicRoutes.contains(path)) {
+          return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
+        }
       }
 
-      // 4) ضيف يحاول الوصول إلى مسار يحتاج حساب حقيقي → نوديه على login مع from
-      if (isLoggedIn && isGuest && authOnlyRoutes.contains(location)) {
-        // نضيف from كـ query param عشان نرجعه لنفس الصفحة بعد الـ login
-        return '${AppRoutes.login}?from=$location';
-      }
-
-      // 5) مستخدم مسجّل (حقيقي) لا يرجع إلى login / register / onboarding
-      // 👈 انتبه: هذا الشرط لا ينطبق على الضيف (isGuest == false فقط)
-      if (isLoggedIn &&
-          !isGuest &&
-          (location == AppRoutes.login ||
-              location == AppRoutes.register ||
-              location == AppRoutes.onboarding)) {
-        return AppRoutes.home;
-      }
-
-      // 6) باقي الحالات: اسمح له يكمل
       return null;
     },
     routes: [
@@ -115,14 +237,7 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.onboarding,
         name: AppRoutes.onboarding,
-        builder: (context, state) {
-          // بعد ما يخلّص Onboarding نحفظ إنو شافها (احتياطًا)
-          Future.microtask(() async {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('seen_onboarding', true);
-          });
-          return const OnboardingView();
-        },
+        builder: (context, state) => const OnboardingView(),
       ),
       GoRoute(
         path: AppRoutes.login,
@@ -130,14 +245,14 @@ class AppRouter {
         builder: (context, state) => const LoginView(),
       ),
       GoRoute(
-        path: AppRoutes.home,
-        name: AppRoutes.home,
-        builder: (context, state) => const HomeView(),
-      ),
-      GoRoute(
         path: AppRoutes.register,
         name: AppRoutes.register,
         builder: (context, state) => const RegisterView(),
+      ),
+      GoRoute(
+        path: AppRoutes.home,
+        name: AppRoutes.home,
+        builder: (context, state) => const HomeView(),
       ),
       GoRoute(
         path: AppRoutes.providerApplication,
@@ -152,7 +267,12 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.browseServices,
         name: AppRoutes.browseServices,
-        builder: (context, state) => const BrowseServiceView(),
+        builder: (context, state) {
+          final q = state.uri.queryParameters['q'];
+          final cityId =
+              int.tryParse(state.uri.queryParameters['city_id'] ?? '');
+          return BrowseServiceView(initialSearch: q, initialCityId: cityId);
+        },
       ),
       GoRoute(
         path: AppRoutes.requestService,
@@ -192,7 +312,10 @@ class AppRouter {
       GoRoute(
         path: AppRoutes.providerBrowse,
         name: AppRoutes.providerBrowse,
-        builder: (context, state) => const ProviderBrowseView(),
+        builder: (context, state) {
+          final tab = state.uri.queryParameters['tab'];
+          return ProviderBrowseView(initialTab: tab);
+        },
       ),
       GoRoute(
         path: AppRoutes.providerMyService,
@@ -209,6 +332,59 @@ class AppRouter {
         name: AppRoutes.providerAddPackage,
         builder: (context, state) => const AddPackageView(),
       ),
+      GoRoute(
+        path: AppRoutes.search,
+        name: AppRoutes.search,
+        builder: (context, state) => const SearchView(),
+      ),
+      GoRoute(
+        path: AppRoutes.serviceDetail,
+        name: AppRoutes.serviceDetail,
+        builder: (context, state) {
+          final item = state.extra as BookingListItem;
+          return ServiceDetailsView(initialItem: item);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.providerMarketplace,
+        name: AppRoutes.providerMarketplace,
+        builder: (context, state) => const MarketplaceView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerTerms,
+        name: AppRoutes.providerTerms,
+        builder: (context, state) => const TermsAndConditionsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerHelpCenter,
+        name: AppRoutes.providerHelpCenter,
+        builder: (context, state) => const HelpCenterProviderView(),
+      ),
+      GoRoute(
+        path: AppRoutes.provideraccountSettings,
+        name: AppRoutes.provideraccountSettings,
+        builder: (context, state) => const ProviderAccountSettingsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.provideraccountEdit,
+        name: AppRoutes.provideraccountEdit,
+        builder: (context, state) => const ProviderAccountEditView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerdocumentsView,
+        name: AppRoutes.providerdocumentsView,
+        builder: (context, state) => const ProviderDocumentsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerHistory,
+        name: AppRoutes.providerHistory,
+        builder: (context, state) => const ProviderHistoryView(),
+      ),
+       GoRoute(
+        path: AppRoutes.providerReviews,
+        name: AppRoutes.providerReviews,
+        builder: (context, state) => const ProviderReviewsView(),
+      ),
     ],
   );
-}
+});

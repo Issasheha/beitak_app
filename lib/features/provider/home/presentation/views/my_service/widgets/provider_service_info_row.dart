@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 
 class ProviderServiceInfoRow extends StatelessWidget {
   final IconData icon;
@@ -18,10 +19,14 @@ class ProviderServiceInfoRow extends StatelessWidget {
       children: [
         Icon(icon, size: 18, color: AppColors.textSecondary),
         const SizedBox(width: 8),
-        Text(label,
-            style: TextStyle(
-                fontSize: SizeConfig.ts(13),
-                color: AppColors.textSecondary)),
+        Text(
+          label,
+          style: AppTextStyles.body14.copyWith(
+            fontSize: SizeConfig.ts(13), // نفس الرقم اللي كان
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w400, // default قريب من body14
+          ),
+        ),
       ],
     );
   }

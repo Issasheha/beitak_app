@@ -1,5 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
 
 class ProfileActionItem extends StatelessWidget {
@@ -39,7 +40,7 @@ class ProfileActionItem extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: TextStyle(
+                style: AppTextStyles.body14.copyWith(
                   fontSize: SizeConfig.ts(14),
                   fontWeight: FontWeight.w500,
                   color: itemColor,
