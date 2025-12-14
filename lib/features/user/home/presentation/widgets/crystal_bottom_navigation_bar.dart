@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:beitak_app/core/constants/color_x.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
@@ -13,17 +14,17 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
   const CrystalBottomNavigationBar({super.key});
 
   void _onItemTapped(BuildContext context, WidgetRef ref, int index) {
-    // تحديث الحالة في Riverpod بدل setState
     ref.read(homeBottomNavIndexProvider.notifier).state = index;
 
-    // نفس منطق التوجيه القديم بالضبط
+    // ✅ بس عنصرين الآن
     if (index == 0) context.go(AppRoutes.home);
     if (index == 1) context.push(AppRoutes.myServices);
-    if (index == 2) context.go(AppRoutes.profile);
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    SizeConfig.init(context);
+
     final selectedIndex = ref.watch(homeBottomNavIndexProvider);
 
     Widget buildNavItem({
@@ -32,45 +33,69 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
       required String label,
       required int index,
     }) {
-      final bool isActive = selectedIndex == index;
+      final isActive = selectedIndex == index;
 
-      return GestureDetector(
-        onTap: () => _onItemTapped(context, ref, index),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isActive ? activeIcon : icon,
-                color: isActive
-                    ? AppColors.primaryGreen
-                    : AppColors.textSecondary,
-                size: 28,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isActive
-                      ? AppColors.primaryGreen
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+      const activeColor = AppColors.lightGreen;
+      const inactiveColor = AppColors.textSecondary;
+
+      final iconWidget = Icon(
+        isActive ? activeIcon : icon,
+        color: isActive ? activeColor : inactiveColor,
+        size: 26,
+      );
+
+      final textWidget = Text(
+        label,
+        style: TextStyle(
+          fontSize: SizeConfig.ts(12),
+          color: isActive ? activeColor : inactiveColor,
+          fontWeight: isActive ? FontWeight.w900 : FontWeight.w600,
+          height: 1.1,
+        ),
+      );
+
+      // ✅ شكل الكليكابل: active = pill background + border
+      final child = AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.symmetric(
+          horizontal: SizeConfig.w(isActive ? 18 : 10),
+          vertical: SizeConfig.h(10),
+        ),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor.o(0.14) : Colors.transparent,
+          borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+          border: Border.all(
+            color: isActive ? activeColor.o(0.25) : Colors.transparent,
+            width: 1.2,
           ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            iconWidget,
+            SizedBox(height: SizeConfig.h(4)),
+            textWidget,
+          ],
+        ),
+      );
+
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _onItemTapped(context, ref, index),
+          borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+          child: child,
         ),
       );
     }
 
     return SizedBox(
-      height: 90,
+      height: 92,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // الخلفية الزجاجية للـ Bottom Bar
+          // ✅ الخلفية الزجاجية للـ Bottom Bar
           Positioned(
             bottom: 0,
             left: 0,
@@ -85,8 +110,6 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
                   height: 76,
                   decoration: BoxDecoration(
                     color: AppColors.white.withValues(alpha: 0.25),
-
-                    // ظل ناعم من الأعلى بدل الخط الفاصل
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.06),
@@ -96,29 +119,26 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
                     ],
                   ),
                   child: Row(
+                    textDirection: TextDirection.rtl,
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      // ✅ يمين: الرئيسية (زي الصورة)
                       buildNavItem(
                         icon: Icons.home_outlined,
-                        activeIcon: Icons.home,
+                        activeIcon: Icons.home_rounded,
                         label: "الرئيسية",
                         index: 0,
                       ),
+
+                      // ✅ مسافة للدائرة الوسطية
+                      const SizedBox(width: 84),
+
+                      // ✅ يسار: حجوزاتي
                       buildNavItem(
-                        icon: Icons.design_services_outlined,
-                        activeIcon: Icons.design_services,
-                        label: "خدماتي",
+                        icon: Icons.calendar_today_outlined,
+                        activeIcon: Icons.calendar_month_rounded,
+                        label: "حجوزاتي",
                         index: 1,
-                      ),
-
-                      // مسافة للدائرة الوسطية
-                      const SizedBox(width: 80),
-
-                      buildNavItem(
-                        icon: Icons.person_outline,
-                        activeIcon: Icons.person,
-                        label: "الملف الشخصي",
-                        index: 2,
                       ),
                     ],
                   ),
@@ -127,46 +147,49 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
             ),
           ),
 
-          // الدائرة الوسطية الخاصة بـ Quick Actions (+)
+          // ✅ زر + بالنص (Floating)
           Positioned(
-            top: 0,
+            top: -8,
             left: 0,
             right: 0,
             child: Center(
-              child: GestureDetector(
-                onTap: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: AppColors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(SizeConfig.radius(24)),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: AppColors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(SizeConfig.radius(24)),
+                        ),
                       ),
+                      builder: (_) => const QuickActionsRow(),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.lightGreen,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.lightGreen.withValues(alpha: 0.40),
+                          blurRadius: 25,
+                          spreadRadius: 8,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                    builder: (_) => const QuickActionsRow(),
-                  );
-                },
-                child: Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.lightGreen,
-                    boxShadow: [
-                      BoxShadow(
-                        color:
-                            AppColors.lightGreen.withValues(alpha: 0.4),
-                        blurRadius: 25,
-                        spreadRadius: 8,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.add,
-                    size: 38,
-                    color: Colors.white,
+                    child: const Icon(
+                      Icons.add,
+                      size: 38,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),

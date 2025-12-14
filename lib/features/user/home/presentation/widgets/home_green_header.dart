@@ -22,17 +22,14 @@ class HomeGreenHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCompact = MediaQuery.of(context).size.height < 720;
-
-    // تحكم أفضل بالفراغات حسب ارتفاع الهيدر
-    final topTextGap = isCompact ? SizeConfig.h(22) : SizeConfig.h(28);
-    final textToSearchGap = isCompact ? SizeConfig.h(16) : SizeConfig.h(18);
+    final mq = MediaQuery.of(context);
+    final isCompact = mq.size.height < 720;
 
     return SizedBox(
       height: height,
       child: Stack(
         children: [
-          // خلفية الهيدر بدون shadow (حتى ما يطلع خط)
+          // ✅ خلفية الهيدر (قصّ أسفل مثل الصورة)
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.only(
@@ -43,27 +40,23 @@ class HomeGreenHeader extends StatelessWidget {
             ),
           ),
 
-          // دوائر داخلية خفيفة (مثل الصورة)
+          // ✅ Blobs خفيفة مثل الصورة
           const Positioned(
             left: -135,
             top: -105,
             child: _SoftBlob(size: 280, opacity: 0.12),
           ),
-
-          // قوس/نص دائرة أسفل يمين (بدون ما يوصل للبروفايل)
           const Positioned(
             right: -120,
             bottom: -190,
             child: ClipRect(
               child: Align(
                 alignment: Alignment.topCenter,
-                heightFactor: 0.58, // يظهر "قوس"
+                heightFactor: 0.58,
                 child: _SoftBlob(size: 320, opacity: 0.12),
               ),
             ),
           ),
-
-          // نقطة خفيفة وسط يسار مثل الصورة
           const Positioned(
             left: 44,
             bottom: 92,
@@ -73,79 +66,182 @@ class HomeGreenHeader extends StatelessWidget {
           SafeArea(
             bottom: false,
             child: Padding(
-              padding: SizeConfig.padding(horizontal: 18, vertical: isCompact ? 12 : 14),
+              padding: SizeConfig.padding(
+                horizontal: 18,
+                vertical: isCompact ? 12 : 14,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // RTL: أول عنصر يمين، آخر عنصر يسار
+                  // ✅ Top row: (يمين: شعار) (يسار: بروفايل + جرس)
                   Row(
+                    textDirection: TextDirection.rtl,
                     children: [
-                      _ProfileChip(name: displayName, onTap: onProfileTap),
-                      const Spacer(),
-
-                      // جرس أكبر شوي (مرتب)
-                      IconButton(
-                        onPressed: onNotificationsTap,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: Icon(
-                          Icons.notifications_none_rounded,
-                          color: Colors.white,
-                          size: SizeConfig.w(26),
-                        ),
-                      ),
-                      SizedBox(width: SizeConfig.w(8)),
-
-                      // شعار أكبر
                       SvgPicture.asset(
                         'assets/images/Baitak white.svg',
                         height: SizeConfig.h(30),
-                        fit: BoxFit.fill,
+                        fit: BoxFit.contain,
+                      ),
+                      const Spacer(),
+                      _HeaderIconBtn(
+                        icon: Icons.person_outline_rounded,
+                        onTap: onProfileTap,
+                      ),
+                      SizedBox(width: SizeConfig.w(10)),
+                      _HeaderIconBtn(
+                        icon: Icons.notifications_none_rounded,
+                        onTap: onNotificationsTap,
                       ),
                     ],
                   ),
 
-                  SizedBox(height: topTextGap),
+                  SizedBox(height: SizeConfig.h(14)),
 
-                  // نصوص الهيدر
-                  Column(
-                    children: [
-                      Text(
-                        'مكانك الموثوق للخدمات المنزلية',
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                          fontSize: SizeConfig.ts(16.5),
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white.o(0.96),
-                          height: 1.15,
+                  // ✅ Name row (مثل الصورة: الاسم يمين + دائرة الحرف)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: InkWell(
+                      onTap: onProfileTap,
+                      borderRadius: BorderRadius.circular(SizeConfig.radius(999)),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: SizeConfig.w(4),
+                          vertical: SizeConfig.h(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          textDirection: TextDirection.rtl,
+                          children: [
+                            Container(
+                              width: SizeConfig.w(46),
+                              height: SizeConfig.w(46),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: const Color(0xFF4B58FF),
+                                border: Border.all(color: Colors.white.o(0.25)),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                _initials(displayName),
+                                style: TextStyle(
+                                  fontSize: SizeConfig.ts(13),
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: SizeConfig.w(10)),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: SizeConfig.w(220)),
+                              child: Text(
+                                displayName.trim().isEmpty ? 'ضيف' : displayName.trim(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  fontSize: SizeConfig.ts(16),
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      SizedBox(height: SizeConfig.h(15)),
-                      Text(
-                        'محترفون موثوقون ومعتمدون دون عناء البحث.',
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                          fontSize: SizeConfig.ts(11.8),
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white.o(0.90),
-                          height: 1.2,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
 
-                  const SizedBox(height: 75),
+                  // ✅ الجزء المرن لمنع overflow
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        // رفع البحث للأعلى بشكل مرن حسب المساحة
+                        final lift = (c.maxHeight * 0.22).clamp(40.0, 78.0);
 
-                  // شريط البحث (مرفوع للأعلى)
-                  _HeaderSearchBar(onTap: onSearchTap),
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(height: isCompact ? SizeConfig.h(14) : SizeConfig.h(18)),
+                            Text(
+                              'مكانك الموثوق للخدمات المنزلية',
+                              textAlign: TextAlign.start,
+                              style: TextStyle(
+                                fontSize: SizeConfig.ts(16.5),
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white.o(0.96),
+                                height: 1.15,
+                              ),
+                            ),
+                            SizedBox(height: SizeConfig.h(14)),
+                            Text(
+                              'محترفون موثوقون ومعتمدون دون عناء البحث.',
+                              textAlign: TextAlign.start,
+                              style: TextStyle(
+                                fontSize: SizeConfig.ts(11.8),
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white.o(0.90),
+                                height: 1.2,
+                              ),
+                            ),
 
-                  // نخلي باقي الفراغ تحت (بدون ما يبعد كثير)
-                  const Spacer(),
+                            const Spacer(),
+
+                            Padding(
+                              padding: EdgeInsets.only(bottom: lift),
+                              child: _HeaderSearchBar(onTap: onSearchTap),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  static String _initials(String s) {
+    final parts = s.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return 'ض';
+    final first = parts.first;
+    if (first.characters.isEmpty) return 'ض';
+    return first.characters.first;
+  }
+}
+
+class _HeaderIconBtn extends StatelessWidget {
+  const _HeaderIconBtn({
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        width: SizeConfig.w(40),
+        height: SizeConfig.w(40),
+        decoration: BoxDecoration(
+          color: Colors.white.o(0.18),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.o(0.25)),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: SizeConfig.w(24),
+        ),
       ),
     );
   }
@@ -179,7 +275,11 @@ class _HeaderSearchBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(Icons.search_rounded, color: const Color(0xFF8A8A8A), size: SizeConfig.w(20)),
+              Icon(
+                Icons.search_rounded,
+                color: const Color(0xFF8A8A8A),
+                size: SizeConfig.w(20),
+              ),
               SizeConfig.hSpace(10),
               Expanded(
                 child: Text(
@@ -198,70 +298,16 @@ class _HeaderSearchBar extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: AppColors.lightGreen.o(0.14),
                 ),
-                child: Icon(Icons.mic_none_rounded, color: AppColors.lightGreen, size: SizeConfig.w(18)),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.mic_none_rounded,
+                  color: AppColors.lightGreen,
+                  size: SizeConfig.w(18),
+                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ProfileChip extends StatelessWidget {
-  const _ProfileChip({required this.name, required this.onTap});
-  final String name;
-  final VoidCallback onTap;
-
-  String _initials(String s) {
-    final parts = s.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return 'ض';
-    return parts.first.characters.isNotEmpty ? parts.first.characters.first : 'ض';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = _initials(name);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(SizeConfig.radius(999)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: SizeConfig.w(38),
-            height: SizeConfig.w(38),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFF4B58FF),
-              border: Border.all(color: Colors.white.o(0.25)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: TextStyle(
-                fontSize: SizeConfig.ts(12.5),
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          SizeConfig.hSpace(10),
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: SizeConfig.w(170)),
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: SizeConfig.ts(13),
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

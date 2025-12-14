@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "233817010055",
-    "project_id": "baitak-c2dd7",
-    "storage_bucket": "baitak-c2dd7.firebasestorage.app"
+    "project_number": "205732742922",
+    "project_id": "baitak-app-d31ab",
+    "storage_bucket": "baitak-app-d31ab.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:233817010055:android:e4e0ed9c29343cac102d22",
+        "mobilesdk_app_id": "1:205732742922:android:a0c516453b3382b5c11cf3",
         "android_client_info": {
           "package_name": "com.example.beitak_app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCpGRQVOXLWZGQhj25xGwuQb-9cV0lPJEk"
+          "current_key": "AIzaSyDRe4H0XCRT_nWspVQc3dccL5UszJaRdos"
         }
       ],
       "services": {

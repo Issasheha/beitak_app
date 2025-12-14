@@ -296,11 +296,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.changePassword,
         builder: (context, state) => const ChangePasswordView(),
       ),
-      GoRoute(
-        path: AppRoutes.helpCenter,
-        name: AppRoutes.helpCenter,
-        builder: (context, state) => const HelpCenterView(),
-      ),
+      // GoRoute(
+      //   path: AppRoutes.helpCenter,
+      //   name: AppRoutes.helpCenter,
+      //   builder: (context, state) => const HelpCenterView(),
+      // ),
       GoRoute(
         path: AppRoutes.providerHome,
         name: AppRoutes.providerHome,
