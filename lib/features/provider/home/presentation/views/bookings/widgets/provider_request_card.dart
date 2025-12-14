@@ -135,6 +135,12 @@ class ProviderBookingCard extends StatelessWidget {
     return palette[hash % palette.length];
   }
 
+  bool _hasContactInfo(ProviderBookingModel b) {
+    final p = (b.customerPhone ?? '').trim();
+    final e = (b.customerEmail ?? '').trim();
+    return p.isNotEmpty || e.isNotEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     final initials = _initials(booking.customerName);
@@ -147,6 +153,9 @@ class ProviderBookingCard extends StatelessWidget {
         _isPending && (onAccept != null || onReject != null);
     final canShowUpcomingActions =
         _isScheduledLike && (onComplete != null || onCancel != null);
+
+    // ✅ فقط قبل القبول + فقط إذا كان فيه رقم/إيميل أصلاً
+    final showContactHint = _isPending && _hasContactInfo(booking);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -255,6 +264,12 @@ class ProviderBookingCard extends StatelessWidget {
                         ],
                       ),
 
+                      // ✅ تنبيه بيانات التواصل قبل القبول (خفيف ومرتب)
+                      if (showContactHint) ...[
+                        SizedBox(height: SizeConfig.h(10)),
+                        const _ContactHiddenHint(),
+                      ],
+
                       if (showNotes) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         Container(
@@ -262,8 +277,8 @@ class ProviderBookingCard extends StatelessWidget {
                               horizontal: 10, vertical: 9),
                           decoration: BoxDecoration(
                             color: AppColors.background,
-                            borderRadius: BorderRadius.circular(
-                                SizeConfig.radius(14)),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
                             border: Border.all(color: AppColors.borderLight),
                           ),
                           child: Row(
@@ -294,18 +309,24 @@ class ProviderBookingCard extends StatelessWidget {
                       // Date + time (no price as you wanted)
                       Row(
                         children: [
-                          _Meta(Icons.calendar_today_outlined,
-                              _dateNice(booking.bookingDate)),
+                          _Meta(
+                            Icons.calendar_today_outlined,
+                            _dateNice(booking.bookingDate),
+                          ),
                           SizedBox(width: SizeConfig.w(12)),
-                          _Meta(Icons.access_time, _timeShort(booking.bookingTime)),
+                          _Meta(
+                            Icons.access_time,
+                            _timeShort(booking.bookingTime),
+                          ),
                           const Spacer(),
                           Container(
                             width: SizeConfig.w(44),
                             height: SizeConfig.w(44),
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(
-                                  SizeConfig.radius(14)),
-                              color: AppColors.lightGreen.withValues(alpha: 0.12),
+                              borderRadius:
+                                  BorderRadius.circular(SizeConfig.radius(14)),
+                              color:
+                                  AppColors.lightGreen.withValues(alpha: 0.12),
                             ),
                             alignment: Alignment.center,
                             child: Text(
@@ -374,7 +395,6 @@ class ProviderBookingCard extends StatelessWidget {
       return Row(
         textDirection: TextDirection.rtl,
         children: [
-          // ✅ قبول على اليمين
           Expanded(
             child: _PrimaryBtn(
               label: 'قبول',
@@ -383,7 +403,6 @@ class ProviderBookingCard extends StatelessWidget {
             ),
           ),
           SizedBox(width: SizeConfig.w(10)),
-          // ✅ رفض على اليسار
           Expanded(
             child: _OutlineBtn(
               label: 'رفض',
@@ -394,11 +413,9 @@ class ProviderBookingCard extends StatelessWidget {
       );
     }
 
-    // scheduled/upcoming
     return Row(
       textDirection: TextDirection.rtl,
       children: [
-        // ✅ إنهاء الخدمة على اليمين
         Expanded(
           child: _PrimaryBtn(
             label: 'إنهاء الخدمة',
@@ -407,7 +424,6 @@ class ProviderBookingCard extends StatelessWidget {
           ),
         ),
         SizedBox(width: SizeConfig.w(10)),
-        // ✅ إلغاء على اليسار
         Expanded(
           child: _OutlineBtn(
             label: 'إلغاء الخدمة',
@@ -415,6 +431,61 @@ class ProviderBookingCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ContactHiddenHint extends StatelessWidget {
+  const _ContactHiddenHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: SizeConfig.padding(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        textDirection: TextDirection.rtl,
+        children: [
+          Container(
+            width: SizeConfig.w(30),
+            height: SizeConfig.w(30),
+            decoration: BoxDecoration(
+              color: AppColors.lightGreen.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(SizeConfig.radius(10)),
+              border: Border.all(
+                color: AppColors.lightGreen.withValues(alpha: 0.22),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '🔒',
+              style: TextStyle(
+                fontSize: SizeConfig.ts(14),
+                height: 1.0,
+              ),
+            ),
+          ),
+          SizedBox(width: SizeConfig.w(10)),
+          Expanded(
+            child: Text(
+              'بيانات التواصل (الهاتف/الإيميل) تظهر بعد قبول الطلب.',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppTextStyles.body14.copyWith(
+                fontSize: SizeConfig.ts(12.2),
+                fontWeight: FontWeight.w800,
+                color: AppColors.textSecondary,
+                height: 1.25,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

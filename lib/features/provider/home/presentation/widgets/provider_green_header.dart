@@ -10,10 +10,14 @@ class ProviderHeaderStat {
   final String value;
   final String emoji;
 
+  /// ✅ إذا موجود => البطاقة تصير كليكابل وتعمل فتح/تنقل
+  final VoidCallback? onTap;
+
   const ProviderHeaderStat({
     required this.title,
     required this.value,
     required this.emoji,
+    this.onTap,
   });
 }
 
@@ -67,7 +71,7 @@ class ProviderGreenHeader extends StatelessWidget {
             builder: (context, c) {
               final available = c.maxHeight;
 
-              // ✅ compact للهواتف/الشاشات القصيرة (يمنع overflow)
+              // compact للهواتف/الشاشات القصيرة (يمنع overflow)
               final compact = available < SizeConfig.h(260);
 
               final gap1 = (available * 0.04).clamp(6.0, 14.0);
@@ -87,10 +91,9 @@ class ProviderGreenHeader extends StatelessWidget {
                       onProfileTap: onProfileTap,
                       onNotificationsTap: onNotificationsTap,
                     ),
-
                     SizedBox(height: gap1),
 
-                    // ✅ نص الترحيب يأخذ مساحة مرنة (بدون فيض)
+                    // الترحيب
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
@@ -109,7 +112,6 @@ class ProviderGreenHeader extends StatelessWidget {
 
                     SizedBox(height: gap2),
 
-                    // ✅ البطاقات: Widget مرتب + مقاسات ثابتة + بدون FittedBox
                     ProviderHeaderStatsRow(
                       stats: stats,
                       compact: compact,

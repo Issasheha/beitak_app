@@ -49,6 +49,15 @@ class ProviderHomeViewModel extends ChangeNotifier {
   String get headerSubtitle =>
       'أهلًا بك من جديد يا $providerName! إليك لمحة عامة.';
 
+  // ---------------- Earnings helpers (for Earnings page / header taps) ----------------
+  // ملاحظة: تعتمد على ProviderStatsModel (المحدّث) لو ضفت حقول total_earnings / completed_bookings...
+  double get totalEarnings => stats.totalEarnings;
+  int get completedCount => stats.completedBookings;
+
+  // placeholders (لحد ما الباك يضيفهم)
+  double? get thisWeekEarnings => null;
+  double? get monthChangePct => null;
+
   // ---------------- Policies ----------------
 
   static const String _pendingProviderAccept = 'pending_provider_accept';
@@ -164,36 +173,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ---------------- Internals ----------------
-
-  Future<void> _resolveProviderNameIfPossible() async {
-    try {
-      final session = await _local.getCachedAuthSession();
-      if (session == null) return;
-
-      final dynamic user = (session as dynamic).user ?? session;
-
-      final String fn = ((user as dynamic).firstName ??
-              (user as dynamic).first_name ??
-              (user as dynamic).first ??
-              '')
-          .toString()
-          .trim();
-
-      final String ln = (((user as dynamic).lastName ??
-              (user as dynamic).last_name ??
-              (user as dynamic).last ??
-              '') as dynamic)
-          .toString()
-          .trim();
-
-      final full = ('$fn $ln').trim();
-      if (full.isNotEmpty) providerName = full;
-    } catch (_) {
-      // ignore
-    }
-  }
-
   Future<void> complete(int bookingId) async {
     errorMessage = null;
     notifyListeners();
@@ -235,6 +214,36 @@ class ProviderHomeViewModel extends ChangeNotifier {
       _log('cancel($bookingId) error: $e');
       errorMessage = 'تعذر تنفيذ العملية. حاول مرة أخرى.';
       notifyListeners();
+    }
+  }
+
+  // ---------------- Internals ----------------
+
+  Future<void> _resolveProviderNameIfPossible() async {
+    try {
+      final session = await _local.getCachedAuthSession();
+      if (session == null) return;
+
+      final dynamic user = (session as dynamic).user ?? session;
+
+      final String fn = ((user as dynamic).firstName ??
+              (user as dynamic).first_name ??
+              (user as dynamic).first ??
+              '')
+          .toString()
+          .trim();
+
+      final String ln = (((user as dynamic).lastName ??
+              (user as dynamic).last_name ??
+              (user as dynamic).last ??
+              '') as dynamic)
+          .toString()
+          .trim();
+
+      final full = ('$fn $ln').trim();
+      if (full.isNotEmpty) providerName = full;
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -281,9 +290,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
 
     // Compare time string (HH:mm:ss) lexicographically works if padded.
-    final at = a.bookingTime;
-    final bt = b.bookingTime;
-    return at.compareTo(bt);
+    return a.bookingTime.compareTo(b.bookingTime);
   }
 
   static DateTime _todayDateOnly() {

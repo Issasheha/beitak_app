@@ -42,8 +42,7 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     final mq = MediaQuery.of(context);
     final screenH = mq.size.height;
 
-    // ✅ Bigger height on small screens to avoid overflow (no scroll)
-    final heightFactor = screenH < 720 ? 0.94 : 0.86;
+    final heightFactor = (screenH < 720 ? 0.94 : 0.86).clamp(0.82, 0.96);
 
     final b = booking;
 
@@ -59,6 +58,10 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     final addons = b.addOnsSelected;
     final addonsPreview = addons.length <= 4 ? addons : addons.take(4).toList();
     final remainingAddons = addons.length - addonsPreview.length;
+
+    // ✅ قبل القبول: اخفاء بيانات التواصل
+    final isPending = b.status == 'pending_provider_accept';
+    final showContactInfo = !isPending;
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -88,7 +91,6 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                   left: SizeConfig.w(16),
                   right: SizeConfig.w(16),
                   top: SizeConfig.h(12),
-                  // ✅ safe bottom padding
                   bottom: SizeConfig.h(12) + mq.padding.bottom,
                 ),
                 child: Column(
@@ -118,7 +120,6 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                       ],
                     ),
 
-                    // ✅ Info header (service + booking number + price)
                     _InfoCard(
                       title: b.serviceName,
                       subtitle:
@@ -135,74 +136,99 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
 
                     SizedBox(height: SizeConfig.h(10)),
 
-                    // ✅ Compact grid-like info (no scroll)
-                    const _SectionTitle('الموعد والمكان'),
-                    SizedBox(height: SizeConfig.h(6)),
-                    _KeyValue('📅', 'التاريخ', date),
-                    _KeyValue('🕘', 'الوقت', time),
-                    _KeyValue('⏱️', 'المدة', duration),
-                    _KeyValue('📍', 'المنطقة', b.locationText),
-                    if (hasAddress)
-                      _KeyValue('🏠', 'العنوان', b.serviceAddress!, maxLines: 2),
+                    // ✅ FIX: اجعل باقي المحتوى Scrollable لتفادي overflow
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const _SectionTitle('الموعد والمكان'),
+                            SizedBox(height: SizeConfig.h(6)),
+                            _KeyValue('📅', 'التاريخ', date),
+                            _KeyValue('🕘', 'الوقت', time),
+                            _KeyValue('⏱️', 'المدة', duration),
+                            _KeyValue('📍', 'المنطقة', b.locationText),
+                            if (hasAddress)
+                              _KeyValue('🏠', 'العنوان', b.serviceAddress!,
+                                  maxLines: 2),
 
-                    SizedBox(height: SizeConfig.h(10)),
+                            SizedBox(height: SizeConfig.h(10)),
 
-                    const _SectionTitle('العميل'),
-                    SizedBox(height: SizeConfig.h(6)),
-                    _KeyValue('👤', 'الاسم', b.customerName),
-                    if (b.customerPhone != null)
-                      _KeyValue('📞', 'الهاتف', b.customerPhone!),
-                    if (b.customerEmail != null)
-                      _KeyValue('✉️', 'الإيميل', b.customerEmail!),
+                            const _SectionTitle('العميل'),
+                            SizedBox(height: SizeConfig.h(6)),
+                            _KeyValue('👤', 'الاسم', b.customerName),
 
-                    // ✅ Optional blocks (clamped to avoid overflow)
-                    if (hasDesc || hasPackage || addons.isNotEmpty || hasNotes)
-                      ...[
-                        SizedBox(height: SizeConfig.h(10)),
-                        const _SectionTitle('تفاصيل إضافية'),
-                        SizedBox(height: SizeConfig.h(6)),
+                            // ✅ بعد القبول فقط: الهاتف/الإيميل
+                            if (showContactInfo) ...[
+                              if (b.customerPhone != null)
+                                _KeyValue('📞', 'الهاتف', b.customerPhone!),
+                              if (b.customerEmail != null)
+                                _KeyValue('✉️', 'الإيميل', b.customerEmail!),
+                            ] else ...[
+                              SizedBox(height: SizeConfig.h(10)),
+                              const _PrivacyNoticeCard(
+                                text:
+                                    '🔒 بيانات التواصل مخفية حالياً.\nستظهر رقم الهاتف والإيميل بعد قبول الطلب.',
+                              ),
+                            ],
 
-                        if (hasDesc)
-                          _MultiLineCard(
-                            title: 'وصف الخدمة',
-                            text: b.serviceDescription!,
-                            maxLines: 3,
-                          ),
+                            if (hasDesc ||
+                                hasPackage ||
+                                addons.isNotEmpty ||
+                                hasNotes) ...[
+                              SizedBox(height: SizeConfig.h(10)),
+                              const _SectionTitle('تفاصيل إضافية'),
+                              SizedBox(height: SizeConfig.h(6)),
 
-                        if (hasPackage || addons.isNotEmpty)
-                          _CompactCard(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (hasPackage)
-                                  _KeyValue('📦', 'الباقة', b.packageSelected!),
-                                if (addonsPreview.isNotEmpty) ...[
-                                  SizedBox(height: SizeConfig.h(8)),
-                                  Wrap(
-                                    spacing: SizeConfig.w(8),
-                                    runSpacing: SizeConfig.h(8),
+                              if (hasDesc)
+                                _MultiLineCard(
+                                  title: 'وصف الخدمة',
+                                  text: b.serviceDescription!,
+                                  maxLines: 3,
+                                ),
+
+                              if (hasPackage || addons.isNotEmpty)
+                                _CompactCard(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      ...addonsPreview
-                                          .map((t) => _ChipPill(label: t)),
-                                      if (remainingAddons > 0)
-                                        _ChipPill(label: '+$remainingAddons'),
+                                      if (hasPackage)
+                                        _KeyValue('📦', 'الباقة',
+                                            b.packageSelected!),
+                                      if (addonsPreview.isNotEmpty) ...[
+                                        SizedBox(height: SizeConfig.h(8)),
+                                        Wrap(
+                                          spacing: SizeConfig.w(8),
+                                          runSpacing: SizeConfig.h(8),
+                                          children: [
+                                            ...addonsPreview
+                                                .map((t) => _ChipPill(label: t)),
+                                            if (remainingAddons > 0)
+                                              _ChipPill(
+                                                  label: '+$remainingAddons'),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
-                                ],
-                              ],
-                            ),
-                          ),
+                                ),
 
-                        if (hasNotes)
-                          _MultiLineCard(
-                            title: 'ملاحظات العميل',
-                            text: b.customerNotes!,
-                            maxLines: 3,
-                          ),
-                      ],
+                              if (hasNotes)
+                                _MultiLineCard(
+                                  title: 'ملاحظات العميل',
+                                  text: b.customerNotes!,
+                                  maxLines: 3,
+                                ),
+                            ],
 
-                    // ✅ Spacer so content breathes without overflow
-                    const Spacer(),
+                            // ✅ مسافة نهائية لطيفة داخل السكرول
+                            SizedBox(height: SizeConfig.h(14)),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -355,6 +381,56 @@ class _KeyValue extends StatelessWidget {
               style: AppTextStyles.body14.copyWith(
                 fontSize: SizeConfig.ts(12.6),
                 fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyNoticeCard extends StatelessWidget {
+  final String text;
+  const _PrivacyNoticeCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: SizeConfig.padding(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        textDirection: TextDirection.rtl,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: SizeConfig.w(34),
+            height: SizeConfig.w(34),
+            decoration: BoxDecoration(
+              color: AppColors.lightGreen.o(0.12),
+              borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+              border: Border.all(color: AppColors.lightGreen.o(0.25)),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '🔒',
+              style: TextStyle(fontSize: SizeConfig.ts(16), height: 1.0),
+            ),
+          ),
+          SizedBox(width: SizeConfig.w(10)),
+          Expanded(
+            child: Text(
+              text,
+              textAlign: TextAlign.right,
+              style: AppTextStyles.body14.copyWith(
+                fontSize: SizeConfig.ts(12.2),
+                fontWeight: FontWeight.w800,
                 color: AppColors.textSecondary,
                 height: 1.35,
               ),

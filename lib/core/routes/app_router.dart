@@ -10,6 +10,7 @@ import 'package:beitak_app/features/auth/presentation/views/provider/provider_ap
 import 'package:beitak_app/features/auth/presentation/views/register/register_view.dart';
 
 import 'package:beitak_app/features/onboarding/presentation/views/onboarding_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/about_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/account/provider_edit_account_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/account_settings_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/documents/provider_documents_view.dart';
@@ -17,6 +18,7 @@ import 'package:beitak_app/features/provider/home/presentation/views/profile/hel
 import 'package:beitak_app/features/provider/home/presentation/views/profile/history/provider_history_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/reviews/provider_reviews_view.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/terms_and_conditions_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/provider_earnings_view.dart';
 import 'package:beitak_app/features/splash/presentation/views/splash_view.dart';
 
 import 'package:beitak_app/features/provider/home/presentation/views/add_package_view.dart';
@@ -380,10 +382,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.providerHistory,
         builder: (context, state) => const ProviderHistoryView(),
       ),
-       GoRoute(
+      GoRoute(
         path: AppRoutes.providerReviews,
         name: AppRoutes.providerReviews,
         builder: (context, state) => const ProviderReviewsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerAboutView,
+        name: AppRoutes.providerAboutView,
+        builder: (context, state) => const AboutView(),
+      ),
+      GoRoute(
+        path: AppRoutes.ProviderEarningsView,
+        name: AppRoutes.ProviderEarningsView,
+        builder: (context, state) => const ProviderEarningsView(),
       ),
     ],
   );

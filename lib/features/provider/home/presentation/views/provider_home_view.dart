@@ -329,15 +329,17 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
 
     return [
       ProviderHeaderStat(
-        title: 'إجمالي الطلبات',
+        title: 'الطلبات',
         value: vm.totalRequestsCount.toString(),
         emoji: '📥',
       ),
       ProviderHeaderStat(
-        title: 'أرباح الشهر',
-        value: jd(vm.stats.thisMonthEarnings),
-        emoji: '💰',
-      ),
+  title: 'أرباح الشهر',
+  value: jd(vm.stats.thisMonthEarnings),
+  emoji: '💰',
+  onTap: () => context.push(AppRoutes.ProviderEarningsView), // ✅ مسارك
+),
+
       ProviderHeaderStat(
         title: ' القادمة',
         value: vm.upcomingCount.toString(),
