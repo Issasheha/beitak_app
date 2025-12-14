@@ -1,5 +1,3 @@
-// lib/features/user/home/presentation/views/request_service/viewmodels/request_service_controller.dart
-
 import 'dart:io';
 
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
@@ -344,25 +342,29 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     if (!mounted) return;
     state = state.copyWith(submitting: true);
 
+    String? guestOtp;
+
     try {
+      // ✅ للضيف: OTP ثم نرسل الطلب على /service-requests/guest
       if (state.isGuest) {
         await _vm.sendServiceReqOtp(phone: phone);
 
-        final verified = await showDialog<bool>(
+        guestOtp = await showDialog<String>(
           context: context,
           barrierDismissible: false,
           builder: (_) => OtpVerifyDialog(
             phone: phone,
             onResend: () => _vm.sendServiceReqOtp(phone: phone),
-            onVerify: (otp) =>
-                _vm.verifyServiceReqOtp(phone: phone, otp: otp),
+            onVerify: (otp) => _vm.verifyServiceReqOtp(phone: phone, otp: otp),
           ),
         );
 
-        if (verified != true) {
+        if (guestOtp == null || guestOtp!.trim().isEmpty) {
           _snack(context, 'لم يتم التحقق من الرقم');
           return;
         }
+
+        guestOtp = guestOtp!.trim();
       }
 
       final serviceDateIso =
@@ -386,6 +388,10 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         serviceTimeHour: state.selectedHour!,
         sharePhoneWithProvider: share,
         files: List<File>.from(state.files),
+
+        // ✅ أهم شي:
+        isGuest: state.isGuest,
+        otp: state.isGuest ? guestOtp : null,
       );
 
       await _vm.submitServiceRequest(draft);
@@ -439,8 +445,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     return double.tryParse(normalized);
   }
 
-  String? _resolveSelectedDateIso(
-      ServiceDateType type, DateTime? otherDate) {
+  String? _resolveSelectedDateIso(ServiceDateType type, DateTime? otherDate) {
     final now = DateTime.now();
     DateTime? date;
 

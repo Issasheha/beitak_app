@@ -1,5 +1,5 @@
 class ApiConstants {
-  static const String baseUrl = 'https://harry-notebook-image-myers.trycloudflare.com';
+  static const String baseUrl = 'http://192.168.1.29:3026';
   static const String apiBase = '$baseUrl/api';
 
   // auth endpoints
@@ -25,6 +25,7 @@ class ApiConstants {
   // ✅ NEW: guest booking OTP + create booking
   static const String bookingsSendOtp = '/bookings/send-otp';
   static const String bookingsCreate = '/bookings';
+  static const String serviceRequestsGuest = '/service-requests/guest'; // ✅
 
   // ✅ services (public + details)
   static const String services = '/services';

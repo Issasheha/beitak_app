@@ -24,6 +24,12 @@ class ServiceRequestDraft {
   final bool sharePhoneWithProvider;
   final List<File> files;
 
+  // ✅ جديد: للضيف نحتاج OTP
+  final String? otp;
+
+  // ✅ جديد: نحدد هل الطلب Guest ولا Authenticated
+  final bool isGuest;
+
   const ServiceRequestDraft({
     required this.name,
     required this.phone,
@@ -33,9 +39,11 @@ class ServiceRequestDraft {
     required this.serviceDateIso,
     required this.serviceTimeHour,
     required this.sharePhoneWithProvider,
+    required this.isGuest, // ✅
     this.areaId,
     this.budget,
     this.files = const [],
+    this.otp, // ✅
   });
 }
 
@@ -46,7 +54,12 @@ class RequestServiceViewModel {
 
   static const String _sendOtp = '/auth/send-service-req-otp';
   static const String _verifyOtp = '/auth/verify-service-req-otp';
+
+  // ✅ authenticated route
   static const String _serviceRequests = '/service-requests';
+
+  // ✅ guest route (حسب الباك اللي بعثته)
+  static const String _serviceRequestsGuest = '/service-requests/guest';
 
   Future<Map<String, dynamic>> _authHeadersIfAny() async {
     final token = await TokenProvider.getToken();
@@ -131,12 +144,17 @@ class RequestServiceViewModel {
       'phone': draft.phone,
       'category_id': draft.categoryId,
       'city_id': draft.cityId,
-      if (draft.areaId != null) 'area_id': draft.areaId, // ✅
+      if (draft.areaId != null) 'area_id': draft.areaId,
       'description': draft.description,
       if (draft.budget != null) 'budget': draft.budget,
       'service_date': draft.serviceDateIso,
       'service_time': draft.serviceTimeHour,
       'share_phone': draft.sharePhoneWithProvider ? 1 : 0,
+
+      // ✅ للضيف فقط: ابعث OTP
+      if (draft.isGuest && draft.otp != null && draft.otp!.trim().isNotEmpty)
+        'otp': draft.otp!.trim(),
+
       if (draft.files.isNotEmpty)
         'files': [
           for (final f in draft.files)
@@ -147,12 +165,15 @@ class RequestServiceViewModel {
         ],
     });
 
+    // ✅ اختيار المسار حسب الضيف/المسجّل
+    final path = draft.isGuest ? _serviceRequestsGuest : _serviceRequests;
+
     final res = await _dio.post(
-      _serviceRequests,
+      path,
       data: formData,
       options: Options(
         contentType: 'multipart/form-data',
-        headers: await _authHeadersIfAny(),
+        headers: draft.isGuest ? const {'Accept': 'application/json'} : await _authHeadersIfAny(),
       ),
     );
 
