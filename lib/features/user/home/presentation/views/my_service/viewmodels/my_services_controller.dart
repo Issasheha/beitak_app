@@ -1,18 +1,29 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:beitak_app/core/error/exceptions.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'my_services_state.dart';
 
 class MyServicesController extends StateNotifier<MyServicesState> {
   final Dio _dio;
   final AuthLocalDataSource _local;
+
+  final Map<MyServicesTab, Timer> _guards = {};
+  final Map<MyServicesTab, CancelToken> _cancelTokens = {};
+
+  // ✅ نحتفظ بآخر total_pages لكل تاب (لو الباك بيدعمها)
+  final Map<MyServicesTab, int?> _totalPages = {};
+
+  // ✅ حماية إضافية: إذا loadMore ما أضاف ولا عنصر → وقف hasMore
+  final Map<MyServicesTab, int> _noGrowthStreak = {};
+  static const int _allowNoGrowthPages = 1; // صفحة وحدة بدون نمو = وقف
 
   MyServicesController({
     Dio? dio,
@@ -23,16 +34,85 @@ class MyServicesController extends StateNotifier<MyServicesState> {
 
   TabBookingState _tabState(MyServicesTab tab) => state.tab(tab);
 
+  @override
+  void dispose() {
+    for (final t in _guards.values) {
+      t.cancel();
+    }
+    _guards.clear();
+
+    for (final ct in _cancelTokens.values) {
+      if (!ct.isCancelled) ct.cancel('dispose');
+    }
+    _cancelTokens.clear();
+
+    _totalPages.clear();
+    _noGrowthStreak.clear();
+
+    super.dispose();
+  }
+
   Future<String?> _getToken() async {
     final session = await _local.getCachedAuthSession();
     return session?.token;
   }
 
-  Future<void> loadInitial(MyServicesTab tab, {int limit = 20}) async {
-    var current = _tabState(tab);
+  void _cancelInFlight(MyServicesTab tab) {
+    final ct = _cancelTokens[tab];
+    if (ct != null && !ct.isCancelled) {
+      ct.cancel('cancel_in_flight');
+    }
+    _cancelTokens.remove(tab);
+  }
 
-    current = current.copyWith(
+  CancelToken _newCancelToken(MyServicesTab tab) {
+    _cancelInFlight(tab);
+    final ct = CancelToken();
+    _cancelTokens[tab] = ct;
+    return ct;
+  }
+
+  void _startGuard(MyServicesTab tab, {required bool isInitial}) {
+    _guards[tab]?.cancel();
+
+    _guards[tab] = Timer(const Duration(seconds: 12), () {
+      final st = _tabState(tab);
+
+      final stuck = isInitial
+          ? (st.isLoading && st.items.isEmpty)
+          : (st.isLoadingMore);
+
+      if (!stuck) return;
+
+      _cancelInFlight(tab);
+
+      state = state.copyWithTab(
+        tab,
+        st.copyWith(
+          isLoading: false,
+          isLoadingMore: false,
+          hasMore: false,
+          error: null,
+        ),
+      );
+    });
+  }
+
+  void _stopGuard(MyServicesTab tab) {
+    _guards[tab]?.cancel();
+    _guards.remove(tab);
+  }
+
+  Future<void> loadInitial(MyServicesTab tab, {int limit = 20}) async {
+    final check = _tabState(tab);
+    if (check.isLoading) return;
+
+    _totalPages.remove(tab);
+    _noGrowthStreak[tab] = 0;
+
+    final current = check.copyWith(
       isLoading: true,
+      isLoadingMore: false,
       error: null,
       page: 1,
       hasMore: true,
@@ -40,22 +120,54 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     );
     state = state.copyWithTab(tab, current);
 
+    _startGuard(tab, isInitial: true);
+    final cancelToken = _newCancelToken(tab);
+
     try {
-      await _fetch(tab: tab, page: 1, limit: limit, append: false);
+      await _fetch(
+        tab: tab,
+        page: 1,
+        limit: limit,
+        append: false,
+        cancelToken: cancelToken,
+      );
     } finally {
-      final after = _tabState(tab).copyWith(isLoading: false);
+      _stopGuard(tab);
+      _cancelTokens.remove(tab);
+
+      final after = _tabState(tab).copyWith(
+        isLoading: false,
+        isLoadingMore: false,
+      );
       state = state.copyWithTab(tab, after);
     }
   }
 
   Future<void> loadMore(MyServicesTab tab, {int limit = 20}) async {
     final current = _tabState(tab);
-    if (current.isLoadingMore || !current.hasMore) return;
+
+    // ✅ إذا عارفين total_pages وخلصنا: لا تطلب
+    final tp = _totalPages[tab];
+    if (tp != null && current.page >= tp) {
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          hasMore: false,
+          isLoadingMore: false,
+        ),
+      );
+      return;
+    }
+
+    if (current.isLoadingMore || current.isLoading || !current.hasMore) return;
 
     state = state.copyWithTab(
       tab,
       current.copyWith(isLoadingMore: true, error: null),
     );
+
+    _startGuard(tab, isInitial: false);
+    final cancelToken = _newCancelToken(tab);
 
     try {
       await _fetch(
@@ -63,8 +175,12 @@ class MyServicesController extends StateNotifier<MyServicesState> {
         page: current.page + 1,
         limit: limit,
         append: true,
+        cancelToken: cancelToken,
       );
     } finally {
+      _stopGuard(tab);
+      _cancelTokens.remove(tab);
+
       final after = _tabState(tab).copyWith(isLoadingMore: false);
       state = state.copyWithTab(tab, after);
     }
@@ -75,6 +191,7 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     required int page,
     required int limit,
     required bool append,
+    required CancelToken cancelToken,
   }) async {
     final token = await _getToken();
     if (token == null) {
@@ -99,21 +216,23 @@ class MyServicesController extends StateNotifier<MyServicesState> {
         'sort': '-created_at',
       };
 
-      // نفس المنطق القديم: pending مع فلتر status إن كان الباك يدعمه
       if (tab == MyServicesTab.pending) {
         query['status'] = 'pending_provider_accept';
       }
 
-      final res = await _dio.get(
-        '/bookings/my',
-        queryParameters: query,
-        options: Options(
-          headers: {
-            HttpHeaders.authorizationHeader: 'Bearer $token',
-            HttpHeaders.acceptHeader: 'application/json',
-          },
-        ),
-      );
+      final res = await _dio
+          .get(
+            '/bookings/my',
+            queryParameters: query,
+            options: Options(
+              headers: {
+                HttpHeaders.authorizationHeader: 'Bearer $token',
+                HttpHeaders.acceptHeader: 'application/json',
+              },
+            ),
+            cancelToken: cancelToken,
+          )
+          .timeout(const Duration(seconds: 20));
 
       final code = res.statusCode ?? 0;
       final body = res.data;
@@ -138,23 +257,35 @@ class MyServicesController extends StateNotifier<MyServicesState> {
 
       final data = body['data'];
       if (data is! Map<String, dynamic>) {
-        throw const ServerException(
-          message: 'Invalid bookings response format',
-        );
+        throw const ServerException(message: 'Invalid bookings response format');
       }
 
       final bookingsJson = data['bookings'];
       if (bookingsJson is! List) {
-        throw const ServerException(
-          message: 'Invalid bookings list format',
-        );
+        throw const ServerException(message: 'Invalid bookings list format');
       }
 
-      final pagination = data['pagination'];
-      final hasNext = (pagination is Map<String, dynamic>)
-          ? (pagination['has_next'] as bool? ?? false)
-          : false;
+      // ✅ pagination أقوى من has_next
+      int? totalPages;
+      int? currentPageFromApi;
+      bool hasNextFromApi = false;
 
+      final pagination = data['pagination'];
+      if (pagination is Map<String, dynamic>) {
+        totalPages = (pagination['total_pages'] is int)
+            ? pagination['total_pages'] as int
+            : int.tryParse('${pagination['total_pages']}');
+
+        currentPageFromApi = (pagination['current_page'] is int)
+            ? pagination['current_page'] as int
+            : int.tryParse('${pagination['current_page']}');
+
+        hasNextFromApi = pagination['has_next'] as bool? ?? false;
+      }
+
+      if (totalPages != null) _totalPages[tab] = totalPages;
+
+      // ✅ ماب + فلترة
       final mapped = bookingsJson
           .whereType<Map<String, dynamic>>()
           .map<BookingListItem>(_mapBookingToItem)
@@ -163,20 +294,90 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       final visible = _applyTabFilter(tab, mapped);
 
       final current = _tabState(tab);
+      final beforeCount = current.items.length;
+
       final newItems = <BookingListItem>[
         if (append) ...current.items,
         ...visible,
       ];
 
-      final updated = current.copyWith(
-        items: newItems,
-        page: page,
-        hasMore: hasNext,
-        error: null,
-      );
+      final afterCount = newItems.length;
+      final grew = afterCount > beforeCount;
 
-      state = state.copyWithTab(tab, updated);
+      // ✅ لو loadMore وما زاد ولا عنصر: لا نسمح باللوب
+      if (append && !grew) {
+        final prev = _noGrowthStreak[tab] ?? 0;
+        final next = prev + 1;
+        _noGrowthStreak[tab] = next;
+
+        if (next >= _allowNoGrowthPages) {
+          state = state.copyWithTab(
+            tab,
+            current.copyWith(
+              page: page,
+              items: newItems,
+              hasMore: false,
+              error: null,
+              isLoading: false,
+              isLoadingMore: false,
+            ),
+          );
+          return;
+        }
+      } else {
+        _noGrowthStreak[tab] = 0;
+      }
+
+      // ✅ حساب hasMore بشكل موثوق
+      bool hasMore;
+      if (totalPages != null) {
+        final cp = currentPageFromApi ?? page;
+        hasMore = cp < totalPages;
+      } else {
+        // fallback
+        hasMore = hasNextFromApi && visible.isNotEmpty;
+      }
+
+      // إذا أول صفحة وطلع فاضي: خلص
+      if (page == 1 && newItems.isEmpty) hasMore = false;
+
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          items: newItems,
+          page: page,
+          hasMore: hasMore,
+          error: null,
+          isLoading: false,
+          isLoadingMore: false,
+        ),
+      );
+    } on TimeoutException {
+      final current = _tabState(tab);
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          error: null,
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+        ),
+      );
     } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        final current = _tabState(tab);
+        state = state.copyWithTab(
+          tab,
+          current.copyWith(
+            error: null,
+            hasMore: false,
+            isLoading: false,
+            isLoadingMore: false,
+          ),
+        );
+        return;
+      }
+
       final current = _tabState(tab);
       String message;
 
@@ -191,25 +392,37 @@ class MyServicesController extends StateNotifier<MyServicesState> {
         message = 'حدث خطأ غير متوقع، حاول مرة أخرى لاحقاً.';
       }
 
-      final updated = current.copyWith(
-        error: message,
-        hasMore: false,
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          error: message,
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+        ),
       );
-      state = state.copyWithTab(tab, updated);
     } on ServerException catch (e) {
       final current = _tabState(tab);
-      final updated = current.copyWith(
-        error: e.message ?? 'حدث خطأ غير متوقع.',
-        hasMore: false,
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          error: e.message ?? 'حدث خطأ غير متوقع.',
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+        ),
       );
-      state = state.copyWithTab(tab, updated);
     } catch (_) {
       final current = _tabState(tab);
-      final updated = current.copyWith(
-        error: 'حدث خطأ غير متوقع.',
-        hasMore: false,
+      state = state.copyWithTab(
+        tab,
+        current.copyWith(
+          error: 'حدث خطأ غير متوقع.',
+          hasMore: false,
+          isLoading: false,
+          isLoadingMore: false,
+        ),
       );
-      state = state.copyWithTab(tab, updated);
     }
   }
 
@@ -221,11 +434,9 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       if (tab == MyServicesTab.pending) return it.isPending;
       if (tab == MyServicesTab.upcoming) return it.isUpcoming;
 
-      // الأرشيف = مكتملة + ملغاة + refunded
       if (tab == MyServicesTab.archive) {
         return it.isCompleted || it.isCancelled;
       }
-
       return true;
     }).toList();
   }
@@ -239,7 +450,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
         (json['booking_number'] ?? json['id'] ?? '').toString();
     final status = (json['status'] ?? '').toString();
 
-    // service name
     String serviceName = 'خدمة';
     final service = json['service'];
     if (service is Map<String, dynamic>) {
@@ -253,13 +463,8 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     final date = json['booking_date']?.toString() ?? '';
     final time = _formatTime(json['booking_time']?.toString() ?? '');
 
-    final city = json['service_city']?.toString() ?? '';
-    final area = json['service_area']?.toString() ?? '';
-    final address = json['service_address']?.toString() ?? '';
-    final loc =
-        [city, area, address].where((e) => e.trim().isNotEmpty).join('، ');
+    final loc = _extractCityAr(json);
 
-    // price (قد تكون في booking أو service)
     double? price;
     final rawPrice = json['total_price'] ?? json['base_price'];
     if (rawPrice is num) price = rawPrice.toDouble();
@@ -268,7 +473,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       if (sp is num) price = sp.toDouble();
     }
 
-    // provider info (قد تكون null/مخفية قبل التأكيد)
     String? providerName;
     String? providerPhone;
 
@@ -338,5 +542,56 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     if (h > 12) h -= 12;
 
     return '$h:$m $suffix';
+  }
+
+  String _extractCityAr(Map<String, dynamic> json) {
+    final v = json['service_city'];
+
+    String raw = '';
+    if (v is Map) {
+      raw = (v['name_ar'] ??
+              v['nameAr'] ??
+              v['label_ar'] ??
+              v['labelAr'] ??
+              v['name'] ??
+              v['label'] ??
+              '')
+          .toString();
+    } else {
+      raw = (v ?? '').toString();
+    }
+
+    raw = raw.trim();
+    if (raw.isEmpty) return '';
+
+    raw = raw.split(RegExp(r'[,،\-]')).first.trim();
+    return _normalizeCityAr(raw);
+  }
+
+  String _normalizeCityAr(String raw) {
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(raw);
+    if (hasArabic) return raw;
+
+    final k = raw.toLowerCase().trim();
+
+    const map = <String, String>{
+      'amman': 'عمان',
+      'zarqa': 'الزرقاء',
+      'irbid': 'إربد',
+      'aqaba': 'العقبة',
+      'salt': 'السلط',
+      'madaba': 'مادبا',
+      'jerash': 'جرش',
+      'mafraq': 'المفرق',
+      'karak': 'الكرك',
+      'tafileh': 'الطفيلة',
+      'maan': 'معان',
+      'ajloun': 'عجلون',
+    };
+
+    if (k == 'az zarqa' || k == 'al zarqa' || k == 'alzarka') return 'الزرقاء';
+    if (k == 'al aqaba' || k == 'el aqaba') return 'العقبة';
+
+    return map[k] ?? raw;
   }
 }

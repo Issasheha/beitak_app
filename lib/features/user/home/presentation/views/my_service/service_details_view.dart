@@ -7,8 +7,12 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/viewmodels/service_details_providers.dart';
-import 'package:beitak_app/features/user/home/presentation/views/my_service/widgets/detail_row_tile.dart';
-import 'package:beitak_app/features/user/home/presentation/views/my_service/widgets/status_header_card.dart';
+
+import 'widgets_details/status_ui.dart';
+import 'widgets_details/booking_header_card.dart';
+import 'widgets_details/details_line.dart';
+import 'widgets_details/status_footer_box.dart';
+import 'widgets_details/cancel_button.dart';
 
 class ServiceDetailsView extends ConsumerStatefulWidget {
   final BookingListItem initialItem;
@@ -19,19 +23,15 @@ class ServiceDetailsView extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ServiceDetailsView> createState() =>
-      _ServiceDetailsViewState();
+  ConsumerState<ServiceDetailsView> createState() => _ServiceDetailsViewState();
 }
 
 class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
   @override
   void initState() {
     super.initState();
-    // تحميل التفاصيل أول ما تفتح الشاشة
     Future.microtask(() {
-      ref
-          .read(serviceDetailsControllerProvider.notifier)
-          .loadBookingDetails(
+      ref.read(serviceDetailsControllerProvider.notifier).loadBookingDetails(
             bookingId: widget.initialItem.bookingId,
           );
     });
@@ -61,18 +61,81 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     return null;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    SizeConfig.init(context);
+  bool _hasArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
 
-    final state = ref.watch(serviceDetailsControllerProvider);
-    final details = state.data;
-    final base = widget.initialItem;
+  String _toArabicDigits(String input) {
+    const map = {
+      '0': '٠',
+      '1': '١',
+      '2': '٢',
+      '3': '٣',
+      '4': '٤',
+      '5': '٥',
+      '6': '٦',
+      '7': '٧',
+      '8': '٨',
+      '9': '٩',
+    };
+    final b = StringBuffer();
+    for (final ch in input.runes) {
+      final c = String.fromCharCode(ch);
+      b.write(map[c] ?? c);
+    }
+    return b.toString();
+  }
 
-    final status = details != null
-        ? _readString(details, ['status'], fallback: base.status)
-        : base.status;
+  String _onlyArabicCity(String raw) {
+    var r = raw.trim();
+    if (r.isEmpty) return '';
 
+    r = r.split(',').first.trim();
+    r = r.split('،').first.trim();
+
+    if (_hasArabic(r)) return r;
+
+    final k = r.toLowerCase().trim();
+    const map = <String, String>{
+      'amman': 'عمان',
+      'zarqa': 'الزرقاء',
+      'irbid': 'إربد',
+      'aqaba': 'العقبة',
+      'salt': 'السلط',
+      'madaba': 'مادبا',
+      'jerash': 'جرش',
+      'mafraq': 'المفرق',
+      'karak': 'الكرك',
+      'tafileh': 'الطفيلة',
+      'maan': 'معان',
+      'ajloun': 'عجلون',
+      'dubai': 'دبي',
+    };
+
+    return map[k] ?? '';
+  }
+
+  String _formatTimeArabic(String raw) {
+    final r = raw.trim();
+    if (r.isEmpty) return '';
+
+    if (r.contains('ص')) return _toArabicDigits(r.replaceAll('ص', 'صباحاً'));
+    if (r.contains('م')) return _toArabicDigits(r.replaceAll('م', 'مساءً'));
+
+    final parts = r.split(':');
+    if (parts.length >= 2) {
+      int h = int.tryParse(parts[0]) ?? 0;
+      final m = parts[1];
+
+      final suffix = h >= 12 ? 'مساءً' : 'صباحاً';
+      if (h == 0) h = 12;
+      if (h > 12) h -= 12;
+
+      return _toArabicDigits('$h:$m $suffix');
+    }
+
+    return _toArabicDigits(r);
+  }
+
+  StatusUi _statusUi(String status) {
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
     final isPending =
@@ -85,84 +148,123 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       'in_progress',
     }.contains(status);
 
-    final title = isCancelled
-        ? 'خدمة ملغاة'
-        : isCompleted
-            ? 'خدمة مكتملة'
-            : isPending
-                ? 'طلب قيد الانتظار'
-                : 'طلب قادم';
+    if (isCancelled) {
+      return StatusUi(
+        label: 'ملغاة',
+        color: Colors.red.shade700,
+        bg: Colors.red.withValues(alpha: 0.10),
+        border: Colors.red.withValues(alpha: 0.35),
+        footerText: 'تم إلغاء هذا الحجز ولن يتم تنفيذه.',
+      );
+    }
+    if (isCompleted) {
+      return StatusUi(
+        label: 'مكتمل',
+        color: Colors.blue.shade700,
+        bg: Colors.blue.withValues(alpha: 0.10),
+        border: Colors.blue.withValues(alpha: 0.35),
+        footerText: 'تم تنفيذ الخدمة بنجاح.',
+      );
+    }
+    if (isPending) {
+      return StatusUi(
+        label: 'قيد الانتظار',
+        color: Colors.orange.shade800,
+        bg: Colors.orange.withValues(alpha: 0.10),
+        border: Colors.orange.withValues(alpha: 0.35),
+        footerText: 'بانتظار موافقة مزود الخدمة على طلبك.',
+      );
+    }
+    if (isUpcoming) {
+      return StatusUi(
+        label: 'قادمة',
+        color: AppColors.lightGreen,
+        bg: AppColors.lightGreen.withValues(alpha: 0.12),
+        border: AppColors.lightGreen.withValues(alpha: 0.35),
+        footerText: 'تمت الموافقة على طلبك وسيتم تنفيذ الخدمة حسب الموعد.',
+      );
+    }
 
-    final subtitle = isCancelled
-        ? 'تم إلغاء هذا الطلب ولن يتم تنفيذه.'
-        : isCompleted
-            ? 'تم تنفيذ الخدمة بنجاح.'
-            : isPending
-                ? 'بانتظار موافقة مزود الخدمة.'
-                : 'تمت الموافقة وسيتم تنفيذ الخدمة حسب الموعد.';
+    return StatusUi(
+      label: 'قيد الانتظار',
+      color: Colors.orange.shade800,
+      bg: Colors.orange.withValues(alpha: 0.10),
+      border: Colors.orange.withValues(alpha: 0.35),
+      footerText: 'بانتظار تحديث حالة الطلب.',
+    );
+  }
 
-    final headerColor = isCancelled
-        ? Colors.red.shade600
-        : isCompleted
-            ? Colors.blue.shade700
-            : isPending
-                ? Colors.orange.shade700
-                : AppColors.lightGreen;
+  String _cancelReasonArabic(String raw) {
+    final r = raw.trim();
+    if (r.isEmpty) return '';
+    if (_hasArabic(r)) return r;
 
-    final headerIcon = isCancelled
-        ? Icons.cancel_rounded
-        : isCompleted
-            ? Icons.verified_rounded
-            : isPending
-                ? Icons.hourglass_top_rounded
-                : Icons.schedule_rounded;
+    final k = r.toLowerCase();
+    if (k.contains('provider')) return 'تم الإلغاء من قبل المزود';
+    if (k.contains('customer') || k.contains('user')) return 'تم الإلغاء من قبل العميل';
+    if (k.contains('system')) return 'تم الإلغاء تلقائياً';
+    return 'سبب الإلغاء غير محدد';
+  }
 
-    // service name
+  @override
+  Widget build(BuildContext context) {
+    SizeConfig.init(context);
+
+    final state = ref.watch(serviceDetailsControllerProvider);
+    final details = state.data;
+    final base = widget.initialItem;
+
+    final status = details != null
+        ? _readString(details, ['status'], fallback: base.status)
+        : base.status;
+
+    final ui = _statusUi(status);
+
+    final isCancelled = status == 'cancelled' || status == 'refunded';
+    final isCompleted = status == 'completed';
+    final isPending =
+        status == 'pending_provider_accept' || status == 'pending';
+    final isUpcoming = const {
+      'confirmed',
+      'provider_on_way',
+      'provider_arrived',
+      'in_progress',
+    }.contains(status);
+
     String serviceName = base.serviceName;
     if (details != null) {
       final service = details['service'];
       if (service is Map<String, dynamic>) {
         serviceName = _readString(
           service,
-          ['name_localized', 'name_ar', 'name'],
+          ['name_ar', 'name_localized', 'name'],
           fallback: serviceName,
         );
       }
     }
 
-    final date = details != null
+    String date = details != null
         ? _readString(details, ['booking_date'], fallback: base.date)
         : base.date;
+    date = _toArabicDigits(date);
 
     final timeRaw = details != null
         ? _readString(details, ['booking_time'], fallback: base.time)
         : base.time;
+    final time = _formatTimeArabic(timeRaw);
 
-    final city = details != null
-        ? _readString(details, ['service_city'], fallback: '')
-        : '';
-    final area = details != null
-        ? _readString(details, ['service_area'], fallback: '')
-        : '';
-    final address = details != null
-        ? _readString(details, ['service_address'], fallback: '')
-        : '';
-
-    final locRaw = [city, area, address]
-        .where((e) => e.trim().isNotEmpty)
-        .join('، ');
-    final loc = locRaw.isNotEmpty ? locRaw : base.location;
+    String city = details != null ? _readString(details, ['service_city']) : '';
+    city = _onlyArabicCity(city);
+    final loc = city.isEmpty ? '' : city;
 
     final price = details != null
         ? (_readNum(details, ['total_price', 'base_price']) ?? base.price)
         : base.price;
-
-    final currency = base.currency ?? 'JOD';
+    final currency = (base.currency ?? 'JOD').trim();
     final priceText = price == null
         ? 'غير محدد'
-        : '$currency ${price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2)}';
+        : '$currency ${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))}';
 
-    // provider info
     String? providerName = base.providerName;
     String? providerPhone = base.providerPhone;
 
@@ -184,6 +286,21 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         }
       }
     }
+
+    final rawCancelReason = details == null
+        ? ''
+        : _readString(details, [
+            'cancellation_reason',
+            'cancel_reason',
+            'cancellation_note',
+          ]);
+    final cancelReason = _cancelReasonArabic(rawCancelReason);
+
+    final bookingNumber = _toArabicDigits(
+      base.bookingNumber.startsWith('#')
+          ? base.bookingNumber
+          : '#${base.bookingNumber}',
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -209,131 +326,92 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         body: RefreshIndicator(
           onRefresh: () => ref
               .read(serviceDetailsControllerProvider.notifier)
-              .loadBookingDetails(
-                bookingId: widget.initialItem.bookingId,
-              ),
+              .loadBookingDetails(bookingId: widget.initialItem.bookingId),
           child: ListView(
             padding: SizeConfig.padding(horizontal: 16, bottom: 24),
             children: [
-              StatusHeaderCard(
-                title: title,
-                subtitle: subtitle,
-                color: headerColor,
-                icon: headerIcon,
+              BookingHeaderCard(
+                bookingNumber: bookingNumber,
+                serviceName: serviceName,
+                statusLabel: ui.label,
+                statusColor: ui.color,
+                background: ui.bg,
               ),
-              SizeConfig.v(14),
-
-              // بطاقة العنوان + رقم الطلب
-              Container(
-                padding: SizeConfig.padding(all: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 16,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color:
-                            AppColors.lightGreen.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(
-                        Icons.build_rounded,
-                        color: AppColors.lightGreen,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            serviceName,
-                            style: TextStyle(
-                              fontSize: SizeConfig.ts(16),
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'رقم الطلب: ${base.bookingNumber}',
-                            style: TextStyle(
-                              fontSize: SizeConfig.ts(12),
-                              color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+              SizeConfig.v(18),
+              Center(
+                child: Text(
+                  'تفاصيل الخدمة',
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(16),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
+              SizeConfig.v(18),
 
-              SizeConfig.v(12),
-
-              DetailRowTile(
+              DetailsLine(
                 icon: Icons.calendar_today_rounded,
-                label: 'التاريخ',
+                iconColor: AppColors.textSecondary,
+                label: 'التاريخ:',
                 value: date.isEmpty ? '—' : date,
               ),
-              DetailRowTile(
+              DetailsLine(
                 icon: Icons.access_time_rounded,
-                label: 'الوقت',
-                value: timeRaw.isEmpty ? '—' : timeRaw,
+                iconColor: AppColors.textSecondary,
+                label: 'الوقت:',
+                value: time.isEmpty ? '—' : time,
               ),
-              DetailRowTile(
-                icon: Icons.location_on_rounded,
-                label: 'الموقع',
-                value: loc.isEmpty ? '—' : loc,
-              ),
-              DetailRowTile(
+              if (loc.isNotEmpty)
+                DetailsLine(
+                  icon: Icons.location_on_rounded,
+                  iconColor: Colors.red.shade600,
+                  label: 'الموقع:',
+                  value: loc,
+                ),
+              DetailsLine(
                 icon: Icons.payments_rounded,
-                label: 'السعر',
+                iconColor: AppColors.textSecondary,
+                label: 'السعر:',
                 value: priceText,
               ),
-              DetailRowTile(
+              DetailsLine(
                 icon: Icons.person_rounded,
-                label: 'مزود الخدمة',
+                iconColor: AppColors.textSecondary,
+                label: 'المزود:',
                 value: providerName ?? 'غير متاح حالياً',
               ),
               if (providerPhone != null && providerPhone.trim().isNotEmpty)
-                DetailRowTile(
+                DetailsLine(
                   icon: Icons.phone_rounded,
-                  label: 'هاتف مزود الخدمة',
-                  value: providerPhone!,
+                  iconColor: AppColors.textSecondary,
+                  label: 'الهاتف:',
+                  value: _toArabicDigits(providerPhone!),
+                ),
+              if (isCancelled)
+                DetailsLine(
+                  icon: Icons.info_outline_rounded,
+                  iconColor: Colors.red.shade700,
+                  label: 'سبب الإلغاء:',
+                  value: cancelReason.isEmpty ? 'غير محدد' : cancelReason,
                 ),
 
               if (state.isLoading) ...[
-                SizeConfig.v(12),
+                SizeConfig.v(14),
                 const Center(child: CircularProgressIndicator()),
               ],
-
               if (state.error != null) ...[
                 SizeConfig.v(12),
                 Container(
                   padding: SizeConfig.padding(all: 14),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: Colors.red.withValues(alpha: 0.2),
-                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.20)),
                   ),
                   child: Text(
                     state.error!,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: SizeConfig.ts(13),
                       color: Colors.red.shade700,
@@ -343,98 +421,25 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 ),
               ],
 
-              // قسم الإلغاء (لو لسه مش ملغى/مكتمل)
+              SizeConfig.v(18),
+
+              StatusFooterBox(
+                text: ui.footerText,
+                bg: ui.bg,
+                border: ui.border,
+                textColor: ui.color,
+              ),
+
               if (!isCancelled && !isCompleted && (isPending || isUpcoming))
-                _buildCancelSection(
-                  status: status,
-                  isPending: isPending,
-                  isUpcoming: isUpcoming,
+                CancelButton(
+                  isLoading:
+                      ref.watch(serviceDetailsControllerProvider).isCancelling,
+                  onPressed: () => _confirmCancel(status),
                 ),
 
               SizeConfig.v(10),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCancelSection({
-    required String status,
-    required bool isPending,
-    required bool isUpcoming,
-  }) {
-    final state = ref.watch(serviceDetailsControllerProvider);
-
-    return Padding(
-      padding: SizeConfig.padding(top: 14),
-      child: Container(
-        padding: SizeConfig.padding(all: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Colors.red.withValues(alpha: 0.18),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'إلغاء الطلب',
-              style: TextStyle(
-                fontSize: SizeConfig.ts(14),
-                fontWeight: FontWeight.w900,
-                color: Colors.red.shade700,
-              ),
-            ),
-            SizeConfig.v(8),
-            Text(
-              isPending
-                  ? 'يمكنك إلغاء الطلب الآن قبل قبول مزود الخدمة.'
-                  : 'سيتم إرسال طلب إلغاء (قد يفشل إذا كان الوقت متأخرًا حسب سياسة الإلغاء).',
-              style: TextStyle(
-                fontSize: SizeConfig.ts(12),
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-                height: 1.35,
-              ),
-            ),
-            SizeConfig.v(12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                icon: state.isCancelling
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.cancel_rounded),
-                label: Text(
-                  state.isCancelling ? 'جارٍ الإلغاء...' : 'إلغاء الطلب',
-                  style: TextStyle(
-                    fontSize: SizeConfig.ts(13),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red.shade700,
-                  side: BorderSide(
-                    color: Colors.red.withValues(alpha: 0.55),
-                    width: 1.4,
-                  ),
-                  padding: SizeConfig.padding(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                onPressed: state.isCancelling
-                    ? null
-                    : () => _confirmCancel(status),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -464,8 +469,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
               return AlertDialog(
                 title: Row(
                   children: [
-                    Icon(Icons.cancel_rounded,
-                        color: Colors.red.shade700),
+                    Icon(Icons.cancel_rounded, color: Colors.red.shade700),
                     const SizedBox(width: 10),
                     const Text('تأكيد إلغاء الطلب'),
                   ],
@@ -477,9 +481,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                     children: [
                       const Text(
                         'اختر سبب الإلغاء:',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: TextStyle(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 10),
                       Wrap(
@@ -489,29 +491,22 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                           final isSelected = selectedCategory == c;
                           return InkWell(
                             borderRadius: BorderRadius.circular(999),
-                            onTap: () =>
-                                setState(() => selectedCategory = c),
+                            onTap: () => setState(() => selectedCategory = c),
                             child: AnimatedContainer(
-                              duration:
-                                  const Duration(milliseconds: 180),
+                              duration: const Duration(milliseconds: 180),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
                                 vertical: 10,
                               ),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? Colors.red
-                                        .withValues(alpha: 0.12)
-                                    : Colors.grey
-                                        .withValues(alpha: 0.08),
-                                borderRadius:
-                                    BorderRadius.circular(999),
+                                    ? Colors.red.withValues(alpha: 0.12)
+                                    : Colors.grey.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(999),
                                 border: Border.all(
                                   color: isSelected
-                                      ? Colors.red
-                                          .withValues(alpha: 0.55)
-                                      : Colors.grey
-                                          .withValues(alpha: 0.20),
+                                      ? Colors.red.withValues(alpha: 0.55)
+                                      : Colors.grey.withValues(alpha: 0.20),
                                   width: 1.2,
                                 ),
                               ),
@@ -542,40 +537,20 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                       TextField(
                         controller: noteCtrl,
                         maxLines: 2,
+                        textDirection: TextDirection.rtl,
                         decoration: InputDecoration(
-                          hintText:
-                              'مثلاً: أريد تأجيل الموعد إلى يوم آخر...',
+                          hintText: 'مثلاً: أريد تأجيل الموعد إلى يوم آخر...',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide(
-                              color: Colors.red
-                                  .withValues(alpha: 0.55),
+                              color: Colors.red.withValues(alpha: 0.55),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      if (currentStatus != 'pending_provider_accept' &&
-                          currentStatus != 'pending')
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.orange
-                                .withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'قد يتم رفض طلب الإلغاء إذا كان موعد الخدمة قد اقترب جداً حسب سياسة الإلغاء.',
-                            style: TextStyle(
-                              fontSize: SizeConfig.ts(11.5),
-                              color: Colors.orange.shade800,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -611,16 +586,14 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     if (ok != true) return;
 
-    final controller =
-        ref.read(serviceDetailsControllerProvider.notifier);
+    final controller = ref.read(serviceDetailsControllerProvider.notifier);
 
     final success = await controller.cancelBooking(
       bookingId: widget.initialItem.bookingId,
       currentStatus: currentStatus,
       cancellationCategory: selectedCategory,
-      cancellationReason: noteCtrl.text.trim().isEmpty
-          ? null
-          : noteCtrl.text.trim(),
+      cancellationReason:
+          noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
     );
 
     final latest = ref.read(serviceDetailsControllerProvider);
@@ -629,13 +602,10 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إلغاء الطلب بنجاح')),
       );
-
-      // ✅ هذا هو الربط مع MyServices: نرجع true
       context.pop(true);
     } else {
       final msg = latest.error ?? 'تعذّر إلغاء الطلب';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 }

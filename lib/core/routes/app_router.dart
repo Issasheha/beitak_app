@@ -32,11 +32,11 @@ import 'package:beitak_app/features/provider/home/presentation/views/provider_ho
 import 'package:beitak_app/features/user/home/presentation/home_view.dart';
 import 'package:beitak_app/features/user/home/presentation/search_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/browse_service_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/provider_ratings_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/service_details_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/my_service_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/profile_view.dart';
-import 'package:beitak_app/features/user/home/presentation/views/profile/support_widgets/help_center_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/change_password_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/request_service/request_service_view.dart';
 import 'package:beitak_app/features/user/notifications/presentation/views/notifications_view.dart';
@@ -396,6 +396,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.ProviderEarningsView,
         name: AppRoutes.ProviderEarningsView,
         builder: (context, state) => const ProviderEarningsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.providerRatings,
+        name: AppRoutes.providerRatings,
+        builder: (context, state) {
+          final providerId =
+              int.tryParse(state.uri.queryParameters['provider_id'] ?? '') ?? 0;
+          final providerName = state.uri.queryParameters['name'];
+
+          return ProviderRatingsView(
+            providerId: providerId,
+            providerName: providerName,
+          );
+        },
       ),
     ],
   );

@@ -16,7 +16,9 @@ class ProviderServicePackage {
   factory ProviderServicePackage.fromJson(Map<String, dynamic> json) {
     return ProviderServicePackage(
       name: (json['name'] ?? '').toString(),
-      price: (json['price'] is num) ? (json['price'] as num).toDouble() : double.tryParse('${json['price']}') ?? 0,
+      price: (json['price'] is num)
+          ? (json['price'] as num).toDouble()
+          : double.tryParse('${json['price']}') ?? 0,
       description: json['description']?.toString(),
       features: (json['features'] is List) ? (json['features'] as List) : const [],
     );
@@ -60,6 +62,9 @@ class ProviderServiceModel {
   final String priceType; // hourly | fixed
   final bool isActive;
 
+  /// ✅ جديد: إذا موجود من الباك-إند نستخدمه لإظهار Badge "جديد"
+  final bool isNew;
+
   final List<ProviderServicePackage> packages;
 
   ProviderServiceModel({
@@ -71,10 +76,15 @@ class ProviderServiceModel {
     required this.priceType,
     required this.isActive,
     required this.packages,
+    required this.isNew,
   });
 
   factory ProviderServiceModel.fromJson(Map<String, dynamic> json) {
     final pkgsRaw = (json['packages'] is List) ? (json['packages'] as List) : const [];
+
+    final isNewRaw = json['is_new'] ?? json['isNew'] ?? json['new'] ?? json['is_new_service'];
+    final parsedIsNew = isNewRaw == true || isNewRaw == 1 || isNewRaw == '1';
+
     return ProviderServiceModel(
       id: (json['id'] as num).toInt(),
       name: (json['name'] ?? '').toString(),
@@ -85,6 +95,7 @@ class ProviderServiceModel {
           : double.tryParse('${json['base_price']}') ?? 0,
       priceType: (json['price_type'] ?? 'hourly').toString(),
       isActive: (json['is_active'] == true),
+      isNew: parsedIsNew,
       packages: pkgsRaw.map((e) => ProviderServicePackage.fromJson(Map<String, dynamic>.from(e))).toList(),
     );
   }

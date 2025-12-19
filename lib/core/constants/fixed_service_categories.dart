@@ -1,4 +1,5 @@
 // lib/core/constants/fixed_service_categories.dart
+
 class FixedServiceCategory {
   final String key; // internal (backend-friendly)
   final String labelAr; // UI label (Arabic)
@@ -25,6 +26,7 @@ class FixedServiceCategories {
   };
 
   // ---------- Normalization helpers ----------
+
   static String _normAr(String s) {
     var x = s.trim();
 
@@ -47,8 +49,12 @@ class FixedServiceCategories {
 
   static String _normKey(String s) {
     var x = s.trim().toLowerCase();
+
+    // ✅ أهم تعديل: لا تحذف المسافات، حولها إلى underscore
+    x = x.replaceAll(RegExp(r'\s+'), '_');
     x = x.replaceAll('-', '_');
-    x = x.replaceAll(RegExp(r'\s+'), '');
+    x = x.replaceAll(RegExp(r'_+'), '_');
+
     return x;
   }
 
@@ -62,8 +68,12 @@ class FixedServiceCategories {
     // allow some common variants
     final variants = <String, String>{
       _normAr('صيانة للمنزل'): 'home_maintenance',
+      _normAr('صيانه للمنزل'): 'home_maintenance',
+
       _normAr('صيانة للاجهزة'): 'appliance_maintenance',
+      _normAr('صيانه للاجهزة'): 'appliance_maintenance',
       _normAr('صيانة للأجهزة'): 'appliance_maintenance',
+
       _normAr('كهرباء'): 'electricity',
       _normAr('سباكة'): 'plumbing',
       _normAr('تنظيف'): 'cleaning',
@@ -87,12 +97,18 @@ class FixedServiceCategories {
     final hasLatin = RegExp(r'[a-zA-Z_/-]').hasMatch(s);
     if (hasLatin) {
       final k = _normKey(s);
+
+      // ✅ Aliases: السيرفر vs مفاتيحك الثابتة
+      if (k == 'electrical') return 'electricity';
+      if (k == 'general_maintenance') return 'home_maintenance';
+      if (k == 'appliance_repair') return 'appliance_maintenance';
+
       if (keyToAr.containsKey(k)) return k;
 
-      // sometimes slug is "home-maintenance"
-      final k2 = k.replaceAll('_', '-');
-      final back = k2.replaceAll('-', '_');
+      // sometimes slug is "home-maintenance" (بعد _normKey غالباً تصير home_maintenance)
+      final back = k.replaceAll('-', '_');
       if (keyToAr.containsKey(back)) return back;
+
       return null;
     }
 

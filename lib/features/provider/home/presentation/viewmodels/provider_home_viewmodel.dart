@@ -25,40 +25,23 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
   ProviderStatsModel stats = ProviderStatsModel.empty;
 
-  /// Raw bookings list (for future use / UI expand).
   List<ProviderBookingModel> allBookings = [];
-
-  /// NEW Requests (status == pending_provider_accept)
   List<ProviderBookingModel> newRequests = [];
-
-  /// A single task for today (UI shows one only).
   ProviderBookingModel? todayTask;
 
-  /// Upcoming count (booking_date > today + scheduled statuses)
   int upcomingCount = 0;
-
-  /// Total requests count (pending_provider_accept)
   int totalRequestsCount = 0;
-
-  /// Convenience: show one preview request to avoid overflow.
   ProviderBookingModel? newRequestPreview;
-
-  // ---------------- Texts ----------------
 
   String get headerTitle => 'لوحة التحكم';
   String get headerSubtitle =>
       'أهلًا بك من جديد يا $providerName! إليك لمحة عامة.';
 
-  // ---------------- Earnings helpers (for Earnings page / header taps) ----------------
-  // ملاحظة: تعتمد على ProviderStatsModel (المحدّث) لو ضفت حقول total_earnings / completed_bookings...
   double get totalEarnings => stats.totalEarnings;
   int get completedCount => stats.completedBookings;
 
-  // placeholders (لحد ما الباك يضيفهم)
   double? get thisWeekEarnings => null;
   double? get monthChangePct => null;
-
-  // ---------------- Policies ----------------
 
   static const String _pendingProviderAccept = 'pending_provider_accept';
 
@@ -68,8 +51,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     'provider_arrived',
     'in_progress',
   };
-
-  // ---------------- Logging ----------------
 
   void _log(String msg) {
     debugPrint('[ProviderHomeVM] $msg');
@@ -104,49 +85,89 @@ class ProviderHomeViewModel extends ChangeNotifier {
     return 'تعذر تنفيذ العملية. حاول مرة أخرى.';
   }
 
-  // ---------------- Public API ----------------
-
+  // ✅ Refresh partial-fail: stats/bookings independent
   Future<void> refresh() async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
+    String? statsErr;
+    String? bookingsErr;
+
     try {
-      // Get name (best-effort)
       await _resolveProviderNameIfPossible();
 
-      final results = await Future.wait([
-        _remote.getDashboardStats(),
-        _remote.getMyBookings(limit: 60, sortBy: 'booking_date', order: 'ASC'),
-      ]);
+      try {
+        stats = await _remote.getDashboardStats();
+      } on DioException catch (e) {
+        _logDio('getDashboardStats', e);
+        statsErr = _friendlyErrorFromStatus(e.response?.statusCode);
+      } catch (e) {
+        _log('getDashboardStats error: $e');
+        statsErr = 'تعذر تحميل الإحصائيات حالياً.';
+      }
 
-      stats = results[0] as ProviderStatsModel;
-      allBookings = results[1] as List<ProviderBookingModel>;
+      try {
+        allBookings = await _remote.getMyBookings(
+          limit: 60,
+          sortBy: 'booking_date',
+          order: 'ASC',
+        );
+        _computeDashboardFromBookings(allBookings);
+      } on DioException catch (e) {
+        _logDio('getMyBookings', e);
+        bookingsErr = _friendlyErrorFromStatus(e.response?.statusCode);
+      } catch (e) {
+        _log('getMyBookings error: $e');
+        bookingsErr = 'تعذر تحميل الحجوزات حالياً.';
+      }
 
-      _computeDashboardFromBookings(allBookings);
-    } on DioException catch (e) {
-      _logDio('refresh', e);
-      errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
-    } catch (e) {
-      _log('refresh error: $e');
-      errorMessage =
-          'تعذر تحميل البيانات. تأكد من تسجيل الدخول والاتصال بالإنترنت.';
+      if (statsErr != null && bookingsErr != null) {
+        errorMessage =
+            'تعذر تحميل بيانات لوحة التحكم. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.';
+      } else if (statsErr != null) {
+        errorMessage = 'تعذر تحميل الإحصائيات حالياً.';
+      } else if (bookingsErr != null) {
+        errorMessage = 'تعذر تحميل الحجوزات حالياً.';
+      } else {
+        errorMessage = null;
+      }
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
+  // ✅ Accept: local same-day rule + no longer available handling
   Future<void> accept(int bookingId) async {
     errorMessage = null;
     notifyListeners();
+
+    final target = _findBookingById(bookingId);
+    if (target != null && _violatesSameDayRule(target)) {
+      errorMessage =
+          'لا يمكنك قبول هذا الطلب لأن لديك حجزاً مجدولاً في نفس اليوم.';
+      notifyListeners();
+      return;
+    }
 
     try {
       await _remote.providerAction(bookingId: bookingId, action: 'accept');
       await refresh();
     } on DioException catch (e) {
       _logDio('accept($bookingId)', e);
-      errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
+
+      final status = e.response?.statusCode;
+
+      // ✅ NEW: no longer available message + refresh
+      if (status == 404 || status == 409) {
+        errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
+        notifyListeners();
+        await refresh();
+        return;
+      }
+
+      errorMessage = _friendlyErrorFromStatus(status);
       notifyListeners();
     } catch (e) {
       _log('accept($bookingId) error: $e');
@@ -155,6 +176,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
+  // ✅ Reject: no longer available handling
   Future<void> reject(int bookingId) async {
     errorMessage = null;
     notifyListeners();
@@ -164,7 +186,18 @@ class ProviderHomeViewModel extends ChangeNotifier {
       await refresh();
     } on DioException catch (e) {
       _logDio('reject($bookingId)', e);
-      errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
+
+      final status = e.response?.statusCode;
+
+      // ✅ NEW: no longer available message + refresh
+      if (status == 404 || status == 409) {
+        errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
+        notifyListeners();
+        await refresh();
+        return;
+      }
+
+      errorMessage = _friendlyErrorFromStatus(status);
       notifyListeners();
     } catch (e) {
       _log('reject($bookingId) error: $e');
@@ -217,8 +250,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ---------------- Internals ----------------
-
   Future<void> _resolveProviderNameIfPossible() async {
     try {
       final session = await _local.getCachedAuthSession();
@@ -242,13 +273,10 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
       final full = ('$fn $ln').trim();
       if (full.isNotEmpty) providerName = full;
-    } catch (_) {
-      // ignore
-    }
+    } catch (_) {}
   }
 
   void _computeDashboardFromBookings(List<ProviderBookingModel> bookings) {
-    // 1) NEW Requests
     newRequests =
         bookings.where((b) => b.status == _pendingProviderAccept).toList();
     newRequests.sort(_byDateThenTime);
@@ -256,7 +284,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     totalRequestsCount = newRequests.length;
     newRequestPreview = newRequests.isEmpty ? null : newRequests.first;
 
-    // 2) Today Task (ONE)
     final today = _todayDateOnly();
     final todays = bookings.where((b) {
       final d = _parseDateOnly(b.bookingDate);
@@ -267,7 +294,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     todays.sort(_byDateThenTime);
     todayTask = todays.isEmpty ? null : todays.first;
 
-    // 3) UPCOMING count: booking_date > today + scheduled statuses (exclude pending accept)
     final upcoming = bookings.where((b) {
       if (b.status == _pendingProviderAccept) return false;
       if (!_scheduledStatuses.contains(b.status)) return false;
@@ -280,6 +306,32 @@ class ProviderHomeViewModel extends ChangeNotifier {
     upcomingCount = upcoming.length;
   }
 
+  ProviderBookingModel? _findBookingById(int bookingId) {
+    try {
+      return allBookings.firstWhere((b) => b.id == bookingId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _violatesSameDayRule(ProviderBookingModel pending) {
+    if (pending.status != _pendingProviderAccept) return false;
+
+    final targetDate = _parseDateOnly(pending.bookingDate);
+    if (targetDate == null) return false;
+
+    for (final b in allBookings) {
+      if (b.id == pending.id) continue;
+      if (!_scheduledStatuses.contains(b.status)) continue;
+
+      final d = _parseDateOnly(b.bookingDate);
+      if (d == null) continue;
+
+      if (_isSameDate(d, targetDate)) return true;
+    }
+    return false;
+  }
+
   static int _byDateThenTime(ProviderBookingModel a, ProviderBookingModel b) {
     final ad = _parseDateOnly(a.bookingDate);
     final bd = _parseDateOnly(b.bookingDate);
@@ -289,7 +341,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
       if (cmp != 0) return cmp;
     }
 
-    // Compare time string (HH:mm:ss) lexicographically works if padded.
     return a.bookingTime.compareTo(b.bookingTime);
   }
 

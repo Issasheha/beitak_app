@@ -61,7 +61,7 @@ class ProviderHeaderStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final clickable = stat.onTap != null;
+    final clickable = (stat.onTap != null) && !stat.skeleton;
 
     return LayoutBuilder(
       builder: (context, c) {
@@ -80,15 +80,28 @@ class ProviderHeaderStatCard extends StatelessWidget {
         final gap1 = (h * 0.10).clamp(3.0, 7.0);
         final gap2 = (h * 0.08).clamp(2.0, 6.0);
 
-        // ✅ Border يوضح “كليكابل”
         final borderColor = clickable
             ? AppColors.lightGreen.o(0.40)
             : AppColors.borderLight;
 
+        Widget skeletonBar({required double widthFactor, required double height}) {
+          return Align(
+            alignment: Alignment.center,
+            child: Container(
+              width: (w * widthFactor).clamp(26.0, w),
+              height: height,
+              decoration: BoxDecoration(
+                color: AppColors.borderLight.o(0.55),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          );
+        }
+
         return Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: stat.onTap,
+            onTap: clickable ? stat.onTap : null,
             borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
             child: Container(
               decoration: BoxDecoration(
@@ -110,53 +123,63 @@ class ProviderHeaderStatCard extends StatelessWidget {
               child: Stack(
                 children: [
                   Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          stat.emoji,
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.title18.copyWith(
-                            fontSize: emojiSize,
-                            height: 1.0,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary,
+                    child: stat.skeleton
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              skeletonBar(widthFactor: 0.30, height: emojiSize * 0.75),
+                              SizedBox(height: gap1),
+                              skeletonBar(widthFactor: 0.45, height: valueSize * 0.75),
+                              SizedBox(height: gap2),
+                              skeletonBar(widthFactor: 0.55, height: titleSize * 0.70),
+                            ],
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                stat.emoji,
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.title18.copyWith(
+                                  fontSize: emojiSize,
+                                  height: 1.0,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              SizedBox(height: gap1),
+                              Text(
+                                stat.value,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.title18.copyWith(
+                                  fontSize: valueSize,
+                                  height: 1.0,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              SizedBox(height: gap2),
+                              Text(
+                                stat.title,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.body16.copyWith(
+                                  fontSize: titleSize,
+                                  height: 1.0,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        SizedBox(height: gap1),
-                        Text(
-                          stat.value,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.title18.copyWith(
-                            fontSize: valueSize,
-                            height: 1.0,
-                            fontWeight: FontWeight.w900,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: gap2),
-                        Text(
-                          stat.title,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: AppTextStyles.body16.copyWith(
-                            fontSize: titleSize,
-                            height: 1.0,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
 
-                  // ✅ علامة دخول صغيرة تعطي إحساس “تفاصيل”
                   if (clickable)
                     Positioned(
                       left: 8,

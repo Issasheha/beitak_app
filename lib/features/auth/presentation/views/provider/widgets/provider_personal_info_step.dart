@@ -9,12 +9,18 @@ import 'package:flutter/material.dart';
 class ProviderPersonalInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
-  // ✅ Controllers نمررهم من الشاشة الرئيسية
   final TextEditingController firstNameController;
   final TextEditingController lastNameController;
   final TextEditingController phoneController;
   final TextEditingController emailController;
   final TextEditingController passwordController;
+
+  // ✅ Terms
+  final bool termsAccepted;
+  final ValueChanged<bool> onTermsChanged;
+
+  // ✅ City selection (نكتفي بالـ City)
+  final ValueChanged<String?> onCityChanged;
 
   const ProviderPersonalInfoStep({
     super.key,
@@ -24,6 +30,9 @@ class ProviderPersonalInfoStep extends StatefulWidget {
     required this.phoneController,
     required this.emailController,
     required this.passwordController,
+    required this.termsAccepted,
+    required this.onTermsChanged,
+    required this.onCityChanged,
   });
 
   @override
@@ -39,7 +48,6 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
       TextEditingController();
 
   String? _selectedCity;
-  String? _selectedArea;
 
   final _cities = const [
     'عمان',
@@ -55,36 +63,24 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     'الطفيلة',
   ];
 
-  final Map<String, List<String>> _areasByCity = const {
-    'عمان': [
-      'عبدون',
-      'البلدة القديمة',
-      'جبل الحسين',
-      'جبل عمان',
-      'الجبيهة',
-      'خلدا',
-      'شارع الرينبو',
-      'الشميساني',
-      'الشفا',
-      'تلاع العلي',
-    ],
-    'الزرقاء': [
-      'وسط المدينة',
-      'الهاشمي',
-      'الزرقاء الجديدة',
-      'مخيم الزرقاء',
-      'الرصيفة',
-    ],
-    'إربد': [
-      'شارع الحسين',
-      'وسط المدينة',
-      'شارع البترا',
-      'شارع الجامعة',
-    ],
-  };
+  @override
+  void initState() {
+    super.initState();
+
+    // عشان الـ "واحد منهم على الأقل" يشتغل لحظة بلحظة
+    widget.phoneController.addListener(_revalidateSoft);
+    widget.emailController.addListener(_revalidateSoft);
+  }
+
+  void _revalidateSoft() {
+    // ما نعمل validate كامل، بس نعمل setState لتحديث الرسائل عند الحاجة
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
+    widget.phoneController.removeListener(_revalidateSoft);
+    widget.emailController.removeListener(_revalidateSoft);
     _confirmPasswordController.dispose();
     super.dispose();
   }
@@ -100,7 +96,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
             'المعلومات الشخصية',
             style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.w700, // كان bold
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
@@ -124,7 +120,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
                   hint: 'أحمد',
                   icon: Icons.person_outline,
                   controller: widget.firstNameController,
-                  validator: _requiredValidator,
+                  validator: _nameValidator,
                   onDarkBackground: false,
                 ),
               ),
@@ -135,7 +131,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
                   hint: 'محمد',
                   icon: Icons.person_outline,
                   controller: widget.lastNameController,
-                  validator: _requiredValidator,
+                  validator: _nameValidator,
                   onDarkBackground: false,
                 ),
               ),
@@ -143,39 +139,58 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
-          // رقم الجوال
+          // رقم الجوال (مش لازم إذا الإيميل موجود)
           AuthTextField(
-            label: 'رقم الجوال *',
-            hint: '077 123 4567',
+            label: 'رقم الجوال',
+            hint: '0771234567',
             icon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
             controller: widget.phoneController,
-            validator: _phoneValidator,
+            validator: (v) => _phoneValidator(
+              v,
+              email: widget.emailController.text,
+            ),
             onDarkBackground: false,
           ),
           SizeConfig.v(14),
 
-          // الإيميل (اختياري)
+          // الإيميل (مش لازم إذا الجوال موجود)
           AuthTextField(
-            label: 'البريد الإلكتروني (اختياري)',
+            label: 'البريد الإلكتروني',
             hint: 'ahmad@example.com',
             icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
             controller: widget.emailController,
-            validator: (value) {
-              if (value == null || value.isEmpty) return null;
-              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+$');
-              if (!emailRegex.hasMatch(value)) return 'البريد الإلكتروني غير صالح';
-              return null;
-            },
+            validator: (v) => _emailValidator(
+              v,
+              phone: widget.phoneController.text,
+            ),
             onDarkBackground: false,
           ),
-          SizeConfig.v(14),
+          // SizeConfig.v(14),
+
+          // (Hidden) ضمان "واحد منهم على الأقل" حتى لو واحد فيهم ما لمس المستخدم
+          // TextFormField(
+          //   validator: (_) {
+          //     final phone = widget.phoneController.text.trim();
+          //     final email = widget.emailController.text.trim();
+          //     if (phone.isEmpty && email.isEmpty) {
+          //       return 'يجب إدخال رقم الجوال أو البريد على الأقل';
+          //     }
+          //     return null;
+          //   },
+          //   decoration: const InputDecoration(
+          //     border: InputBorder.none,
+          //     isCollapsed: true,
+          //     contentPadding: EdgeInsets.zero,
+          //   ),
+          // ),
+          SizeConfig.v(2),
 
           // كلمة المرور
           AuthTextField(
             label: 'كلمة المرور *',
-            hint: 'أدنى 8 أحرف',
+            hint: 'مثال: Abc@123',
             icon: Icons.lock_outline,
             obscureText: _obscurePass,
             controller: widget.passwordController,
@@ -186,11 +201,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
               ),
               onPressed: () => setState(() => _obscurePass = !_obscurePass),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) return 'كلمة المرور مطلوبة';
-              if (value.length < 8) return 'يجب أن تكون 8 أحرف على الأقل';
-              return null;
-            },
+            validator: _passwordValidator,
             onDarkBackground: false,
           ),
           SizeConfig.v(14),
@@ -211,10 +222,9 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
                   setState(() => _obscureConfirm = !_obscureConfirm),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'تأكيد كلمة المرور مطلوب';
-              }
-              if (value != widget.passwordController.text) {
+              final v = (value ?? '').trim();
+              if (v.isEmpty) return 'تأكيد كلمة المرور مطلوب';
+              if (v != widget.passwordController.text) {
                 return 'كلمتا المرور غير متطابقتين';
               }
               return null;
@@ -223,33 +233,82 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
-          // المحافظة
+          // المحافظة (City فقط)
           _buildDropdown(
             label: 'المحافظة *',
             hint: 'اختر المحافظة',
             value: _selectedCity,
             items: _cities,
             onChanged: (value) {
-              setState(() {
-                _selectedCity = value;
-                _selectedArea = null;
-              });
+              setState(() => _selectedCity = value);
+              widget.onCityChanged(value);
             },
             validator: (v) => v == null ? 'المحافظة مطلوبة' : null,
           ),
-          SizeConfig.v(14),
+          SizeConfig.v(16),
 
-          // المنطقة
-          _buildDropdown(
-            label: 'المنطقة *',
-            hint: 'اختر المنطقة',
-            value: _selectedArea,
-            items: _areasByCity[_selectedCity] ?? const [],
-            onChanged: (value) => setState(() => _selectedArea = value),
-            validator: (v) => v == null ? 'المنطقة مطلوبة' : null,
-          ),
+          // Terms (بدون حقل فاضي)
+          _buildTermsSection(),
         ],
       ),
+    );
+  }
+
+  Widget _buildTermsSection() {
+    return FormField<bool>(
+      initialValue: widget.termsAccepted,
+      validator: (_) {
+        if (!widget.termsAccepted) return 'يجب الموافقة على الشروط والأحكام';
+        return null;
+      },
+      builder: (field) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Checkbox(
+                  value: widget.termsAccepted,
+                  onChanged: (v) {
+                    final newVal = v ?? false;
+                    widget.onTermsChanged(newVal);
+                    field.didChange(newVal);
+                  },
+                  activeColor: AppColors.primaryGreen,
+                ),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      final newVal = !widget.termsAccepted;
+                      widget.onTermsChanged(newVal);
+                      field.didChange(newVal);
+                    },
+                    child: Text(
+                      'أوافق على الشروط والأحكام وسياسة الخصوصية *',
+                      style: AppTextStyles.body14.copyWith(
+                        fontSize: SizeConfig.ts(13),
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (field.hasError)
+              Padding(
+                padding: EdgeInsets.only(right: SizeConfig.w(8)),
+                child: Text(
+                  field.errorText!,
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: SizeConfig.ts(12),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -315,18 +374,103 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     );
   }
 
-  static String? _requiredValidator(String? value) {
-    if (value == null || value.isEmpty) return 'هذا الحقل مطلوب';
+  // ===== Validators (Strict Doc) =====
+
+  static String? _nameValidator(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return 'هذا الحقل مطلوب';
+    if (v.length < 2) return 'يجب أن يكون حرفين على الأقل';
+
+    // عربي/إنجليزي + مسافة بين الكلمات (بدون أرقام/رموز)
+    final ok = RegExp(
+      r'^[a-zA-Z\u0600-\u06FF]+(?:\s[a-zA-Z\u0600-\u06FF]+)*$',
+    ).hasMatch(v);
+    if (!ok) return 'يسمح بالحروف فقط';
     return null;
   }
 
-  static String? _phoneValidator(String? value) {
-    if (value == null || value.isEmpty) return 'رقم الجوال مطلوب';
-    final cleaned = value.replaceAll(RegExp(r'\s+'), '');
+  static String? _phoneValidator(String? value, {required String email}) {
+    final phone = (value ?? '').trim();
+    final e = email.trim();
+
+    // واحد منهم على الأقل
+    if (phone.isEmpty && e.isEmpty) {
+      return 'يجب إدخال رقم الجوال أو البريد على الأقل';
+    }
+
+    // إذا فاضي بس الإيميل موجود -> OK
+    if (phone.isEmpty) return null;
+
+    // بدون مسافات/رموز - أرقام فقط
+    if (!RegExp(r'^\d+$').hasMatch(phone)) {
+      return 'رقم الجوال يجب أن يحتوي أرقام فقط';
+    }
+
+    // الأردن 10 أرقام ويبدأ 077/078/079
     final regex = RegExp(r'^07(7|8|9)\d{7}$');
-    if (!regex.hasMatch(cleaned)) {
+    if (!regex.hasMatch(phone)) {
       return 'يجب أن يبدأ بـ 077 أو 078 أو 079 ويتكوّن من 10 أرقام';
     }
     return null;
   }
+
+  static String? _emailValidator(String? value, {required String phone}) {
+    final email = (value ?? '').trim();
+    final p = phone.trim();
+
+    // واحد منهم على الأقل
+    if (email.isEmpty && p.isEmpty) {
+      return 'يجب إدخال رقم الجوال أو البريد على الأقل';
+    }
+
+    // إذا فاضي بس الجوال موجود -> OK
+    if (email.isEmpty) return null;
+
+    // Strict rules
+    if (email.contains(' ')) return 'البريد الإلكتروني غير صالح';
+    if (email.startsWith('.') || email.endsWith('.')) {
+      return 'البريد الإلكتروني غير صالح';
+    }
+    if (email.contains('..')) return 'البريد الإلكتروني غير صالح';
+
+    final emailRegex = RegExp(
+      r"^[A-Za-z0-9!#$%&'*+\-/=?^_`{|}~.]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$",
+    );
+    if (!emailRegex.hasMatch(email)) return 'البريد الإلكتروني غير صالح';
+
+    return null;
+  }
+
+ static String? _passwordValidator(String? value) {
+  final v = (value ?? '');
+
+  if (v.isEmpty) return 'كلمة المرور مطلوبة';
+
+  // 1) بدون مسافات
+  if (v.contains(' ')) {
+    return 'كلمة المرور يجب أن لا تحتوي على مسافات';
+  }
+
+  // 2) الحد الأدنى 8
+  if (v.length < 8) {
+    return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+  }
+
+  // 3) حرف كبير
+  if (!RegExp(r'[A-Z]').hasMatch(v)) {
+    return 'كلمة المرور يجب أن تحتوي على حرف كبير (A-Z)';
+  }
+
+  // 4) رقم
+  if (!RegExp(r'\d').hasMatch(v)) {
+    return 'كلمة المرور يجب أن تحتوي على رقم واحد على الأقل';
+  }
+
+  // 5) رمز خاص
+  if (!RegExp(r'[^A-Za-z0-9]').hasMatch(v)) {
+    return 'كلمة المرور يجب أن تحتوي على رمز خاص (مثل ! @ #)';
+  }
+
+  return null;
+}
 }

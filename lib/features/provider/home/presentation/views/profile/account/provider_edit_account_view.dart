@@ -176,26 +176,34 @@ class _ProviderAccountEditViewState
             ),
             SizeConfig.v(12),
 
-            const _FieldLabel(text: 'رقم الهاتف', requiredStar: true),
+            // ✅ رقم الهاتف (غير قابل للتعديل)
+            const _FieldLabel(text: 'رقم الهاتف', requiredStar: false),
             SizeConfig.v(6),
             _TextInput(
               controller: _phoneCtrl,
               hint: '+962 79 123 4567',
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.phone,
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'رقم الهاتف مطلوب';
-                if (s.length < 8) return 'رقم الهاتف غير مكتمل';
-                return null;
-              },
+              enabled: false, // ✅
+              // لا داعي للـ validator لأنه غير قابل للتعديل
             ),
-            SizeConfig.v(4),
+            SizeConfig.v(6),
+            Text(
+              'لا يمكن تعديل رقم الهاتف حالياً',
+              textAlign: TextAlign.right,
+              style: AppTextStyles.caption11.copyWith(
+                fontSize: SizeConfig.ts(11.5),
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            SizeConfig.v(6),
             _VerifiedRow(
               isVerified: state.isPhoneVerified,
               labelWhenVerified: 'الرقم موثّق',
               labelWhenNotVerified: 'الرقم غير موثّق',
             ),
+
             SizeConfig.v(16),
 
             SizedBox(
@@ -287,9 +295,7 @@ class _ProviderAccountEditViewState
               validator: (v) {
                 final s = (v ?? '').trim();
                 if (s.isEmpty) return 'كلمة المرور الجديدة مطلوبة';
-                if (s.length < 8) {
-                  return 'يجب أن تحتوي على 8 أحرف على الأقل';
-                }
+                if (s.length < 8) return 'يجب أن تحتوي على 8 أحرف على الأقل';
                 return null;
               },
             ),
@@ -369,7 +375,7 @@ class _ProviderAccountEditViewState
     final error = await notifier.saveProfile(
       fullName: _fullNameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
-      phone: _phoneCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim(), // موجود بس السيرفر ما بيسمح، والكونترولر ما راح يرسله
     );
 
     if (!mounted) return;
@@ -389,6 +395,7 @@ class _ProviderAccountEditViewState
     final error = await notifier.changePassword(
       currentPassword: _currentPassCtrl.text.trim(),
       newPassword: _newPassCtrl.text.trim(),
+      confirmPassword: _confirmPassCtrl.text.trim(),
     );
 
     if (!mounted) return;
@@ -456,6 +463,7 @@ class _TextInput extends StatelessWidget {
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
   final String? Function(String?)? validator;
+  final bool enabled;
 
   const _TextInput({
     required this.controller,
@@ -463,19 +471,22 @@ class _TextInput extends StatelessWidget {
     required this.keyboardType,
     required this.textInputAction,
     this.validator,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      enabled: enabled,
+      readOnly: !enabled,
       textAlign: TextAlign.right,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       validator: validator,
       style: AppTextStyles.body14.copyWith(
         fontSize: SizeConfig.ts(13.5),
-        color: AppColors.textPrimary,
+        color: enabled ? AppColors.textPrimary : AppColors.textSecondary,
       ),
       decoration: InputDecoration(
         hintText: hint,
@@ -487,6 +498,12 @@ class _TextInput extends StatelessWidget {
         fillColor: Colors.white,
         contentPadding: SizeConfig.padding(horizontal: 14, vertical: 12),
         enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+          borderSide: BorderSide(
+            color: AppColors.borderLight.withValues(alpha: 0.8),
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
           borderSide: BorderSide(
             color: AppColors.borderLight.withValues(alpha: 0.8),

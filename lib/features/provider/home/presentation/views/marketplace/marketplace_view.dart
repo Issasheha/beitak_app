@@ -72,6 +72,26 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
   Widget build(BuildContext context) {
     final state = ref.watch(marketplaceControllerProvider);
 
+    // ✅ NEW: SnackBar لأي uiMessage (رسالة قبول/رفض بدون ما نكسّر UI)
+    ref.listen(marketplaceControllerProvider, (prev, next) {
+      final msg = next.uiMessage;
+      if (msg != null && msg.isNotEmpty && msg != prev?.uiMessage) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+
+        // نمسح الرسالة بعد العرض عشان ما تتكرر
+        Future.microtask(() {
+          ref.read(marketplaceControllerProvider.notifier).clearUiMessage();
+        });
+      }
+    });
+
     if (_searchController.text != state.searchQuery) {
       _searchController.value = TextEditingValue(
         text: state.searchQuery,
@@ -93,7 +113,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                 onBack: () => _handleBack(context),
               ),
               const SizedBox(height: 12),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _SearchRow(
@@ -103,7 +122,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                       .setSearchQuery(v),
                 ),
               ),
-
               const SizedBox(height: 10),
 
               // ✅ صف الـ Chips فقط (بدون "الفلاتر النشطة")
@@ -116,7 +134,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
               ),
 
               const SizedBox(height: 10),
-
               Expanded(
                 child: Builder(
                   builder: (_) {
@@ -124,7 +141,9 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    if (state.errorMessage != null) {
+                    // ✅ NEW: لا نعرض Error Screen إذا في بيانات محمّلة
+                    if (state.errorMessage != null &&
+                        state.allRequests.isEmpty) {
                       return _ErrorState(
                         message: state.errorMessage!,
                         onRetry: () => ref

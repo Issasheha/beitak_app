@@ -1,3 +1,4 @@
+import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,36 +7,40 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
 import 'package:beitak_app/features/user/home/presentation/views/browse/widgets/service_details_models.dart';
+import 'package:go_router/go_router.dart';
 import 'viewmodels/service_details_providers.dart';
 
-import 'widgets_service_details/location_models.dart';
 import 'widgets_service_details/service_details_header_card.dart';
-import 'widgets_service_details/booking_details_card.dart';
-import 'widgets_service_details/guest_booking_sheet.dart';
-import 'widgets_service_details/package_selector_tile.dart';
-import 'widgets_service_details/package_selector_sheet.dart';
+import 'widgets_service_details/service_booking_form_sheet.dart';
+import 'widgets_service_details/provider_info_card.dart';
 
 class ServiceDetailsView extends ConsumerStatefulWidget {
   const ServiceDetailsView({
     super.key,
     required this.serviceId,
     this.lockedCityId,
+    this.openBookingOnLoad = false,
   });
 
   final int serviceId;
   final int? lockedCityId;
+
+  /// إذا true: أول ما تتحمل التفاصيل يفتح فورم الحجز BottomSheet
+  final bool openBookingOnLoad;
 
   @override
   ConsumerState<ServiceDetailsView> createState() => _ServiceDetailsViewState();
 }
 
 class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
-  final TextEditingController _notesCtrl = TextEditingController();
+  bool _bookingOpenedOnce = false;
 
-  @override
-  void dispose() {
-    _notesCtrl.dispose();
-    super.dispose();
+  void _openBooking(BuildContext context, ServiceDetailsArgs args) {
+    ServiceBookingFormSheet.show(
+      context: context,
+      args: args,
+      isCityLocked: widget.lockedCityId != null,
+    );
   }
 
   @override
@@ -46,30 +51,27 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       serviceId: widget.serviceId,
       lockedCityId: widget.lockedCityId,
     );
+
     final st = ref.watch(serviceDetailsControllerProvider(args));
     final ctrl = ref.read(serviceDetailsControllerProvider(args).notifier);
+
+    // auto-open booking form if requested
+    if (widget.openBookingOnLoad &&
+        !_bookingOpenedOnce &&
+        !st.loading &&
+        st.error == null &&
+        st.service != null) {
+      _bookingOpenedOnce = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openBooking(context, args);
+      });
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
-                color: AppColors.textPrimary),
-            onPressed: () => Navigator.pop(context),
-          ),
-          title: Text(
-            'تفاصيل الخدمة',
-            style: AppTextStyles.screenTitle.copyWith(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w900,
-              fontSize: SizeConfig.ts(18),
-            ),
-          ),
-        ),
+        appBar: const _GreenDetailsAppBar(title: 'تفاصيل الخدمة'),
         body: st.loading
             ? const Center(
                 child: CircularProgressIndicator(color: AppColors.lightGreen),
@@ -79,296 +81,194 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                     message: st.error!,
                     onRetry: () => ctrl.loadAll(),
                   )
-                : _Content(
+                : _DetailsContent(
                     state: st,
+                    args: args,
                     isCityLocked: widget.lockedCityId != null,
-                    onPickDate: () => _pickDate(context, ctrl, st.selectedDate),
-                    notesCtrl: _notesCtrl,
-                    onOpenPackagePicker: () =>
-                        _openPackagePicker(context, ctrl, st.service),
-                    onAreaChanged: (a) => ctrl.setSelectedArea(a),
+                    onBookNow: () => _openBooking(context, args),
                   ),
-        bottomNavigationBar: st.service == null
-            ? null
-            : SafeArea(
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                  decoration: const BoxDecoration(
-                    color: AppColors.background,
-                    border: Border(top: BorderSide(color: AppColors.borderLight)),
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: st.bookingLoading
-                          ? null
-                          : () => _bookNow(context, ctrl, st),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.lightGreen,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(
-                        st.bookingLoading ? 'جارٍ الحجز...' : 'احجز الآن',
-                        style: AppTextStyles.semiBold.copyWith(
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
       ),
     );
-  }
-
-  Future<void> _pickDate(
-    BuildContext context,
-    dynamic ctrl,
-    DateTime? current,
-  ) async {
-    final first = _todayDateOnly();
-    final last = first.add(const Duration(days: 60));
-    final initial = current ?? first.add(const Duration(days: 1));
-
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: first,
-      lastDate: last,
-      initialDate: initial,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppColors.lightGreen,
-              primary: AppColors.lightGreen,
-            ),
-          ),
-          child: Directionality(textDirection: TextDirection.rtl, child: child!),
-        );
-      },
-    );
-
-    if (picked == null) return;
-    ctrl.setSelectedDate(DateTime(picked.year, picked.month, picked.day));
-  }
-
-  Future<void> _openPackagePicker(
-    BuildContext context,
-    dynamic ctrl,
-    ServiceDetails? s,
-  ) async {
-    if (s == null) return;
-    if (s.packages.isEmpty) return;
-
-    final picked = await PackageSelectorSheet.show(
-      context,
-      packages: s.packages,
-      selectedName: ctrl.state.selectedPackageName,
-    );
-
-    ctrl.setSelectedPackageName(picked);
-  }
-
-  Future<void> _bookNow(BuildContext context, dynamic ctrl, dynamic st) async {
-    final s = st.service as ServiceDetails?;
-    if (s == null) return;
-
-    if (st.selectedDate == null) {
-      _toast(context, 'اختر تاريخ الحجز.');
-      return;
-    }
-
-    final CityOption? city = st.selectedCity;
-    final AreaOption? area = st.selectedArea;
-
-    final citySlug =
-        (city?.slug ?? '').trim().isEmpty ? 'amman' : city!.slug.toLowerCase();
-    final areaSlug =
-        (area?.slug ?? '').trim().isEmpty ? 'abdoun' : area!.slug.toLowerCase();
-
-    final bookingDate = _fmtDate(st.selectedDate!);
-    final bookingTime = s.provider.workingHours.start;
-    final durationHours = s.durationHours <= 0 ? 1.0 : s.durationHours;
-
-    final notes = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
-
-    try {
-      await ctrl.createBookingAsUser(
-        bookingDate: bookingDate,
-        bookingTime: bookingTime,
-        durationHours: durationHours,
-        serviceCity: citySlug,
-        serviceArea: areaSlug,
-        notes: notes,
-      );
-
-      _toast(context, 'تم إنشاء الحجز بنجاح ✅');
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (ctrl.isOtpRequiredError(e)) {
-        await _openGuestOtpFlow(
-          context: context,
-          ctrl: ctrl,
-          service: s,
-          bookingDate: bookingDate,
-          bookingTime: bookingTime,
-          durationHours: durationHours,
-          serviceCity: citySlug,
-          serviceArea: areaSlug,
-          notes: notes,
-        );
-        return;
-      }
-      _toast(context, 'فشل الحجز: ${e.toString()}');
-    }
-  }
-
-  Future<void> _openGuestOtpFlow({
-    required BuildContext context,
-    required dynamic ctrl,
-    required ServiceDetails service,
-    required String bookingDate,
-    required String bookingTime,
-    required double durationHours,
-    required String serviceCity,
-    required String serviceArea,
-    required String? notes,
-  }) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => GuestBookingSheet(
-        onSendOtp: (phone) => ctrl.sendBookingOtp(customerPhone: phone),
-        onConfirm: ({
-          required String name,
-          required String phone,
-          required String otp,
-        }) async {
-          await ctrl.createBookingAsGuest(
-            bookingDate: bookingDate,
-            bookingTime: bookingTime,
-            durationHours: durationHours,
-            serviceCity: serviceCity,
-            serviceArea: serviceArea,
-            customerName: name,
-            customerPhone: phone,
-            otp: otp,
-            notes: notes,
-          );
-
-          _toast(context, 'تم إنشاء الحجز كضيف ✅');
-          if (mounted) Navigator.pop(context);
-        },
-      ),
-    );
-  }
-
-  void _toast(BuildContext context, String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          msg,
-          style: AppTextStyles.body.copyWith(color: Colors.white),
-        ),
-        backgroundColor: AppColors.textPrimary,
-      ),
-    );
-  }
-
-  DateTime _todayDateOnly() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
-
-  String _fmtDate(DateTime d) {
-    final mm = d.month.toString().padLeft(2, '0');
-    final dd = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$mm-$dd';
   }
 }
 
-class _Content extends StatelessWidget {
-  const _Content({
+class _GreenDetailsAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _GreenDetailsAppBar({required this.title});
+
+  final String title;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    final top = MediaQuery.of(context).padding.top;
+
+    return Container(
+      padding: EdgeInsets.only(top: top),
+      decoration: const BoxDecoration(color: AppColors.lightGreen),
+      child: SizedBox(
+        height: kToolbarHeight,
+        child: Row(
+          textDirection: TextDirection.ltr,
+          children: [
+            const SizedBox(width: 12),
+
+            // Title centered
+            Expanded(
+              child: Center(
+                child: Text(
+                  title,
+                  style: AppTextStyles.screenTitle.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: SizeConfig.ts(18),
+                  ),
+                ),
+              ),
+            ),
+
+            // back button (right) in RTL
+            Container(
+              
+              width: 40,
+              height: 40,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                splashRadius: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailsContent extends StatelessWidget {
+  const _DetailsContent({
     required this.state,
+    required this.args,
     required this.isCityLocked,
-    required this.onPickDate,
-    required this.notesCtrl,
-    required this.onOpenPackagePicker,
-    required this.onAreaChanged,
+    required this.onBookNow,
   });
 
-  final dynamic state;
+  final dynamic state; // keeps compatibility with your existing state file
+  final ServiceDetailsArgs args;
   final bool isCityLocked;
-
-  final VoidCallback onPickDate;
-  final TextEditingController notesCtrl;
-  final VoidCallback onOpenPackagePicker;
-  final ValueChanged<AreaOption?> onAreaChanged;
+  final VoidCallback onBookNow;
 
   @override
   Widget build(BuildContext context) {
     final s = state.service as ServiceDetails;
     final p = s.provider;
 
-    final cityDisplay = state.locLoading
-        ? '...'
-        : ((state.selectedCity?.nameAr ?? '').trim().isNotEmpty
-            ? state.selectedCity!.nameAr
-            : '—');
-
-    final selectedDateLabel =
-        state.selectedDate == null ? 'غير محدد' : _fmtDate(state.selectedDate!);
-
     final displayedPrice = _calcDisplayedPrice(state);
-    final selectedPackageLabel = state.selectedPackageName == null
-        ? 'بدون باقة'
-        : state.selectedPackageName!;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+    // ما عندك category name بالموديل (فقط categoryId) — مؤقتاً ثابت
+    final categoryLabel = 'خدمات المنزل';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
         children: [
           ServiceDetailsHeaderCard(
             serviceName: s.name,
-            description: s.description,
-            providerName: p.displayName,
+            categoryLabel: categoryLabel,
+            durationLabel: _durationLabel(s.durationHours),
             rating: p.ratingAvg,
-            priceLabel: '${displayedPrice.toStringAsFixed(0)} د.أ',
-            locationLabelAr:
-                (p.serviceAreas.isNotEmpty) ? p.serviceAreas.first : '—',
+            priceValueLabel: '${displayedPrice.toStringAsFixed(0)} JD',
+            priceHintLabel: 'حسب حجم المنزل',
+            bookingLoading: state.bookingLoading == true,
+            onBookNow: onBookNow,
           ),
           const SizedBox(height: 12),
-          Expanded(
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: BookingDetailsCard(
-                loading: state.locLoading,
-                selectedDateLabel: selectedDateLabel,
-                onPickDate: onPickDate,
-                notesCtrl: notesCtrl,
-                cityNameAr: cityDisplay,
-                isCityLocked: isCityLocked,
-                areas: state.areas as List<AreaOption>,
-                selectedArea: state.selectedArea as AreaOption?,
-                onAreaChanged: onAreaChanged,
-                areaEnabled:
-                    (state.areas as List).isNotEmpty && !state.locLoading,
+
+          _ServiceSectionCard(
+            title: 'وصف الخدمة',
+            child: Text(
+              s.description.trim().isEmpty ? '—' : s.description.trim(),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textPrimary,
+                fontSize: SizeConfig.ts(12.8),
+                height: 1.55,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
           const SizedBox(height: 12),
-          PackageSelectorTile(
-            hasPackages: s.packages.isNotEmpty,
-            selectedLabel: selectedPackageLabel,
-            onTap: s.packages.isEmpty ? null : onOpenPackagePicker,
+          ProviderInfoCard(
+            providerName: p.displayName,
+            memberSinceYear: p.memberSinceLabel,
+            ratingAvg: p.ratingAvg,
+            ratingCount: p.ratingCount,
+            bio: p.bio,
+            onTapReviews: () {
+              final providerId = p.id;
+              final providerName = p.displayName;
+
+              context.push(
+                '${AppRoutes.providerRatings}'
+                '?provider_id=$providerId'
+                '&name=${Uri.encodeComponent(providerName)}',
+              );
+            },
           ),
+          const SizedBox(height: 12),
+
+          // (اختياري) عرض الباقات
+          if (s.packages.isNotEmpty) ...[
+            _SectionTitle(title: 'الباقات'),
+            const SizedBox(height: 8),
+            ...s.packages.map(
+              (pkg) => _InfoTile(
+                title: pkg.name,
+                subtitle: pkg.description,
+                trailing: '${pkg.price.toStringAsFixed(0)} JD',
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (s.addOns.isNotEmpty) ...[
+            _SectionTitle(title: 'إضافات'),
+            const SizedBox(height: 8),
+            ...s.addOns.map(
+              (a) => _InfoTile(
+                title: a.name,
+                subtitle: a.description,
+                trailing: '${a.price.toStringAsFixed(0)} JD',
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  String _durationLabel(double hrs) {
+    if (hrs <= 0) return '—';
+    if (hrs < 1) return 'أقل من ساعة';
+
+    final isInt = (hrs - hrs.floorToDouble()).abs() < 0.0001;
+    if (isInt) {
+      final h = hrs.toInt();
+      return h == 1 ? 'ساعة' : '$h ساعات';
+    }
+
+    final a = hrs.floor();
+    final b = hrs.ceil();
+    return '$a-$b ساعات';
   }
 
   double _calcDisplayedPrice(dynamic st) {
@@ -377,10 +277,10 @@ class _Content extends StatelessWidget {
 
     double price = s.basePrice;
     final String? selectedName = st.selectedPackageName;
+
     if (selectedName != null) {
-      final pkg = s.packages
-          .where((p) => p.name.trim() == selectedName.trim())
-          .toList();
+      final pkg =
+          s.packages.where((p) => p.name.trim() == selectedName.trim()).toList();
       if (pkg.isNotEmpty) price = pkg.first.price;
     }
 
@@ -391,11 +291,137 @@ class _Content extends StatelessWidget {
     }
     return price;
   }
+}
 
-  String _fmtDate(DateTime d) {
-    final mm = d.month.toString().padLeft(2, '0');
-    final dd = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$mm-$dd';
+class _ServiceSectionCard extends StatelessWidget {
+  const _ServiceSectionCard({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: SizeConfig.padding(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: AppColors.lightGreen,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              SizedBox(width: SizeConfig.w(10)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTextStyles.semiBold.copyWith(
+                    fontSize: SizeConfig.ts(14.5),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: SizeConfig.h(10)),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title});
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        title,
+        style: AppTextStyles.semiBold.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w900,
+          fontSize: SizeConfig.ts(15),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoTile extends StatelessWidget {
+  const _InfoTile({
+    required this.title,
+    required this.subtitle,
+    required this.trailing,
+  });
+
+  final String title;
+  final String subtitle;
+  final String trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTextStyles.semiBold.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: SizeConfig.ts(14),
+                  ),
+                ),
+                if (subtitle.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: SizeConfig.ts(13),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            trailing,
+            style: AppTextStyles.semiBold.copyWith(
+              color: AppColors.lightGreen,
+              fontWeight: FontWeight.w900,
+              fontSize: SizeConfig.ts(13.5),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -413,8 +439,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline,
-                size: 48, color: AppColors.textSecondary),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppColors.textSecondary,
+            ),
             const SizedBox(height: 10),
             Text(
               message,
@@ -431,15 +460,14 @@ class _ErrorState extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.lightGreen,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               ),
               child: Text(
                 'إعادة المحاولة',
-                style: AppTextStyles.semiBold.copyWith(
-                  color: Colors.white,
-                ),
+                style: AppTextStyles.semiBold.copyWith(color: Colors.white),
               ),
             ),
           ],

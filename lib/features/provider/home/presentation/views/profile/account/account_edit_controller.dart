@@ -6,8 +6,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import 'account_edit_state.dart';
 
-class AccountEditController
-    extends StateNotifier<AsyncValue<AccountEditState>> {
+class AccountEditController extends StateNotifier<AsyncValue<AccountEditState>> {
   AccountEditController() : super(const AsyncValue.loading()) {
     _loadAccount();
   }
@@ -16,19 +15,13 @@ class AccountEditController
 
   Future<void> _loadAccount() async {
     try {
-      final res = await ApiClient.dio.get(ApiConstants.userProfile);
+      final res = await ApiClient.dio.get(ApiConstants.authProfile);
       final nextState = _mapResponseToState(res.data);
       state = AsyncValue.data(nextState);
     } on DioException catch (e) {
-      state = AsyncValue.error(
-        _errorMessageFromDio(e),
-        StackTrace.current,
-      );
+      state = AsyncValue.error(_errorMessageFromDio(e), StackTrace.current);
     } catch (_) {
-      state = const AsyncValue.error(
-        'فشل تحميل بيانات الحساب',
-        StackTrace.empty,
-      );
+      state = const AsyncValue.error('فشل تحميل بيانات الحساب', StackTrace.empty);
     }
   }
 
@@ -57,10 +50,7 @@ class AccountEditController
 
     final fullName = fullNameField.isNotEmpty
         ? fullNameField
-        : [firstName, lastName]
-            .where((e) => e.isNotEmpty)
-            .join(' ')
-            .trim();
+        : [firstName, lastName].where((e) => e.isNotEmpty).join(' ').trim();
 
     final email = (user['email'] ?? '').toString().trim();
     final phone = (user['phone'] ?? '').toString().trim();
@@ -76,9 +66,7 @@ class AccountEditController
     final isEmailVerified =
         _b(user['is_email_verified'] ?? user['email_verified']);
     final isPhoneVerified = _b(
-      user['is_phone_verified'] ??
-          user['phone_verified'] ??
-          user['is_verified'],
+      user['is_phone_verified'] ?? user['phone_verified'] ?? user['is_verified'],
     );
 
     return AccountEditState(
@@ -92,105 +80,91 @@ class AccountEditController
     );
   }
 
-  // ================= تحديث الاسم / الإيميل / الهاتف =================
-
+  // ================= تحديث الاسم / الإيميل =================
+  // ملاحظة: السيرفر لا يسمح بإرسال phone على /auth/profile
   Future<String?> saveProfile({
     required String fullName,
     required String email,
-    required String phone,
+    required String phone, // موجود بالـ UI بس مش راح نرسله
   }) async {
-    final current =
-        state.value ?? AccountEditState.initial(); // AsyncValue.value في نسختك
+    final current = state.value ?? AccountEditState.initial();
 
-    // تقسيم الاسم لاسم أول وأخير
-    final parts = fullName.trim().split(RegExp(r'\s+'));
-    final firstName = parts.isNotEmpty ? parts.first : '';
+    final normalizedFullName = fullName.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final parts = normalizedFullName.split(' ');
+    final firstName = parts.isNotEmpty ? parts.first.trim() : '';
     final lastName =
-        parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        parts.length > 1 ? parts.sublist(1).join(' ').trim() : '';
 
-    state = AsyncValue.data(
-      current.copyWith(isSavingProfile: true),
-    );
+    final normalizedEmail = email.trim();
+
+    state = AsyncValue.data(current.copyWith(isSavingProfile: true));
 
     try {
       await ApiClient.dio.put(
-        ApiConstants.userProfile,
+        ApiConstants.authProfile,
         data: {
           'first_name': firstName,
           'last_name': lastName,
-          'email': email,
-          'phone': phone,
+          'email': normalizedEmail,
+          // ❌ لا phone
         },
       );
 
-      state = AsyncValue.data(
-        current.copyWith(
-          fullName: fullName,
-          email: email,
-          phone: phone,
-          isSavingProfile: false,
-        ),
-      );
-      return null; // success
+      // ✅ أفضل ممارسة: نعمل reload بعد الحفظ حتى نضمن state مطابق للسيرفر
+      await _loadAccount();
+      // وبعد _loadAccount بيصير isSavingProfile false داخل state الجديد؟
+      // لا، _loadAccount يرجع state جديد بدون saving flags، فتمام.
+
+      return null;
     } on DioException catch (e) {
-      state = AsyncValue.data(
-        current.copyWith(isSavingProfile: false),
-      );
+      state = AsyncValue.data(current.copyWith(isSavingProfile: false));
       return _errorMessageFromDio(e);
     } catch (_) {
-      state = AsyncValue.data(
-        current.copyWith(isSavingProfile: false),
-      );
+      state = AsyncValue.data(current.copyWith(isSavingProfile: false));
       return 'حدث خطأ غير متوقع أثناء حفظ البيانات';
     }
   }
 
   // ================= تغيير كلمة المرور =================
-
   Future<String?> changePassword({
     required String currentPassword,
     required String newPassword,
+    required String confirmPassword,
   }) async {
-    final current =
-        state.value ?? AccountEditState.initial();
+    final current = state.value ?? AccountEditState.initial();
 
-    state = AsyncValue.data(
-      current.copyWith(isChangingPassword: true),
-    );
+    state = AsyncValue.data(current.copyWith(isChangingPassword: true));
 
     try {
       await ApiClient.dio.post(
         ApiConstants.changePassword,
         data: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
+          'current_password': currentPassword.trim(),
+          'new_password': newPassword.trim(),
+          'confirm_password': confirmPassword.trim(),
         },
       );
 
-      state = AsyncValue.data(
-        current.copyWith(isChangingPassword: false),
-      );
+      state = AsyncValue.data(current.copyWith(isChangingPassword: false));
       return null;
     } on DioException catch (e) {
-      state = AsyncValue.data(
-        current.copyWith(isChangingPassword: false),
-      );
+      state = AsyncValue.data(current.copyWith(isChangingPassword: false));
       return _errorMessageFromDio(e);
     } catch (_) {
-      state = AsyncValue.data(
-        current.copyWith(isChangingPassword: false),
-      );
+      state = AsyncValue.data(current.copyWith(isChangingPassword: false));
       return 'حدث خطأ غير متوقع أثناء تغيير كلمة المرور';
     }
   }
-
-  // ================= helpers =================
 
   String _errorMessageFromDio(DioException e) {
     try {
       final data = e.response?.data;
       if (data is Map && data['message'] != null) {
         return data['message'].toString();
+      }
+      if (data is Map && data['errors'] is List && (data['errors'] as List).isNotEmpty) {
+        final first = (data['errors'] as List).first;
+        if (first is Map && first['message'] != null) return first['message'].toString();
       }
     } catch (_) {}
     return 'خطأ في الاتصال بالخادم (${e.response?.statusCode ?? ''})';

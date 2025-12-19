@@ -1,7 +1,9 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
+import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/my_service/models/provider_service_model.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/my_service/providers/provider_my_services_provider.dart';
 import 'package:dio/dio.dart';
@@ -29,15 +31,36 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
   late final TextEditingController _price;
   late final TextEditingController _desc;
 
+  // ✅ Dirty tracking
+  late final String _initialName;
+  late final String _initialPrice;
+  late final String _initialDesc;
+
   bool _saving = false;
+
+  static const int _nameMin = 2;
+  static const int _nameMax = 60;
+
+  static const double _minPrice = 0.01;
+  static const double _maxPrice = 10000;
+
+  static const int _descMin = 10;
+  static const int _descMax = 250;
 
   @override
   void initState() {
     super.initState();
     final pkg = widget.service.packages[widget.packageIndex];
-    _name = TextEditingController(text: pkg.name);
-    _price = TextEditingController(text: pkg.price.toStringAsFixed(0));
-    _desc = TextEditingController(text: pkg.description ?? '');
+
+    _initialName = pkg.name;
+    _initialPrice = pkg.price.toStringAsFixed(0);
+    _initialDesc = (pkg.description ?? '');
+
+    _name = TextEditingController(text: _initialName);
+    _price = TextEditingController(text: _initialPrice);
+    _desc = TextEditingController(text: _initialDesc);
+
+    Future.microtask(() => ref.read(categoriesIdMapProvider.future));
   }
 
   @override
@@ -48,15 +71,89 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     super.dispose();
   }
 
+  bool get _isDirty {
+    return _name.text.trim() != _initialName.trim() ||
+        _price.text.trim() != _initialPrice.trim() ||
+        _desc.text.trim() != _initialDesc.trim();
+  }
+
+  Future<bool> _confirmDiscardIfDirty() async {
+    if (!_isDirty) return true;
+
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تجاهل التغييرات؟'),
+          content: const Text('في تغييرات غير محفوظة، بدك تلغيها؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('متابعة التعديل'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.lightGreen),
+              child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return res == true;
+  }
+
+  String? _validateName(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'اسم الباقة مطلوب';
+    if (s.length < _nameMin) return 'اسم الباقة لازم يكون على الأقل $_nameMin أحرف';
+    if (s.length > _nameMax) return 'اسم الباقة لازم يكون أقل من $_nameMax حرف';
+    return null;
+  }
+
+  String? _validatePrice(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'السعر مطلوب';
+
+    final n = double.tryParse(s);
+    if (n == null) return 'السعر لازم يكون رقم';
+
+    if (n < _minPrice) return 'السعر لازم يكون أكبر من 0';
+    if (n > _maxPrice) return 'السعر كبير جدًا (أقصى حد $_maxPrice)';
+
+    return null;
+  }
+
+  String? _validateDesc(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'الوصف مطلوب';
+    if (s.length < _descMin) return 'الوصف لازم يكون على الأقل $_descMin أحرف';
+    if (s.length > _descMax) return 'الوصف لازم يكون أقل من $_descMax حرف';
+    return null;
+  }
+
+  String? _serviceKey() {
+    final k1 = FixedServiceCategories.keyFromAnyString(widget.service.name);
+    if (k1 != null) return k1;
+
+    final k2 = FixedServiceCategories.keyFromAnyString(widget.service.categoryOther ?? '');
+    if (k2 != null) return k2;
+
+    return null;
+  }
+
   Future<void> _save() async {
     if (_saving) return;
+
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
     setState(() => _saving = true);
 
     try {
-      final newPrice = double.parse(_price.text.trim());
+      final newPrice = double.tryParse(_price.text.trim()) ?? 0;
 
       // ✅ ننسخ كل الباقات ونعدل وحدة فقط، ونحافظ على features القديمة
       final updatedPackages = widget.service.packages.map((p) => p.toJson()).toList();
@@ -70,9 +167,25 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
       updatedPackages[widget.packageIndex] = updated.toJson();
 
+      final payload = <String, dynamic>{
+        'packages': updatedPackages,
+      };
+
+      // ✅ إصلاح CATEGORY_MISMATCH حتى لو المستخدم عدّل باقة فقط
+      final key = _serviceKey();
+      if (key != null) {
+        final idMap = await ref.read(categoriesIdMapProvider.future);
+        final categoryId = idMap[key];
+        if (categoryId != null) {
+          payload['category_id'] = categoryId;
+          payload['category_other'] = FixedServiceCategories.labelArFromKey(key);
+          payload['name'] = key;
+        }
+      }
+
       await ApiClient.dio.put(
         ApiConstants.serviceDetails(widget.service.id),
-        data: {'packages': updatedPackages},
+        data: payload,
         options: Options(contentType: Headers.jsonContentType),
       );
 
@@ -80,10 +193,13 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('فشل تعديل الباقة: $e'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('تعذر حفظ التعديل. حاول مرة أخرى.'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -94,71 +210,107 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
   Widget build(BuildContext context) {
     SizeConfig.init(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-          title: const Text('تعديل الباقة', style: TextStyle(fontWeight: FontWeight.bold)),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary),
-            onPressed: () => Navigator.of(context).pop(false),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final canLeave = await _confirmDiscardIfDirty();
+        if (!context.mounted) return;
+        if (canLeave) Navigator.of(context).pop(false);
+      },
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+            title: const Text('تعديل الباقة', style: TextStyle(fontWeight: FontWeight.bold)),
+            leading: IconButton(
+              icon: const BackButtonIcon(),
+              color: AppColors.textPrimary,
+              onPressed: () async {
+                final canLeave = await _confirmDiscardIfDirty();
+                if (!context.mounted) return;
+                if (canLeave) Navigator.of(context).pop(false);
+              },
+            ),
           ),
-        ),
-        body: Padding(
-          padding: SizeConfig.padding(all: 20),
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _label('اسم الباقة'),
-                  _input(_name, 'مثال: باقة بريميوم'),
+          body: Padding(
+            padding: SizeConfig.padding(all: 20),
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label('اسم الباقة'),
+                    _input(
+                      _name,
+                      'مثال: باقة بريميوم',
+                      validator: _validateName,
+                    ),
 
-                  SizeConfig.v(16),
-                  _label('السعر (د.أ)'),
-                  _input(_price, 'مثال: 120', keyboardType: TextInputType.number),
+                    SizeConfig.v(16),
+                    _label('السعر (د.أ)'),
+                    _input(
+                      _price,
+                      'مثال: 120',
+                      keyboardType: TextInputType.number,
+                      validator: _validatePrice,
+                    ),
 
-                  SizeConfig.v(16),
-                  _label('الوصف'),
-                  _input(_desc, 'عدّل وصف الباقة...', maxLines: 3),
+                    SizeConfig.v(16),
+                    _label('الوصف'),
+                    _input(
+                      _desc,
+                      'عدّل وصف الباقة...',
+                      maxLines: 3,
+                      validator: _validateDesc,
+                    ),
 
-                  SizeConfig.v(26),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.lightGreen,
-                            side: const BorderSide(color: AppColors.lightGreen),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            padding: SizeConfig.padding(vertical: 12),
+                    SizeConfig.v(26),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () async {
+                              final canLeave = await _confirmDiscardIfDirty();
+                              if (!context.mounted) return;
+                              if (canLeave) Navigator.of(context).pop(false);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.lightGreen,
+                              side: const BorderSide(color: AppColors.lightGreen),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: SizeConfig.padding(vertical: 12),
+                            ),
+                            child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.w700)),
                           ),
-                          child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.w700)),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _save,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.lightGreen,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                            padding: SizeConfig.padding(vertical: 12),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _save,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.lightGreen,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: SizeConfig.padding(vertical: 12),
+                            ),
+                            child: _saving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : const Text('حفظ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                           ),
-                          child: _saving
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text('حفظ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -169,7 +321,14 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
   Widget _label(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(t, style: TextStyle(fontWeight: FontWeight.bold, fontSize: SizeConfig.ts(14), color: AppColors.textPrimary)),
+        child: Text(
+          t,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: SizeConfig.ts(14),
+            color: AppColors.textPrimary,
+          ),
+        ),
       );
 
   Widget _input(
@@ -177,6 +336,7 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     String hint, {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: c,
@@ -189,7 +349,7 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-      validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+      validator: validator,
     );
   }
 }

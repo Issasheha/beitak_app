@@ -6,8 +6,8 @@ class UserProfileEntity {
   final String? profileImage;
   final int? cityId;
   final int? areaId;
-  final String? city; // الباك اند حالياً ممكن يرجع نص
-  final String? area; // الباك اند حالياً ممكن يرجع نص
+  final String? city;
+  final String? area;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 

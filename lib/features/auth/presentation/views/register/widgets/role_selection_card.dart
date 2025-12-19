@@ -22,7 +22,7 @@ class RoleSelectionCard extends StatelessWidget {
       return Column(
         children: [
           _RoleButton(
-            title: 'مواطن',
+            title: 'مستخدم',
             iconBuilder: PhosphorIcons.houseSimple,
             selected: !isProvider,
             onTap: () => onRoleChanged(false),

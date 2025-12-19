@@ -1,94 +1,170 @@
-import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
-
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
-class ProviderQuickActionsRow extends StatelessWidget {
+class ProviderQuickActionsRow extends ConsumerWidget {
   const ProviderQuickActionsRow({super.key});
 
+  static Future<void> show(BuildContext context) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const ProviderQuickActionsRow(),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius:
-          BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(16))),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+  Widget build(BuildContext context, WidgetRef ref) {
+    SizeConfig.init(context);
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        top: false,
         child: Container(
-          color: AppColors.white.withValues(alpha: 0.25),
-          padding: SizeConfig.padding(all: 16),
+          width: double.infinity,
+          padding: SizeConfig.padding(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(SizeConfig.radius(18)),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // drag handle
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.borderLight,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              SizeConfig.v(10),
+
               Text(
                 'إجراءات سريعة',
                 style: AppTextStyles.title18.copyWith(
-                  fontSize: SizeConfig.ts(18),
+                  fontSize: SizeConfig.ts(16.5),
                   fontWeight: FontWeight.w900,
                   color: AppColors.textPrimary,
                 ),
               ),
-              SizeConfig.v(16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _actionButton(
-                    context,
-                    'إنشاء خدمة جديدة',
-                    Icons.design_services_rounded,
-                    () {
-                      Navigator.pop(context);
-                      context.push(AppRoutes.providerAddService);
-                    },
-                  ),
-                  _actionButton(
-                    context,
-                    'إضافة باقة',
-                    Icons.view_module_rounded,
-                    () {
-                      Navigator.pop(context);
-                      context.push(AppRoutes.providerAddPackage);
-                    },
-                  ),
-                ],
+              SizeConfig.v(12),
+
+              _QuickActionTile(
+                icon: Icons.design_services_rounded,
+                title: 'أضف خدمة',
+                subtitle: 'أنشئ خدمة جديدة وابدأ بعرضها للعملاء.',
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push(AppRoutes.providerAddService);
+                },
               ),
-              SizeConfig.v(16),
+
+              Divider(height: SizeConfig.h(18), color: AppColors.borderLight),
+
+              _QuickActionTile(
+                icon: Icons.view_module_rounded,
+                title: 'أضف باقة',
+                subtitle: 'أنشئ باقة لخدماتك لتسهيل الحجز وزيادة المبيعات.',
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push(AppRoutes.providerAddPackage);
+                },
+              ),
+
+              SizeConfig.v(6),
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _actionButton(
-    BuildContext context,
-    String label,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
       onTap: onTap,
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: SizeConfig.w(30),
-            backgroundColor: AppColors.lightGreen,
-            child: Icon(icon, color: Colors.white, size: SizeConfig.ts(22)),
-          ),
-          SizeConfig.v(8),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.body16.copyWith(
-              fontSize: SizeConfig.ts(13.5),
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: SizeConfig.padding(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: SizeConfig.w(44),
+              height: SizeConfig.w(44),
+              decoration: BoxDecoration(
+                color: AppColors.lightGreen.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: AppColors.lightGreen,
+                size: SizeConfig.ts(22),
+              ),
             ),
-          ),
-        ],
+            SizedBox(width: SizeConfig.w(12)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.semiBold.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: SizeConfig.ts(14.3),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: SizeConfig.ts(12.3),
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_left_rounded,
+              color: AppColors.textSecondary.withValues(alpha: 0.7),
+              size: SizeConfig.ts(22),
+            ),
+          ],
+        ),
       ),
     );
   }

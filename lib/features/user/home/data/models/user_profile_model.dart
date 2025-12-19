@@ -41,15 +41,15 @@ class UserProfileModel extends UserProfileEntity {
   }
 
   /// ✅ يدعم إن city/area تجي String أو Object
-  static String? _extractName(dynamic v) {
+    static String? _extractName(dynamic v) {
     if (v == null) return null;
     if (v is String) return _tryParseString(v);
 
     if (v is Map) {
       final m = v.cast<String, dynamic>();
-      // جرّب أكثر مفاتيح شائعة
-      return _tryParseString(m['name']) ??
-          _tryParseString(m['name_ar']) ??
+      // ✅ خلي العربي أولاً
+      return _tryParseString(m['name_ar']) ??
+          _tryParseString(m['name']) ??
           _tryParseString(m['name_en']) ??
           _tryParseString(m['title']) ??
           _tryParseString(m['label']);
@@ -57,6 +57,7 @@ class UserProfileModel extends UserProfileEntity {
 
     return _tryParseString(v);
   }
+
 
   factory UserProfileModel.fromJson(Map<String, dynamic> json) {
     final first = _tryParseString(json['first_name']);

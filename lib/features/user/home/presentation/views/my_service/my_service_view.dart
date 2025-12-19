@@ -28,25 +28,39 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
 
     _tabController = TabController(length: 3, vsync: this);
 
-    // أول ما تفتح الشاشة: تبويب "طلباتي القادمة"
-    final controller = ref.read(myServicesControllerProvider.notifier);
-    controller.loadInitial(MyServicesTab.upcoming);
+    // ✅ مهم جداً: أول تحميل لازم يكون بعد أول frame (حتى ما يطلع Exception تبع Riverpod)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(myServicesControllerProvider.notifier).loadInitial(
+            MyServicesTab.upcoming,
+            limit: 20,
+          );
+    });
 
-    // لما يغيّر التاب، نحمّل بياناته لو فاضي
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) return;
+    _tabController.addListener(_onTabChanged);
+  }
 
-      final tab = _indexToTab(_tabController.index);
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) return;
+
+    setState(() {}); // للـ accent
+
+    final tab = _indexToTab(_tabController.index);
+
+    // ✅ كمان نأخر التحميل بعد الـ frame (خصوصاً TabBarView أثناء إعادة البناء)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
       final st = ref.read(myServicesControllerProvider).tab(tab);
-
       if (st.items.isEmpty && !st.isLoading) {
-        controller.loadInitial(tab);
+        ref.read(myServicesControllerProvider.notifier).loadInitial(tab, limit: 20);
       }
     });
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -64,9 +78,34 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
     }
   }
 
+  Color _tabAccent(int index) {
+    switch (index) {
+      case 0:
+        return AppColors.lightGreen; // القادمة
+      case 1:
+        return Colors.orange.shade700; // قيد الانتظار
+      case 2:
+      default:
+        return Colors.blue.shade700; // السجل
+    }
+  }
+
+  String _emptyMessage(MyServicesTab tab) {
+    switch (tab) {
+      case MyServicesTab.upcoming:
+        return 'لا توجد طلبات قادمة حالياً.';
+      case MyServicesTab.pending:
+        return 'لا توجد طلبات قيد الانتظار حالياً.';
+      case MyServicesTab.archive:
+        return 'لا يوجد سجل حتى الآن.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
+
+    final accent = _tabAccent(_tabController.index);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -80,10 +119,10 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
             onPressed: () => Navigator.of(context).maybePop(),
           ),
           title: Text(
-            'طلباتي',
+            'حجوزاتي و طلباتي',
             style: AppTextStyles.h1.copyWith(
-              fontSize: SizeConfig.ts(22),
-              fontWeight: FontWeight.bold,
+              fontSize: SizeConfig.ts(20),
+              fontWeight: FontWeight.w900,
               color: AppColors.textPrimary,
             ),
           ),
@@ -95,27 +134,27 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
               margin: SizeConfig.padding(horizontal: 16, top: 8),
               padding: SizeConfig.padding(all: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(
-                  SizeConfig.radius(18),
+                color: Colors.grey.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+                border: Border.all(
+                  color: Colors.grey.withValues(alpha: 0.16),
                 ),
               ),
               child: TabBar(
                 controller: _tabController,
                 indicator: BoxDecoration(
-                  borderRadius: BorderRadius.circular(
-                    SizeConfig.radius(16),
-                  ),
-                  color: AppColors.lightGreen.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+                  color: accent.withValues(alpha: 0.20),
                 ),
-                labelColor: AppColors.lightGreen,
+                labelColor: accent,
                 unselectedLabelColor: AppColors.textSecondary,
+                dividerColor: Colors.transparent,
                 labelStyle: AppTextStyles.semiBold.copyWith(
                   fontSize: SizeConfig.ts(13),
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                 ),
                 tabs: const [
-                  Tab(text: 'طلباتي القادمة'),
+                  Tab(text: 'القادمة'),
                   Tab(text: 'قيد الانتظار'),
                   Tab(text: 'السجل'),
                 ],
@@ -143,10 +182,12 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
     final st = state.tab(tab);
     final items = st.items;
 
-    if (st.isLoading && items.isEmpty) {
+    // ✅ تحميل أولي
+    if (st.isLoading && items.isEmpty && st.hasMore) {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // ✅ خطأ
     if (st.error != null && items.isEmpty) {
       return Center(
         child: Padding(
@@ -183,21 +224,42 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
       );
     }
 
+    // ✅ فاضي
     if (items.isEmpty) {
-      return const EmptyServicesState(
-        message: 'لا توجد طلبات حالياً.',
-      );
+      return EmptyServicesState(message: _emptyMessage(tab));
     }
 
     final controller = ref.read(myServicesControllerProvider.notifier);
 
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
-        if (n.metrics.pixels >= n.metrics.maxScrollExtent - 180) {
-          if (!st.isLoadingMore && st.hasMore) {
-            controller.loadMore(tab, limit: 20);
-          }
+        // ✅ تجاهل أي شيء غير تحديث سكرول فعلي
+        if (n is! ScrollUpdateNotification && n is! OverscrollNotification) {
+          return false;
         }
+
+        // ✅ إذا ما في سكرول أصلاً (القائمة أقصر من الشاشة) لا تعمل loadMore
+        if (n.metrics.maxScrollExtent <= 0) return false;
+
+        // ✅ لا تعمل loadMore أثناء loadInitial
+        if (st.isLoading) return false;
+
+        if (n.metrics.extentAfter < 250) {
+          // ✅ نفذ بعد الحدث (حتى ما يصير تعديل Provider أثناء build/paint)
+          Future.microtask(() {
+            if (!mounted) return;
+
+            final latest = ref.read(myServicesControllerProvider).tab(tab);
+            if (!latest.isLoading &&
+                !latest.isLoadingMore &&
+                latest.hasMore) {
+              ref
+                  .read(myServicesControllerProvider.notifier)
+                  .loadMore(tab, limit: 20);
+            }
+          });
+        }
+
         return false;
       },
       child: RefreshIndicator(
@@ -212,10 +274,8 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-
             return ServiceCard(
               item: items[i],
-              // ✅ لو رجعت التفاصيل بـ true (إلغاء مثلاً) نعيد تحميل التاب الحالي
               onChanged: () => controller.loadInitial(tab, limit: 20),
             );
           },

@@ -40,10 +40,7 @@ class ProviderPackageTile extends StatelessWidget {
                   color: AppColors.lightGreen.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.view_module_rounded,
-                  color: AppColors.lightGreen,
-                ),
+                child: const Icon(Icons.view_module_rounded, color: AppColors.lightGreen),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -73,9 +70,7 @@ class ProviderPackageTile extends StatelessWidget {
               (pkg.description ?? '').trim().isEmpty ? '—' : pkg.description!.trim(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body14.copyWith(
-                color: AppColors.textSecondary,
-              ),
+              style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
             ),
           ),
           children: [
@@ -119,7 +114,7 @@ class ProviderPackageTile extends StatelessWidget {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'تم حفظ تعديل الباقة (إن نجح الطلب على السيرفر)',
+                          'تم حفظ التعديل بنجاح',
                           style: AppTextStyles.body14.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
@@ -132,9 +127,7 @@ class ProviderPackageTile extends StatelessWidget {
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.lightGreen,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   padding: SizeConfig.padding(vertical: 12),
                 ),
                 child: Text(

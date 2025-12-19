@@ -89,9 +89,7 @@ class ProviderPackageDetailsSheet extends StatelessWidget {
               SizeConfig.v(6),
               Text(
                 (pkg.description ?? '').trim().isEmpty ? '—' : pkg.description!.trim(),
-                style: AppTextStyles.body14.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+                style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
               ),
 
               const Spacer(),
@@ -111,14 +109,23 @@ class ProviderPackageDetailsSheet extends StatelessWidget {
                         );
 
                         if (res == true && context.mounted) {
-                          Navigator.of(context).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'تم حفظ التعديل بنجاح',
+                                style: AppTextStyles.body14.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              backgroundColor: AppColors.lightGreen,
+                            ),
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.lightGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         padding: SizeConfig.padding(vertical: 12),
                       ),
                       child: Text(
@@ -137,16 +144,12 @@ class ProviderPackageDetailsSheet extends StatelessWidget {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.lightGreen,
                         side: const BorderSide(color: AppColors.lightGreen),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         padding: SizeConfig.padding(vertical: 12),
                       ),
                       child: Text(
                         'إغلاق',
-                        style: AppTextStyles.body14.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),

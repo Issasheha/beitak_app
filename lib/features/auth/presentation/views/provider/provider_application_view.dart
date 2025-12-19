@@ -22,7 +22,8 @@ class ProviderApplicationView extends ConsumerStatefulWidget {
       _ProviderApplicationViewState();
 }
 
-class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationView> {
+class _ProviderApplicationViewState
+    extends ConsumerState<ProviderApplicationView> {
   int _currentStep = 0;
 
   final _personalFormKey = GlobalKey<FormState>();
@@ -37,12 +38,21 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
   final TextEditingController _emailCtrl = TextEditingController();
   final TextEditingController _passwordCtrl = TextEditingController();
 
+  bool _termsAccepted = false;
+  String? _selectedCity;
+
   // === بيانات العمل ===
   final TextEditingController _businessNameCtrl = TextEditingController();
   final TextEditingController _experienceCtrl = TextEditingController();
+
+  // pricing
   final TextEditingController _hourlyRateCtrl = TextEditingController();
+  final TextEditingController _fixedPriceCtrl = TextEditingController();
+
+  // optional bio
   final TextEditingController _bioCtrl = TextEditingController();
 
+  String? _selectedCategory;
   Set<String> _languages = {'العربية'};
   Set<String> _serviceAreas = {};
 
@@ -56,6 +66,9 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
   };
   TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
+
+  // optional
+  String _cancellationPolicy = '';
 
   // === الملفات ===
   String? _idDocPath;
@@ -73,6 +86,7 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
     _businessNameCtrl.dispose();
     _experienceCtrl.dispose();
     _hourlyRateCtrl.dispose();
+    _fixedPriceCtrl.dispose();
     _bioCtrl.dispose();
 
     super.dispose();
@@ -112,7 +126,8 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
                 child: Container(
                   decoration: BoxDecoration(
                     color: AppColors.cardBackground,
-                    borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
+                    borderRadius:
+                        BorderRadius.circular(SizeConfig.radius(20)),
                     boxShadow: [AppColors.primaryShadow],
                   ),
                   child: Padding(
@@ -144,24 +159,33 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           phoneController: _phoneCtrl,
           emailController: _emailCtrl,
           passwordController: _passwordCtrl,
+          termsAccepted: _termsAccepted,
+          onTermsChanged: (v) => setState(() => _termsAccepted = v),
+          onCityChanged: (v) => _selectedCity = v,
         );
+
       case 1:
         return ProviderBusinessInfoStep(
           formKey: _businessFormKey,
           businessNameController: _businessNameCtrl,
           experienceYearsController: _experienceCtrl,
           hourlyRateController: _hourlyRateCtrl,
+          fixedPriceController: _fixedPriceCtrl,
           descriptionController: _bioCtrl,
           onLanguagesChanged: (langs) => _languages = langs,
           onServiceAreasChanged: (areas) => _serviceAreas = areas,
+          onCategoryChanged: (v) => _selectedCategory = v,
         );
+
       case 2:
         return ProviderAvailabilityStep(
           formKey: _availabilityFormKey,
           onDaysChanged: (days) => _availableDays = days,
           onStartChanged: (t) => _startTime = t,
           onEndChanged: (t) => _endTime = t,
+          onCancellationPolicyChanged: (txt) => _cancellationPolicy = txt,
         );
+
       case 3:
       default:
         return ProviderVerificationStep(
@@ -176,6 +200,8 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
   Widget _buildBottomButtons({required bool isSubmitting}) {
     final isLastStep = _currentStep == 3;
 
+    final disableNextBecauseTerms = _currentStep == 0 && !_termsAccepted;
+
     return Container(
       color: AppColors.background,
       padding: SizeConfig.padding(left: 16, right: 16, top: 8, bottom: 16),
@@ -184,9 +210,8 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           if (_currentStep > 0)
             Expanded(
               child: OutlinedButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () => setState(() => _currentStep--),
+                onPressed:
+                    isSubmitting ? null : () => setState(() => _currentStep--),
                 style: OutlinedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: SizeConfig.h(12)),
                   side: const BorderSide(color: AppColors.borderLight),
@@ -207,7 +232,9 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           if (_currentStep > 0) SizeConfig.hSpace(10),
           Expanded(
             child: ElevatedButton(
-              onPressed: isSubmitting ? null : _onNextPressed,
+              onPressed: (isSubmitting || disableNextBecauseTerms)
+                  ? null
+                  : _onNextPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.white,
                 padding: EdgeInsets.symmetric(vertical: SizeConfig.h(12)),
@@ -232,8 +259,10 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
                       isLastStep ? 'إرسال الطلب' : 'التالي',
                       style: AppTextStyles.body14.copyWith(
                         fontSize: SizeConfig.ts(14),
-                        color: AppColors.primaryGreen,
-                        fontWeight: FontWeight.w700, // كان bold
+                        color: (isSubmitting || disableNextBecauseTerms)
+                            ? AppColors.textSecondary
+                            : AppColors.primaryGreen,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
             ),
@@ -264,24 +293,14 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
-    if (phone.isEmpty && email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'يجب إدخال رقم الجوال أو البريد الإلكتروني على الأقل',
-            style: AppTextStyles.body14,
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     final businessName = _businessNameCtrl.text.trim();
     final bio = _bioCtrl.text.trim();
     final experienceYears = int.tryParse(_experienceCtrl.text.trim()) ?? 0;
+
     final hourlyRate =
         double.tryParse(_hourlyRateCtrl.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final fixedPrice =
+        double.tryParse(_fixedPriceCtrl.text.trim().replaceAll(',', '.')) ?? 0.0;
 
     String formatTime(TimeOfDay t) =>
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -297,10 +316,14 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           phone: phone.isNotEmpty ? phone : null,
           email: email.isNotEmpty ? email : null,
           password: password,
+
+          // ✅ مهم: نخليهم String (بدون null) عشان ما نكسر signature الحالي
           businessName: businessName,
           bio: bio,
+
           experienceYears: experienceYears,
           hourlyRate: hourlyRate,
+
           languages: _languages.toList(),
           serviceAreas: _serviceAreas.toList(),
           availableDaysAr: _availableDays.toList(),

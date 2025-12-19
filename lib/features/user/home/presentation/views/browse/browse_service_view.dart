@@ -65,6 +65,7 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
   }
 
   void _onScroll() {
+    if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 220) {
       ref.read(browseControllerProvider(_args).notifier).loadMore();
@@ -96,6 +97,30 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
           maxPrice: result.maxPrice,
           minRating: result.minRating,
         );
+  }
+
+  void _openDetails(int serviceId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ServiceDetailsView(
+          serviceId: serviceId,
+          lockedCityId: widget.initialCityId,
+          openBookingOnLoad: false, // ✅ تفاصيل فقط
+        ),
+      ),
+    );
+  }
+
+  void _openBooking(int serviceId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ServiceDetailsView(
+          serviceId: serviceId,
+          lockedCityId: widget.initialCityId,
+          openBookingOnLoad: true, // ✅ يفتح فورم الحجز مباشرة
+        ),
+      ),
+    );
   }
 
   @override
@@ -150,9 +175,7 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
                 },
                 onClear: () {
                   _searchController.clear();
-                  ref
-                      .read(browseControllerProvider(_args).notifier)
-                      .clearSearch();
+                  ref.read(browseControllerProvider(_args).notifier).clearSearch();
                 },
               ),
               SizedBox(height: SizeConfig.h(10)),
@@ -165,14 +188,13 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
   }
 
   Widget _buildBody(BrowseState state) {
-    if (state.isLoading) return const _GridSkeleton();
+    if (state.isLoading) return const _ListSkeleton();
 
     if (state.errorMessage != null) {
       return _ErrorState(
         message: state.errorMessage!,
-        onRetry: () => ref
-            .read(browseControllerProvider(_args).notifier)
-            .loadInitial(),
+        onRetry: () =>
+            ref.read(browseControllerProvider(_args).notifier).loadInitial(),
       );
     }
 
@@ -183,53 +205,42 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
     return RefreshIndicator(
       onRefresh: _onRefresh,
       color: AppColors.lightGreen,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return GridView.builder(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            padding: EdgeInsets.only(bottom: SizeConfig.h(16)),
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: SizeConfig.w(185),
-              mainAxisExtent: SizeConfig.h(168),
-              crossAxisSpacing: SizeConfig.w(14),
-              mainAxisSpacing: SizeConfig.h(14),
-            ),
-            itemCount: state.visible.length + (state.isLoadingMore ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index >= state.visible.length) {
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.lightGreen),
-                );
-              }
+      child: ListView.separated(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: EdgeInsets.only(bottom: SizeConfig.h(16)),
+        itemCount: state.visible.length + (state.isLoadingMore ? 1 : 0),
+        separatorBuilder: (_, __) => SizedBox(height: SizeConfig.h(12)),
+        itemBuilder: (context, index) {
+          if (index >= state.visible.length) {
+            return Padding(
+              padding: EdgeInsets.symmetric(vertical: SizeConfig.h(10)),
+              child: const Center(
+                child: CircularProgressIndicator(color: AppColors.lightGreen),
+              ),
+            );
+          }
 
-              final s = state.visible[index];
+          final s = state.visible[index];
 
-              final serviceMap = {
-                'id': s.id,
-                'title': s.title,
-                'provider':
-                    s.providerName.isNotEmpty ? s.providerName : 'مزود خدمة',
-                'rating': s.rating,
-                'price': s.price,
-              };
+          final serviceMap = {
+            'id': s.id,
+            'title': s.title,
+            'provider': s.providerName.isNotEmpty ? s.providerName : 'مزود خدمة',
+            'rating': s.rating,
+            'price': s.price,
+          };
 
-              return ServiceCard(
-                service: serviceMap,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ServiceDetailsView(
-                        serviceId: s.id,
-                        lockedCityId: widget.initialCityId,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+          return ServiceCard(
+            service: serviceMap,
+
+            /// ✅ تفاصيل
+            onTap: () => _openDetails(s.id),
+
+            /// ✅ حجز (لازم ServiceCard يدعم onBookNow)
+            onBookNow: () => _openBooking(s.id),
           );
         },
       ),
@@ -257,28 +268,25 @@ class _SearchBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.cardBackground,
             borderRadius: BorderRadius.circular(18),
-            border:
-                Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+            border: Border.all(
+              color: AppColors.borderLight.withValues(alpha: 0.7),
+            ),
           ),
           child: TextField(
             controller: controller,
             textInputAction: TextInputAction.search,
             onSubmitted: onSubmitted,
-            style: AppTextStyles.body.copyWith(
-              color: AppColors.textPrimary,
-            ),
+            style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             decoration: InputDecoration(
               hintText: 'ابحث عن خدمة…',
               hintStyle: AppTextStyles.body.copyWith(
                 color: AppColors.textSecondary,
               ),
-              prefixIcon:
-                  const Icon(Icons.search, color: AppColors.textSecondary),
+              prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
               suffixIcon: controller.text.isEmpty
                   ? null
                   : IconButton(
-                      icon: const Icon(Icons.close,
-                          color: AppColors.textSecondary),
+                      icon: const Icon(Icons.close, color: AppColors.textSecondary),
                       onPressed: onClear,
                     ),
               filled: true,
@@ -294,28 +302,25 @@ class _SearchBar extends StatelessWidget {
   }
 }
 
-class _GridSkeleton extends StatelessWidget {
-  const _GridSkeleton();
+class _ListSkeleton extends StatelessWidget {
+  const _ListSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
+    return ListView.separated(
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.only(bottom: SizeConfig.h(16)),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: SizeConfig.w(185),
-        mainAxisExtent: SizeConfig.h(168),
-        crossAxisSpacing: SizeConfig.w(14),
-        mainAxisSpacing: SizeConfig.h(14),
-      ),
       itemCount: 8,
+      separatorBuilder: (_, __) => SizedBox(height: SizeConfig.h(12)),
       itemBuilder: (_, __) {
         return Container(
+          height: SizeConfig.h(150),
           decoration: BoxDecoration(
             color: AppColors.cardBackground,
             borderRadius: BorderRadius.circular(18),
-            border:
-                Border.all(color: AppColors.borderLight.withValues(alpha: 0.7)),
+            border: Border.all(
+              color: AppColors.borderLight.withValues(alpha: 0.7),
+            ),
           ),
         );
       },
@@ -373,14 +378,13 @@ class _ErrorState extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.lightGreen,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               ),
               child: Text(
                 'إعادة المحاولة',
-                style: AppTextStyles.semiBold.copyWith(
-                  color: Colors.white,
-                ),
+                style: AppTextStyles.semiBold.copyWith(color: Colors.white),
               ),
             ),
           ],
@@ -389,3 +393,4 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
+

@@ -1,4 +1,11 @@
+// lib/features/provider/home/presentation/views/bookings/viewmodels/provider_availability_viewmodel.dart
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
+
+import 'package:beitak_app/core/network/api_client.dart';
+import 'package:beitak_app/core/network/api_constants.dart';
 
 @immutable
 class TimeRange {
@@ -7,7 +14,8 @@ class TimeRange {
 
   const TimeRange({required this.start, required this.end});
 
-  String format(BuildContext context) => '${start.format(context)} - ${end.format(context)}';
+  String format(BuildContext context) =>
+      '${start.format(context)} - ${end.format(context)}';
 
   int get startMinutes => start.hour * 60 + start.minute;
   int get endMinutes => end.hour * 60 + end.minute;
@@ -55,17 +63,18 @@ class AvailabilityException {
     required this.range,
   });
 
-  // ✅ FIX: helper داخل نفس الـ class
   static DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  factory AvailabilityException.closedDay(DateTime date) => AvailabilityException._(
+  factory AvailabilityException.closedDay(DateTime date) =>
+      AvailabilityException._(
         date: dateOnly(date),
         type: AvailabilityExceptionType.closedDay,
         available: false,
         range: null,
       );
 
-  factory AvailabilityException.customHours(DateTime date, TimeRange range) => AvailabilityException._(
+  factory AvailabilityException.customHours(DateTime date, TimeRange range) =>
+      AvailabilityException._(
         date: dateOnly(date),
         type: AvailabilityExceptionType.customHours,
         available: true,
@@ -78,13 +87,200 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
     _weekly = _buildDefaultWeekly();
   }
 
+  final Dio _dio = ApiClient.dio;
+
+  bool isLoading = false;
+  bool isSaving = false;
+
   late Map<int, WeeklyDayAvailability> _weekly; // key weekday (1..7)
   final Map<DateTime, AvailabilityException> _exceptions = {}; // key dateOnly
 
   Map<int, WeeklyDayAvailability> get weekly => _weekly;
   Map<DateTime, AvailabilityException> get exceptions => _exceptions;
 
-  // ---------------- Weekly ----------------
+  // ---------------- mapping بين أسماء الأيام و int ----------------
+
+  // نستخدم lower-case للقراءة من الـ GET (Sunday → sunday → 7)
+  static const Map<String, int> _weekdayNameToInt = {
+    'monday': 1,
+    'tuesday': 2,
+    'wednesday': 3,
+    'thursday': 4,
+    'friday': 5,
+    'saturday': 6,
+    'sunday': 7,
+  };
+
+  // نستخدم PascalCase للإرسال (نطابق الويب)
+  static const Map<int, String> _weekdayIntToApiName = {
+    1: 'Monday',
+    2: 'Tuesday',
+    3: 'Wednesday',
+    4: 'Thursday',
+    5: 'Friday',
+    6: 'Saturday',
+    7: 'Sunday',
+  };
+
+  TimeOfDay _parseTime(String value) {
+    final parts = value.split(':');
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts.length > 1 ? parts[1] : '0') ?? 0;
+    return TimeOfDay(hour: h, minute: m);
+  }
+
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  String _formatDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  DateTime _dateOnly(DateTime d) => AvailabilityException.dateOnly(d);
+
+  // ---------------- API: LOAD ----------------
+
+  Future<void> loadFromApi() async {
+    isLoading = true;
+    notifyListeners();
+
+    try {
+      final res = await _dio.get(ApiConstants.providerAvailability);
+      final data = (res.data ?? {})['data'] as Map<String, dynamic>? ?? {};
+
+      // working_hours
+      final wh = data['working_hours'] as Map<String, dynamic>? ?? {};
+
+      final Map<int, WeeklyDayAvailability> weekly = {};
+
+      wh.forEach((key, value) {
+        final v = value as Map<String, dynamic>? ?? {};
+        final dayKey = key.toString().toLowerCase(); // Sunday / sunday
+        final weekday = _weekdayNameToInt[dayKey];
+        if (weekday == null) return;
+
+        // السيرفر أحيانًا يرجّع enabled، وأحيانًا active
+        final enabled =
+            (v['enabled'] as bool?) ?? (v['active'] as bool?) ?? false;
+
+        final startStr = v['start'] as String?;
+        final endStr = v['end'] as String?;
+
+        TimeRange? range;
+        if (startStr != null && endStr != null) {
+          final start = _parseTime(startStr);
+          final end = _parseTime(endStr);
+          range = TimeRange(start: start, end: end);
+        }
+
+        weekly[weekday] = WeeklyDayAvailability(
+          weekday: weekday,
+          available: enabled,
+          range: range ?? _defaultRange(),
+        );
+      });
+
+      // نتأكد إنه كل الأيام موجودة
+      for (final entry in _weekdayIntToApiName.entries) {
+        final w = entry.key;
+        weekly[w] = weekly[w] ??
+            WeeklyDayAvailability(
+              weekday: w,
+              available: false,
+              range: _defaultRange(),
+            );
+      }
+
+      _weekly = weekly;
+
+      // unavailable_dates → exceptions closedDay
+      _exceptions.clear();
+      final rawDates = data['unavailable_dates'] as List<dynamic>? ?? [];
+      for (final raw in rawDates) {
+        final s = raw.toString();
+        try {
+          final dt = DateTime.parse(s);
+          final dOnly = _dateOnly(dt);
+          _exceptions[dOnly] = AvailabilityException.closedDay(dOnly);
+        } catch (_) {
+          if (kDebugMode) {
+            debugPrint('Failed to parse unavailable date: $s');
+          }
+        }
+      }
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('loadFromApi error: $e\n$st');
+      }
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------- API: SAVE (PUT) ----------------
+
+  Future<bool> saveToApi() async {
+    isSaving = true;
+    notifyListeners();
+
+    try {
+      // نجهّز working_hours بنفس شكل الويب:
+      // {
+      //   "Sunday": { "enabled": true, "start": "...", "end": "..." },
+      //   ...
+      // }
+      final Map<String, dynamic> workingHoursJson = {};
+
+      for (final entry in _weekdayIntToApiName.entries) {
+        final weekday = entry.key;
+        final apiName = entry.value; // Sunday, Monday, ...
+
+        final day = _weekly[weekday] ??
+            WeeklyDayAvailability(
+              weekday: weekday,
+              available: false,
+              range: _defaultRange(),
+            );
+
+        final range = day.range ?? _defaultRange();
+
+        workingHoursJson[apiName] = {
+          'start': _formatTime(range.start),
+          'end': _formatTime(range.end),
+          'enabled': day.available, // 👈 زي الويب بالضبط
+        };
+      }
+
+      // unavailable_dates من الـ exceptions (closedDay فقط)
+      final closedDates = _exceptions.values
+          .where((ex) => ex.type == AvailabilityExceptionType.closedDay)
+          .map((ex) => _formatDate(ex.date))
+          .toSet()
+          .toList();
+
+      final body = {
+        'working_hours': workingHoursJson,
+        'unavailable_dates': closedDates,
+      };
+
+      await _dio.put(
+        ApiConstants.providerAvailability,
+        data: body,
+      );
+
+      return true;
+    } catch (e, st) {
+      if (kDebugMode) {
+        debugPrint('saveToApi error: $e\n$st');
+      }
+      return false;
+    } finally {
+      isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------- Weekly (local) ----------------
 
   void toggleWeeklyDay(int weekday, bool available) {
     final current = _weekly[weekday];
@@ -92,7 +288,7 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
 
     final next = current.copyWith(
       available: available,
-      range: available ? (current.range ?? _defaultRange()) : null,
+      range: available ? (current.range ?? _defaultRange()) : current.range,
     );
 
     _weekly = {..._weekly, weekday: next};
@@ -110,7 +306,7 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------- Exceptions ----------------
+  // ---------------- Exceptions (closed days) ----------------
 
   AvailabilityException? exceptionOf(DateTime date) {
     return _exceptions[_dateOnly(date)];
@@ -119,12 +315,6 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
   void setExceptionClosed(DateTime date) {
     final key = _dateOnly(date);
     _exceptions[key] = AvailabilityException.closedDay(key);
-    notifyListeners();
-  }
-
-  void setExceptionCustomHours(DateTime date, TimeRange range) {
-    final key = _dateOnly(date);
-    _exceptions[key] = AvailabilityException.customHours(key, range);
     notifyListeners();
   }
 
@@ -139,7 +329,12 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
 
   WeeklyDayAvailability weeklyForDate(DateTime date) {
     final weekday = date.weekday; // 1..7
-    return _weekly[weekday] ?? WeeklyDayAvailability(weekday: weekday, available: false, range: null);
+    return _weekly[weekday] ??
+        WeeklyDayAvailability(
+          weekday: weekday,
+          available: false,
+          range: _defaultRange(),
+        );
   }
 
   bool isDateAvailable(DateTime date) {
@@ -150,7 +345,9 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
 
   TimeRange? effectiveRange(DateTime date) {
     final ex = exceptionOf(date);
-    if (ex != null && ex.type == AvailabilityExceptionType.customHours) return ex.range;
+    if (ex != null && ex.type == AvailabilityExceptionType.customHours) {
+      return ex.range;
+    }
     final w = weeklyForDate(date);
     return w.available ? w.range : null;
   }
@@ -160,13 +357,13 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
   static Map<int, WeeklyDayAvailability> _buildDefaultWeekly() {
     final r = _defaultRange();
     return {
-      1: WeeklyDayAvailability(weekday: 1, available: true, range: r),
-      2: WeeklyDayAvailability(weekday: 2, available: true, range: r),
-      3: WeeklyDayAvailability(weekday: 3, available: true, range: r),
-      4: WeeklyDayAvailability(weekday: 4, available: true, range: r),
-      5: WeeklyDayAvailability(weekday: 5, available: true, range: r),
-      6: WeeklyDayAvailability(weekday: 6, available: true, range: r),
-      7: WeeklyDayAvailability(weekday: 7, available: true, range: r),
+      1: WeeklyDayAvailability(weekday: 1, available: false, range: r),
+      2: WeeklyDayAvailability(weekday: 2, available: false, range: r),
+      3: WeeklyDayAvailability(weekday: 3, available: false, range: r),
+      4: WeeklyDayAvailability(weekday: 4, available: false, range: r),
+      5: WeeklyDayAvailability(weekday: 5, available: false, range: r),
+      6: WeeklyDayAvailability(weekday: 6, available: false, range: r),
+      7: WeeklyDayAvailability(weekday: 7, available: false, range: r),
     };
   }
 
@@ -174,6 +371,4 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
         start: TimeOfDay(hour: 9, minute: 0),
         end: TimeOfDay(hour: 17, minute: 0),
       );
-
-  static DateTime _dateOnly(DateTime d) => AvailabilityException.dateOnly(d);
 }

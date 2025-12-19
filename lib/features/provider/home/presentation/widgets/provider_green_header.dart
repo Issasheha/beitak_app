@@ -10,14 +10,18 @@ class ProviderHeaderStat {
   final String value;
   final String emoji;
 
-  /// ✅ إذا موجود => البطاقة تصير كليكابل وتعمل فتح/تنقل
+  /// إذا موجود => البطاقة تصير كليكابل
   final VoidCallback? onTap;
+
+  /// ✅ NEW: لو true نرسم Skeleton بدل النصوص
+  final bool skeleton;
 
   const ProviderHeaderStat({
     required this.title,
     required this.value,
     required this.emoji,
     this.onTap,
+    this.skeleton = false,
   });
 }
 
@@ -45,7 +49,6 @@ class ProviderGreenHeader extends StatelessWidget {
       height: height,
       child: Stack(
         children: [
-          // الخلفية الخضراء
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -60,18 +63,13 @@ class ProviderGreenHeader extends StatelessWidget {
               ),
             ),
           ),
-
-          // زخرفة بسيطة
           Positioned(right: -120, top: -140, child: _blob(260, Colors.white.o(0.10))),
           Positioned(left: -140, top: -120, child: _blob(220, Colors.white.o(0.08))),
           Positioned(right: -90, bottom: -110, child: _blob(220, Colors.white.o(0.07))),
 
-          // المحتوى
           LayoutBuilder(
             builder: (context, c) {
               final available = c.maxHeight;
-
-              // compact للهواتف/الشاشات القصيرة (يمنع overflow)
               final compact = available < SizeConfig.h(260);
 
               final gap1 = (available * 0.04).clamp(6.0, 14.0);
@@ -93,7 +91,6 @@ class ProviderGreenHeader extends StatelessWidget {
                     ),
                     SizedBox(height: gap1),
 
-                    // الترحيب
                     Expanded(
                       child: Align(
                         alignment: Alignment.centerRight,
@@ -173,7 +170,8 @@ class _TopBar extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white.o(0.25)),
             ),
-            child: const Icon(Icons.notifications_none_rounded, color: Colors.white),
+            child:
+                const Icon(Icons.notifications_none_rounded, color: Colors.white),
           ),
         ),
       ],

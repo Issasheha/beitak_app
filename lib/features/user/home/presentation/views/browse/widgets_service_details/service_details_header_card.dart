@@ -1,33 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 
 class ServiceDetailsHeaderCard extends StatelessWidget {
   const ServiceDetailsHeaderCard({
     super.key,
     required this.serviceName,
-    required this.description,
-    required this.providerName,
+    required this.categoryLabel,
+    required this.durationLabel,
     required this.rating,
-    required this.locationLabelAr,
-    required this.priceLabel,
+    required this.priceValueLabel,
+    required this.priceHintLabel,
+    required this.bookingLoading,
+    required this.onBookNow,
   });
 
   final String serviceName;
-  final String description;
-  final String providerName;
+  final String categoryLabel;
+  final String durationLabel;
   final double rating;
-  final String locationLabelAr;
-  final String priceLabel;
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
-    if (parts.isEmpty) return '??';
-    final a = parts.first.isNotEmpty ? parts.first[0] : '?';
-    final b = parts.length > 1 && parts[1].isNotEmpty
-        ? parts[1][0]
-        : (parts.first.length > 1 ? parts.first[1] : '?');
-    return (a + b).toUpperCase();
+  final String priceValueLabel; // مثال: 30 JD
+  final String priceHintLabel; // مثال: حسب حجم المنزل
+
+  final bool bookingLoading;
+  final VoidCallback onBookNow;
+
+  bool get _showDuration {
+    final d = durationLabel.trim();
+    return d.isNotEmpty && d != '—';
   }
 
   @override
@@ -36,112 +38,132 @@ class ServiceDetailsHeaderCard extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.borderLight),
-        boxShadow: const [BoxShadow(blurRadius: 14, color: Color(0x0F000000), offset: Offset(0, 6))],
+        boxShadow: const [
+          BoxShadow(
+            blurRadius: 16,
+            color: Color(0x1A000000),
+            offset: Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Provider row
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.lightGreen.withValues(alpha: 0.18),
-                  border: Border.all(color: AppColors.lightGreen.withValues(alpha: 0.25),),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _initials(providerName),
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      providerName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w900,
-                        fontSize: SizeConfig.ts(14),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, size: 16, color: AppColors.lightGreen),
-                        const SizedBox(width: 4),
-                        Text(
-                          rating.toStringAsFixed(1),
-                          style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(width: 10),
-                        const Icon(Icons.location_on, size: 16, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            locationLabelAr,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: Text(
+                  serviceName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.semiBold.copyWith(
+                    fontSize: SizeConfig.ts(20),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                    height: 1.2,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.lightGreen.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.lightGreen.withValues(alpha: 0.20),),
-                ),
-                child: Text(
-                  priceLabel,
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w900),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.star_rounded, color: Colors.amber, size: 22),
+                  const SizedBox(width: 4),
+                  Text(
+                    rating <= 0 ? '—' : rating.toStringAsFixed(1),
+                    style: AppTextStyles.semiBold.copyWith(
+                      fontSize: SizeConfig.ts(16),
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
 
-          const SizedBox(height: 12),
-
-          Text(
-            serviceName,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: SizeConfig.ts(16),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
           const SizedBox(height: 6),
 
           Text(
-            description,
-            maxLines: 3,
+            categoryLabel,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: AppTextStyles.body.copyWith(
+              fontSize: SizeConfig.ts(14),
               color: AppColors.textSecondary,
-              fontSize: SizeConfig.ts(13),
               fontWeight: FontWeight.w700,
-              height: 1.4,
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // ✅ Price box (مثل الصورة)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6FBF6),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFE0F0E2)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'نطاق السعر',
+                    style: AppTextStyles.body.copyWith(
+                      fontSize: SizeConfig.ts(14),
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  priceValueLabel,
+                  style: AppTextStyles.semiBold.copyWith(
+                    fontSize: SizeConfig.ts(26),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.lightGreen,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // ✅ Center button (مثل الصورة)
+          Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: SizeConfig.w(190),
+              height: SizeConfig.h(44),
+              child: ElevatedButton(
+                onPressed: bookingLoading ? null : onBookNow,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen,
+                  disabledBackgroundColor:
+                      AppColors.lightGreen.withValues(alpha: 0.55),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
+                ),
+                child: Text(
+                  bookingLoading ? 'جارٍ الحجز...' : 'احجز الآن',
+                  style: AppTextStyles.semiBold.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: SizeConfig.ts(14),
+                  ),
+                ),
+              ),
             ),
           ),
         ],

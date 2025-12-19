@@ -53,40 +53,10 @@ class _PasswordFieldsState extends State<PasswordFields> {
               color: AppColors.textPrimary.withValues(alpha: 0.7),
               size: 22,
             ),
-            onPressed: () {
-              setState(() => _obscurePass = !_obscurePass);
-            },
+            onPressed: () => setState(() => _obscurePass = !_obscurePass),
           ),
-          // رسالة خطأ مختصرة + شروط ثابتة تحت الحقل
-          validator: (value) {
-            final text = value ?? '';
-            if (text.isEmpty) {
-              return 'كلمة المرور مطلوبة.';
-            }
-
-            if (!_isValidPassword(text)) {
-              return 'كلمة المرور غير صالحة، يرجى مراجعة الشروط أسفل الحقل.';
-            }
-            return null;
-          },
-        ),
-
-        // شروط ثابتة صغيرة تحت حقل كلمة السر
-        SizeConfig.v(6),
-        Padding(
-          padding: EdgeInsets.only(right: SizeConfig.w(4)),
-          child: Text(
-            '• 6 أحرف على الأقل\n'
-            '• حرف كبير واحد على الأقل (A-Z)\n'
-            '• رقم واحد على الأقل\n'
-            '• رمز خاص واحد على الأقل (مثل @ أو # أو \$)\n'
-            '• بدون مسافات',
-            style: TextStyle(
-              fontSize: SizeConfig.ts(11),
-              color: AppColors.textSecondary,
-              height: 1.4,
-            ),
-          ),
+          // ✅ رسالة خطأ واحدة حسب الشرط الناقص
+          validator: (value) => _passwordError(value),
         ),
 
         SizeConfig.v(16),
@@ -103,15 +73,11 @@ class _PasswordFieldsState extends State<PasswordFields> {
               color: AppColors.textPrimary.withValues(alpha: 0.7),
               size: 22,
             ),
-            onPressed: () {
-              setState(() => _obscureConfirm = !_obscureConfirm);
-            },
+            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
           ),
           validator: (value) {
-            final text = value ?? '';
-            if (text.isEmpty) {
-              return 'تأكيد كلمة المرور مطلوب.';
-            }
+            final text = (value ?? '').trim();
+            if (text.isEmpty) return 'تأكيد كلمة المرور مطلوب.';
             if (text != widget.passwordController.text) {
               return 'كلمتا المرور غير متطابقتين.';
             }
@@ -122,14 +88,42 @@ class _PasswordFieldsState extends State<PasswordFields> {
     );
   }
 
-  bool _isValidPassword(String value) {
-    if (value.length < 6) return false;
-    if (value.contains(' ')) return false;
+  String? _passwordError(String? value) {
+    final text = (value ?? '');
 
-    final hasUpper = RegExp(r'[A-Z]').hasMatch(value);
-    final hasDigit = RegExp(r'\d').hasMatch(value);
-    final hasSpecial = RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?]').hasMatch(value);
+    if (text.trim().isEmpty) {
+      return 'كلمة المرور مطلوبة.';
+    }
 
-    return hasUpper && hasDigit && hasSpecial;
+    // ممنوع مسافات
+    if (text.contains(' ')) {
+      return 'كلمة المرور يجب ألا تحتوي على مسافات.';
+    }
+
+    // طول أدنى
+    if (text.length < 6) {
+      return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.';
+    }
+
+    // حرف كبير
+    final hasUpper = RegExp(r'[A-Z]').hasMatch(text);
+    if (!hasUpper) {
+      return 'أضف حرفًا كبيرًا واحدًا على الأقل (A-Z).';
+    }
+
+    // رقم
+    final hasDigit = RegExp(r'\d').hasMatch(text);
+    if (!hasDigit) {
+      return 'أضف رقمًا واحدًا على الأقل.';
+    }
+
+    // رمز خاص
+    final hasSpecial = RegExp(r'[!@#$%^&*()_+\-=\[\]{};:"\\|,.<>/?]')
+        .hasMatch(text);
+    if (!hasSpecial) {
+      return 'أضف رمزًا خاصًا واحدًا على الأقل مثل @ أو # أو \$';
+    }
+
+    return null;
   }
 }

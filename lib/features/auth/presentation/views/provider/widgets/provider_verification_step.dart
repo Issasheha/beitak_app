@@ -25,11 +25,13 @@ class ProviderVerificationStep extends StatefulWidget {
   });
 
   @override
-  State<ProviderVerificationStep> createState() =>
-      _ProviderVerificationStepState();
+  State<ProviderVerificationStep> createState() => _ProviderVerificationStepState();
 }
 
 class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
+  static const int _maxBytes = 5 * 1024 * 1024; // 5MB
+  static const _allowedExt = ['pdf', 'jpg', 'jpeg', 'png'];
+
   bool _idUploaded = false;
   bool _licenseUploaded = false;
   bool _certificateUploaded = false;
@@ -37,6 +39,10 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
   String? _idFileName;
   String? _licenseFileName;
   String? _certificateFileName;
+
+  String? _idPath;
+  String? _licensePath;
+  String? _certificatePath;
 
   final ImagePicker _imagePicker = ImagePicker();
 
@@ -51,7 +57,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
             'وثائق التحقق',
             style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.w700, // كان bold
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
@@ -65,30 +71,34 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
             ),
           ),
           SizeConfig.v(16),
+
           _buildUploadTile(
-            title: 'صورة الهوية الشخصية *',
-            subtitle: 'أرفق صورة أو ملف PDF / Word للهوية الوطنية.',
+            title: 'صورة الهوية الشخصية او الاقامه *',
+            subtitle: 'PNG / JPG / PDF (حد أقصى 5MB).',
             uploaded: _idUploaded,
             fileName: _idFileName,
-            onTap: () => _showPickerSheet(type: _DocType.id),
+            onTap: () => _onTileTap(_DocType.id),
           ),
           SizeConfig.v(12),
+
           _buildUploadTile(
             title: 'صورة الترخيص المهني *',
-            subtitle: 'رخصة مزاولة المهنة أو السجل التجاري.',
+            subtitle: 'PNG / JPG / PDF (حد أقصى 5MB).',
             uploaded: _licenseUploaded,
             fileName: _licenseFileName,
-            onTap: () => _showPickerSheet(type: _DocType.license),
+            onTap: () => _onTileTap(_DocType.license),
           ),
           SizeConfig.v(12),
+
           _buildUploadTile(
             title: 'صورة شهادة عدم المحكومية *',
-            subtitle: 'شهادة جنائية حديثة (صورة أو ملف).',
+            subtitle: 'PNG / JPG / PDF (حد أقصى 5MB).',
             uploaded: _certificateUploaded,
             fileName: _certificateFileName,
-            onTap: () => _showPickerSheet(type: _DocType.certificate),
+            onTap: () => _onTileTap(_DocType.certificate),
           ),
           SizeConfig.v(12),
+
           TextFormField(
             validator: (_) {
               if (!_idUploaded || !_licenseUploaded || !_certificateUploaded) {
@@ -105,6 +115,102 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
         ],
       ),
     );
+  }
+
+  Future<void> _onTileTap(_DocType type) async {
+    final uploaded = _isUploaded(type);
+
+    if (!uploaded) {
+      await _showPickerSheet(type: type);
+      return;
+    }
+
+    // لو مرفوع -> خيارات (استبدال / إزالة)
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.cardBackground,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(20)),
+        ),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: SizeConfig.padding(all: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.swap_horiz),
+                  title: Text(
+                    'استبدال الملف',
+                    style: AppTextStyles.body14.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _showPickerSheet(type: type);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: Text(
+                    'إزالة الملف',
+                    style: AppTextStyles.body14.copyWith(
+                      color: Colors.red,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _removeFile(type);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  bool _isUploaded(_DocType type) {
+    switch (type) {
+      case _DocType.id:
+        return _idUploaded;
+      case _DocType.license:
+        return _licenseUploaded;
+      case _DocType.certificate:
+        return _certificateUploaded;
+    }
+  }
+
+  void _removeFile(_DocType type) {
+    setState(() {
+      switch (type) {
+        case _DocType.id:
+          _idUploaded = false;
+          _idFileName = null;
+          _idPath = null;
+          widget.onIdSelected(null);
+          break;
+        case _DocType.license:
+          _licenseUploaded = false;
+          _licenseFileName = null;
+          _licensePath = null;
+          widget.onLicenseSelected(null);
+          break;
+        case _DocType.certificate:
+          _certificateUploaded = false;
+          _certificateFileName = null;
+          _certificatePath = null;
+          widget.onCertificateSelected(null);
+          break;
+      }
+    });
   }
 
   Widget _buildUploadTile({
@@ -142,7 +248,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
                     title,
                     style: AppTextStyles.body14.copyWith(
                       fontSize: SizeConfig.ts(14),
-                      fontWeight: FontWeight.w600, // كان w600
+                      fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -165,8 +271,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
               uploaded ? 'تم الإرفاق' : 'إرفاق',
               style: AppTextStyles.label12.copyWith(
                 fontSize: SizeConfig.ts(12),
-                color:
-                    uploaded ? AppColors.primaryGreen : AppColors.textSecondary,
+                color: uploaded ? AppColors.primaryGreen : AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -232,7 +337,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
                 ListTile(
                   leading: const Icon(Icons.description_outlined),
                   title: Text(
-                    'رفع ملف PDF / Word',
+                    'رفع ملف PDF',
                     style: AppTextStyles.body14.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w500,
@@ -255,12 +360,17 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
     required _DocType type,
     required ImageSource source,
   }) async {
-    final XFile? picked =
-        await _imagePicker.pickImage(source: source, imageQuality: 80);
+    final XFile? picked = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 80,
+    );
     if (picked == null) return;
 
     final file = File(picked.path);
     if (!await file.exists()) return;
+
+    final ok = await _validateFile(file.path);
+    if (!ok) return;
 
     _setFileForType(type, picked.path, picked.name);
   }
@@ -268,23 +378,39 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
   Future<void> _pickDocument({required _DocType type}) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: [
-        'pdf',
-        'doc',
-        'docx',
-        'jpg',
-        'jpeg',
-        'png',
-      ],
+      allowedExtensions: _allowedExt,
+      withData: false,
     );
 
     if (result == null || result.files.isEmpty) return;
 
-    final file = result.files.single;
-    final path = file.path;
+    final f = result.files.single;
+    final path = f.path;
     if (path == null) return;
 
-    _setFileForType(type, path, file.name);
+    final ok = await _validateFile(path, name: f.name);
+    if (!ok) return;
+
+    _setFileForType(type, path, f.name);
+  }
+
+  Future<bool> _validateFile(String path, {String? name}) async {
+    final file = File(path);
+    final fileName = name ?? path.split(Platform.pathSeparator).last;
+
+    final ext = fileName.split('.').last.toLowerCase();
+    if (!_allowedExt.contains(ext)) {
+      _showError('نوع الملف غير مدعوم. المسموح: PDF / JPG / PNG');
+      return false;
+    }
+
+    final bytes = await file.length();
+    if (bytes > _maxBytes) {
+      _showError('حجم الملف كبير. الحد الأقصى 5MB');
+      return false;
+    }
+
+    return true;
   }
 
   void _setFileForType(_DocType type, String path, String fileName) {
@@ -293,20 +419,33 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
         case _DocType.id:
           _idUploaded = true;
           _idFileName = fileName;
+          _idPath = path;
           widget.onIdSelected(path);
           break;
         case _DocType.license:
           _licenseUploaded = true;
           _licenseFileName = fileName;
+          _licensePath = path;
           widget.onLicenseSelected(path);
           break;
         case _DocType.certificate:
           _certificateUploaded = true;
           _certificateFileName = fileName;
+          _certificatePath = path;
           widget.onCertificateSelected(path);
           break;
       }
     });
+  }
+
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: AppTextStyles.body14),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 }
 

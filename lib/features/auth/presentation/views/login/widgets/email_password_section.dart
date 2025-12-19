@@ -12,7 +12,8 @@ class EmailPasswordSection extends StatefulWidget {
   final VoidCallback? onForgotPassword;
   final FocusNode? identifierFocus; // جديد: FocusNode لحقل الإيميل/الهاتف
   final FocusNode? passwordFocus; // جديد: FocusNode لحقل كلمة المرور
-  final VoidCallback? onPasswordSubmitted; // جديد: للإرسال عند Enter في كلمة المرور
+  final VoidCallback?
+      onPasswordSubmitted; // جديد: للإرسال عند Enter في كلمة المرور
 
   const EmailPasswordSection({
     super.key,
@@ -136,49 +137,51 @@ class _EmailPasswordSectionState extends State<EmailPasswordSection> {
           SizedBox(height: SizeConfig.h(_bottomSpacing)),
 
           // Remember Me + Forgot Password
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: SizeConfig.w(_checkboxSize),
-                    height: SizeConfig.w(_checkboxSize),
-                    child: Checkbox(
-                      value: _rememberMe,
-                      onChanged: widget.isLoading
-                          ? null
-                          : (v) => setState(() => _rememberMe = v ?? false),
-                      activeColor: AppColors.darkGreen,
-                      side: const BorderSide(color: Colors.white70, width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: SizeConfig.w(8)),
-                  Text(
-                    'تذكرني',
-                    style: AppTextStyles.body14.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: SizeConfig.ts(_fontSize), // نفس الحجم السابق
-                      fontWeight: FontWeight.w400, // Regular
-                    ),
-                  ),
-                ],
-              ),
-              InkWell(
-                onTap: widget.isLoading ? null : widget.onForgotPassword,
-                child: Text(
-                  'هل نسيت كلمة السر؟',
-                  style: AppTextStyles.body16.copyWith(
-                    color: AppColors.textPrimary,
-                    fontSize: SizeConfig.ts(16), // نفس الحجم (كان 16 ثابت)
-                    fontWeight: FontWeight.w600, // نفس الوزن السابق
-                  ),
+          // Row(
+          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //   children: [
+          //     Row(
+          //       children: [
+          //         SizedBox(
+          //           width: SizeConfig.w(_checkboxSize),
+          //           height: SizeConfig.w(_checkboxSize),
+          //           child: Checkbox(
+          //             value: _rememberMe,
+          //             onChanged: widget.isLoading
+          //                 ? null
+          //                 : (v) => setState(() => _rememberMe = v ?? false),
+          //             activeColor: AppColors.darkGreen,
+          //             side: const BorderSide(color: Colors.white70, width: 1.5),
+          //             shape: RoundedRectangleBorder(
+          //               borderRadius: BorderRadius.circular(4),
+          //             ),
+          //           ),
+          //         ),
+          //         SizedBox(width: SizeConfig.w(8)),
+          //         Text(
+          //           'تذكرني',
+          //           style: AppTextStyles.body14.copyWith(
+          //             color: AppColors.textSecondary,
+          //             fontSize: SizeConfig.ts(_fontSize), // نفس الحجم السابق
+          //             fontWeight: FontWeight.w400, // Regular
+          //           ),
+          //         ),
+          //       ],
+          //     ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: InkWell(
+              onTap: widget.isLoading ? null : widget.onForgotPassword,
+              child: Text(
+                
+                'هل نسيت كلمة السر؟',
+                style: AppTextStyles.body16.copyWith(
+                  color: AppColors.textPrimary,
+                  fontSize: SizeConfig.ts(16), // نفس الحجم (كان 16 ثابت)
+                  fontWeight: FontWeight.w600, // نفس الوزن السابق
                 ),
               ),
-            ],
+            ),
           ),
         ],
       ),

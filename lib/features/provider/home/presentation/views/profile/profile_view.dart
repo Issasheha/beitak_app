@@ -8,6 +8,8 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
+import 'package:beitak_app/features/user/home/presentation/views/profile/account_setting_widgets/confirm_action_dialog.dart'; // ✅ NEW
+
 import 'package:beitak_app/features/provider/home/presentation/views/profile/providers/provider_profile_providers.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_profile_header_card.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_about_section.dart';
@@ -82,6 +84,8 @@ class ProviderProfileView extends ConsumerWidget {
                       child: ProviderSupportSection(),
                     ),
                     SizeConfig.v(18),
+
+                    // ✅ زر تسجيل الخروج مع Dialog تأكيد مثل اليوزر
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -96,6 +100,16 @@ class ProviderProfileView extends ConsumerWidget {
                           ),
                         ),
                         onPressed: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            barrierDismissible: true,
+                            builder: (_) => const ConfirmActionDialog(
+                              mode: ConfirmMode.logout,
+                            ),
+                          );
+
+                          if (confirmed != true) return;
+
                           try {
                             await ref
                                 .read(authControllerProvider.notifier)
@@ -119,6 +133,7 @@ class ProviderProfileView extends ConsumerWidget {
                         ),
                       ),
                     ),
+
                     SizeConfig.v(10),
                     Center(
                       child: Text(

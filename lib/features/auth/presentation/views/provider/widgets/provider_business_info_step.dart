@@ -11,11 +11,16 @@ class ProviderBusinessInfoStep extends StatefulWidget {
 
   final TextEditingController businessNameController;
   final TextEditingController experienceYearsController;
+
   final TextEditingController hourlyRateController;
+  final TextEditingController fixedPriceController;
+
   final TextEditingController descriptionController;
 
   final ValueChanged<Set<String>> onLanguagesChanged;
   final ValueChanged<Set<String>> onServiceAreasChanged;
+
+  final ValueChanged<String?> onCategoryChanged;
 
   const ProviderBusinessInfoStep({
     super.key,
@@ -23,9 +28,11 @@ class ProviderBusinessInfoStep extends StatefulWidget {
     required this.businessNameController,
     required this.experienceYearsController,
     required this.hourlyRateController,
+    required this.fixedPriceController,
     required this.descriptionController,
     required this.onLanguagesChanged,
     required this.onServiceAreasChanged,
+    required this.onCategoryChanged,
   });
 
   @override
@@ -44,11 +51,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
     'أعمال ألمنيوم',
   ];
 
-  final List<String> _languages = const [
-    'العربية',
-    'الإنجليزية',
-    'لغات أخرى',
-  ];
+  final List<String> _languages = const ['العربية', 'الإنجليزية', 'لغات أخرى'];
 
   final List<String> _governorates = const [
     'عمان',
@@ -74,6 +77,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onLanguagesChanged(_selectedLanguages);
       widget.onServiceAreasChanged(_selectedServiceAreas);
+      widget.onCategoryChanged(_selectedCategory);
     });
   }
 
@@ -88,7 +92,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             'معلومات العمل',
             style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.w700, // كان bold
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
@@ -102,30 +106,28 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(16),
-
-          // اسم العمل
           AuthTextField(
-            label: 'اسم العمل *',
+            label: 'اسم العمل (اختياري)',
             hint: 'اسم شركتك أو عملك',
             icon: Icons.business_center_outlined,
             controller: widget.businessNameController,
-            validator: _requiredValidator,
+            validator: _optionalSafeTextMin3,
             onDarkBackground: false,
           ),
           SizeConfig.v(16),
-
-          // فئة الخدمة
           _buildDropdown(
             label: 'فئة الخدمة *',
-            hint: 'اختر فئة الخدمة (اختياري حالياً)',
+            hint: 'اختر فئة الخدمة',
             value: _selectedCategory,
             items: _serviceCategories,
-            onChanged: (v) => setState(() => _selectedCategory = v),
-            validator: (_) => null,
+            onChanged: (v) {
+              setState(() => _selectedCategory = v);
+              widget.onCategoryChanged(v);
+            },
+            validator: (v) =>
+                (v == null || v.isEmpty) ? 'فئة الخدمة مطلوبة' : null,
           ),
           SizeConfig.v(16),
-
-          // سنوات الخبرة
           AuthTextField(
             label: 'سنوات الخبرة *',
             hint: 'مثال: 5',
@@ -133,41 +135,62 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             keyboardType: TextInputType.number,
             controller: widget.experienceYearsController,
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'سنوات الخبرة مطلوبة';
-              }
-              final years = int.tryParse(value);
-              if (years == null || years < 0 || years > 50) {
-                return 'أدخل رقمًا منطقياً (0 - 50)';
-              }
+              final v = (value ?? '').trim();
+              if (v.isEmpty) return 'سنوات الخبرة مطلوبة';
+              final years = int.tryParse(v);
+              if (years == null) return 'أدخل رقمًا صحيحًا';
+              if (years < 0 || years > 70) return 'أدخل رقمًا منطقياً (0 - 70)';
               return null;
             },
             onDarkBackground: false,
           ),
           SizeConfig.v(16),
-
-          // السعر بالساعة
-          AuthTextField(
-            label: 'السعر بالساعة (دينار) *',
-            hint: 'مثال: 15',
-            icon: Icons.monetization_on_outlined,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            controller: widget.hourlyRateController,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'السعر بالساعة مطلوب';
-              }
-              final price = double.tryParse(value.replaceAll(',', '.'));
-              if (price == null || price <= 0) {
-                return 'أدخل سعرًا صحيحًا أكبر من صفر';
+          Row(
+            children: [
+              Expanded(
+                child: AuthTextField(
+                  label: 'السعر الثابت (دينار)',
+                  hint: 'مثال: 20',
+                  icon: Icons.payments_outlined,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  controller: widget.fixedPriceController,
+                  validator: _nonNegativePriceOptional,
+                  onDarkBackground: false,
+                ),
+              ),
+              SizeConfig.hSpace(10),
+              Expanded(
+                child: AuthTextField(
+                  label: 'السعر بالساعة (دينار)',
+                  hint: 'مثال: 15',
+                  icon: Icons.monetization_on_outlined,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  controller: widget.hourlyRateController,
+                  validator: _nonNegativePriceOptional,
+                  onDarkBackground: false,
+                ),
+              ),
+            ],
+          ),
+          SizeConfig.v(4),
+          TextFormField(
+            validator: (_) {
+              final fixed = _parsePrice(widget.fixedPriceController.text);
+              final hourly = _parsePrice(widget.hourlyRateController.text);
+              if ((fixed ?? 0) <= 0 && (hourly ?? 0) <= 0) {
+                return 'يرجى إدخال سعر ثابت أو سعر بالساعة (واحد على الأقل أكبر من صفر)';
               }
               return null;
             },
-            onDarkBackground: false,
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isCollapsed: true,
+              contentPadding: EdgeInsets.zero,
+            ),
           ),
-          SizeConfig.v(16),
-
-          // اللغات
+          SizeConfig.v(14),
           Text(
             'اللغات المتقنة *',
             style: AppTextStyles.body14.copyWith(
@@ -208,9 +231,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedLanguages.isEmpty) {
-                return 'اختر لغة واحدة على الأقل';
-              }
+              if (_selectedLanguages.isEmpty) return 'اختر لغة واحدة على الأقل';
               return null;
             },
             decoration: const InputDecoration(
@@ -220,8 +241,6 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(14),
-
-          // مناطق الخدمة
           Text(
             'مناطق الخدمة *',
             style: AppTextStyles.body14.copyWith(
@@ -262,9 +281,8 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedServiceAreas.isEmpty) {
+              if (_selectedServiceAreas.isEmpty)
                 return 'اختر منطقة خدمة واحدة على الأقل';
-              }
               return null;
             },
             decoration: const InputDecoration(
@@ -274,10 +292,8 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(16),
-
-          // وصف العمل
           Text(
-            'وصف العمل *',
+            'وصف العمل (اختياري)',
             style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
@@ -303,15 +319,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                 borderSide: BorderSide.none,
               ),
             ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'وصف العمل مطلوب';
-              }
-              if (value.length < 20) {
-                return 'يرجى إدخال وصف أكثر تفصيلاً (20 حرفًا على الأقل)';
-              }
-              return null;
-            },
+            validator: _optionalSafeLongTextMax1000,
           ),
         ],
       ),
@@ -378,8 +386,42 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
     );
   }
 
-  static String? _requiredValidator(String? value) {
-    if (value == null || value.isEmpty) return 'هذا الحقل مطلوب';
+  static double? _parsePrice(String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) return null;
+    final normalized = v.replaceAll(',', '.');
+    return double.tryParse(normalized);
+  }
+
+  static String? _nonNegativePriceOptional(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+    final p = _parsePrice(v);
+    if (p == null) return 'أدخل رقمًا صحيحًا';
+    if (p < 0) return 'لا يمكن أن يكون السعر سالبًا';
+    return null;
+  }
+
+  static bool _looksLikeScriptOrHtml(String text) {
+    final t = text.toLowerCase();
+    if (t.contains('<') || t.contains('>')) return true;
+    if (t.contains('script')) return true;
+    return false;
+  }
+
+  static String? _optionalSafeTextMin3(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+    if (v.length < 3) return 'يرجى إدخال 3 أحرف على الأقل';
+    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
+    return null;
+  }
+
+  static String? _optionalSafeLongTextMax1000(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+    if (v.length > 1000) return 'الحد الأقصى 1000 حرف';
+    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
     return null;
   }
 }

@@ -42,7 +42,7 @@ class ProviderServiceCard extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => ProviderServiceDetailsSheet(
         service: service,
-        initialTab: initialTab, // 0 تفاصيل, 1 باقات
+        initialTab: initialTab,
       ),
     );
   }
@@ -67,7 +67,7 @@ class ProviderServiceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title + status
+          // Title + badges
           Row(
             children: [
               Expanded(
@@ -81,11 +81,33 @@ class ProviderServiceCard extends StatelessWidget {
                   ),
                 ),
               ),
+
+              // ✅ Badge جديد
+              if (service.isNew) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'جديد',
+                    style: AppTextStyles.label12.copyWith(
+                      fontSize: SizeConfig.ts(12),
+                      fontWeight: FontWeight.w700,
+                      color: Colors.orange,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+
+              // status
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: (service.isActive ? AppColors.lightGreen : Colors.grey)
-                      .withValues(alpha: 0.12),
+                  color: (service.isActive ? AppColors.lightGreen : Colors.grey).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -104,9 +126,7 @@ class ProviderServiceCard extends StatelessWidget {
           SizeConfig.v(8),
 
           Text(
-            (service.description ?? '').trim().isEmpty
-                ? '—'
-                : service.description!.trim(),
+            (service.description ?? '').trim().isEmpty ? '—' : service.description!.trim(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.body14.copyWith(
@@ -121,8 +141,7 @@ class ProviderServiceCard extends StatelessWidget {
 
           Row(
             children: [
-              const Icon(Icons.attach_money_rounded,
-                  size: 18, color: AppColors.textSecondary),
+              const Icon(Icons.attach_money_rounded, size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -141,8 +160,7 @@ class ProviderServiceCard extends StatelessWidget {
 
           Row(
             children: [
-              const Icon(Icons.view_module_rounded,
-                  size: 18, color: AppColors.textSecondary),
+              const Icon(Icons.view_module_rounded, size: 18, color: AppColors.textSecondary),
               const SizedBox(width: 8),
               Text(
                 'عدد الباقات: $packagesCount',
@@ -156,7 +174,6 @@ class ProviderServiceCard extends StatelessWidget {
 
           SizeConfig.v(14),
 
-          // ✅ Buttons:
           if (packagesCount == 0)
             SizedBox(
               width: double.infinity,
@@ -164,9 +181,7 @@ class ProviderServiceCard extends StatelessWidget {
                 onPressed: () => _openSheet(context, initialTab: 0),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.lightGreen,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   padding: SizeConfig.padding(vertical: 12),
                 ),
                 child: Text(
@@ -186,9 +201,7 @@ class ProviderServiceCard extends StatelessWidget {
                     onPressed: () => _openSheet(context, initialTab: 1),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.lightGreen,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       padding: SizeConfig.padding(vertical: 12),
                     ),
                     child: Text(
@@ -207,9 +220,7 @@ class ProviderServiceCard extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.lightGreen,
                       side: const BorderSide(color: AppColors.lightGreen),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       padding: SizeConfig.padding(vertical: 12),
                     ),
                     child: Text(

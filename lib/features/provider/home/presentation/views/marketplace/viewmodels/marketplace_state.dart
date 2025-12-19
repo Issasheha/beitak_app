@@ -5,6 +5,9 @@ class MarketplaceState {
   final bool isLoading;
   final String? errorMessage;
 
+  /// ✅ رسائل خفيفة للـ UI (SnackBar) بدون ما نوقف الشاشة
+  final String? uiMessage;
+
   final List<MarketplaceRequestUiModel> allRequests;
   final String searchQuery;
   final MarketplaceFilters filters;
@@ -20,6 +23,7 @@ class MarketplaceState {
   const MarketplaceState({
     required this.isLoading,
     required this.errorMessage,
+    required this.uiMessage,
     required this.allRequests,
     required this.searchQuery,
     required this.filters,
@@ -33,6 +37,7 @@ class MarketplaceState {
   factory MarketplaceState.initial() => MarketplaceState(
         isLoading: false,
         errorMessage: null,
+        uiMessage: null,
         allRequests: const [],
         searchQuery: '',
         filters: MarketplaceFilters.initial(),
@@ -46,6 +51,7 @@ class MarketplaceState {
   MarketplaceState copyWith({
     bool? isLoading,
     String? errorMessage,
+    String? uiMessage,
     List<MarketplaceRequestUiModel>? allRequests,
     String? searchQuery,
     MarketplaceFilters? filters,
@@ -58,6 +64,7 @@ class MarketplaceState {
     return MarketplaceState(
       isLoading: isLoading ?? this.isLoading,
       errorMessage: errorMessage,
+      uiMessage: uiMessage,
       allRequests: allRequests ?? this.allRequests,
       searchQuery: searchQuery ?? this.searchQuery,
       filters: filters ?? this.filters,

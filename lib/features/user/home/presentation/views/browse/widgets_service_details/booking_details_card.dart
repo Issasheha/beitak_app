@@ -1,8 +1,9 @@
-// lib/features/user/home/presentation/views/browse/widgets_service_details/booking_details_card.dart
-
 import 'package:flutter/material.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
+
 import 'location_models.dart';
 
 class BookingDetailsCard extends StatelessWidget {
@@ -11,6 +12,8 @@ class BookingDetailsCard extends StatelessWidget {
     required this.loading,
     required this.selectedDateLabel,
     required this.onPickDate,
+    required this.selectedTimeLabel,
+    required this.onPickTime,
     required this.notesCtrl,
     required this.cityNameAr,
     required this.isCityLocked,
@@ -24,6 +27,9 @@ class BookingDetailsCard extends StatelessWidget {
 
   final String selectedDateLabel;
   final VoidCallback onPickDate;
+
+  final String selectedTimeLabel;
+  final VoidCallback onPickTime;
 
   final TextEditingController notesCtrl;
 
@@ -39,249 +45,272 @@ class BookingDetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     SizeConfig.init(context);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.cardBackground,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.fact_check_outlined, color: AppColors.textSecondary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'معلومات الحجز',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: SizeConfig.ts(15),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              if (loading)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.lightGreen),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
+    return Column(
+      children: [
+        _FieldShell(
+          label: 'تاريخ الحجز',
+          icon: Icons.calendar_month_rounded,
+          value: selectedDateLabel,
+          placeholder: 'اختر تاريخ الحجز',
+          isDropdown: false,
+          enabled: !loading,
+          onTap: loading ? null : onPickDate,
+        ),
+        const SizedBox(height: 12),
 
-          _ActionTile(
-            icon: Icons.calendar_month,
-            title: 'اختر تاريخ الحجز',
-            value: selectedDateLabel,
-            onTap: onPickDate,
-          ),
+        _FieldShell(
+          label: 'وقت الحجز',
+          icon: Icons.access_time_rounded,
+          value: selectedTimeLabel,
+          placeholder: 'اختر وقت الحجز',
+          isDropdown: true,
+          enabled: !loading,
+          onTap: loading ? null : onPickTime,
+        ),
+        const SizedBox(height: 12),
 
-          const SizedBox(height: 10),
+        // المحافظة (عرض فقط حسب حالتك الحالية)
+        _FieldShell(
+          label: 'المحافظة',
+          icon: Icons.location_on_rounded,
+          value: cityNameAr == '—' ? '' : cityNameAr,
+          placeholder: 'اختر المحافظة',
+          isDropdown: !isCityLocked, // فقط شكل
+          enabled: false, // لأن المنطق الحالي عندك ما فيه اختيار محافظة هون
+          onTap: null,
+        ),
+        const SizedBox(height: 12),
 
-          _InfoTile(
-            icon: Icons.location_city,
-            label: 'المدينة',
-            value: cityNameAr.isEmpty ? 'غير محددة' : cityNameAr,
-            locked: isCityLocked,
-          ),
+        // المنطقة (Dropdown)
+        _AreaDropdown(
+          label: 'المنطقة',
+          icon: Icons.place_rounded,
+          enabled: areaEnabled,
+          areas: areas,
+          value: selectedArea,
+          onChanged: onAreaChanged,
+        ),
+        const SizedBox(height: 12),
 
-          const SizedBox(height: 10),
-
-          _AreaDropdown(
-            areas: areas,
-            selected: selectedArea,
-            enabled: areaEnabled,
-            onChanged: onAreaChanged,
-          ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            'ملاحظات (اختياري)',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: SizeConfig.ts(14),
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: notesCtrl,
-            maxLines: 3,
-            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700),
-            decoration: InputDecoration(
-              hintText: 'اكتب أي تفاصيل تساعد المزود…',
-              hintStyle: const TextStyle(color: AppColors.textSecondary),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: AppColors.borderLight),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: AppColors.lightGreen, width: 1.6),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            ),
-          ),
-        ],
-      ),
+        // الوصف (TextArea)
+        _NotesField(controller: notesCtrl),
+      ],
     );
   }
 }
 
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
+class _FieldShell extends StatelessWidget {
+  const _FieldShell({
+    required this.label,
     required this.icon,
-    required this.title,
     required this.value,
+    required this.placeholder,
+    required this.isDropdown,
+    required this.enabled,
     required this.onTap,
   });
 
-  final IconData icon;
-  final String title;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.textSecondary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w900),
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(width: 6),
-            // ✅ سهم لليمين
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.locked,
-  });
-
-  final IconData icon;
   final String label;
+  final IconData icon;
   final String value;
-  final bool locked;
+  final String placeholder;
+  final bool isDropdown;
+  final bool enabled;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: locked ? AppColors.borderLight.withValues(alpha: 0.25) : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: AppColors.textSecondary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w900),
+    final showValue = value.trim().isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            fontSize: SizeConfig.ts(13),
+          ),
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            height: SizeConfig.h(52),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.lightGreen, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    showValue ? value : placeholder,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.body.copyWith(
+                      fontSize: SizeConfig.ts(13.5),
+                      fontWeight: FontWeight.w700,
+                      color: showValue ? AppColors.textPrimary : AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                if (isDropdown)
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.textSecondary,
+                    size: 22,
+                  ),
+              ],
             ),
           ),
-          Text(
-            value,
-            style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(width: 8),
-          if (locked) const Icon(Icons.lock_outline, size: 18, color: AppColors.textSecondary),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _AreaDropdown extends StatelessWidget {
   const _AreaDropdown({
-    required this.areas,
-    required this.selected,
+    required this.label,
+    required this.icon,
     required this.enabled,
+    required this.areas,
+    required this.value,
     required this.onChanged,
   });
 
-  final List<AreaOption> areas;
-  final AreaOption? selected;
+  final String label;
+  final IconData icon;
   final bool enabled;
+  final List<AreaOption> areas;
+  final AreaOption? value;
   final ValueChanged<AreaOption?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: enabled ? Colors.white : AppColors.borderLight.withValues(alpha: 0.25),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.place_outlined, color: AppColors.textSecondary),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text(
-              'المنطقة',
-              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w900),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          label,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            fontSize: SizeConfig.ts(13),
           ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<AreaOption>(
-              value: selected,
-              hint: const Text('اختر المنطقة'),
-              onChanged: enabled ? onChanged : null,
-              items: areas
-                  .map(
-                    (a) => DropdownMenuItem<AreaOption>(
-                      value: a,
-                      child: Text(a.nameAr.isEmpty ? a.nameEn : a.nameAr),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: SizeConfig.h(52),
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.lightGreen, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<AreaOption>(
+                    isExpanded: true,
+                    value: areas.any((e) => e.id == value?.id) ? value : null,
+                    hint: Text(
+                      'اختر المنطقة',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: SizeConfig.ts(13.5),
+                      ),
                     ),
-                  )
-                  .toList(),
+                    items: areas
+                        .map(
+                          (a) => DropdownMenuItem<AreaOption>(
+                            value: a,
+                            child: Text(
+                              (a.nameAr.trim().isEmpty ? a.nameEn : a.nameAr).trim(),
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: SizeConfig.ts(13.5),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: enabled ? onChanged : null,
+                    icon: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.textSecondary,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NotesField extends StatelessWidget {
+  const _NotesField({required this.controller});
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'الوصف',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
+            fontSize: SizeConfig.ts(13),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.borderLight),
+          ),
+          child: TextField(
+            controller: controller,
+            maxLines: 5,
+            minLines: 4,
+            style: AppTextStyles.body.copyWith(
+              color: AppColors.textPrimary,
+              fontSize: SizeConfig.ts(13.5),
+              fontWeight: FontWeight.w600,
+              height: 1.5,
+            ),
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              hintText: 'أضف تفاصيل إضافية حول الخدمة المطلوبة...',
+              hintStyle: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: SizeConfig.ts(13.2),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

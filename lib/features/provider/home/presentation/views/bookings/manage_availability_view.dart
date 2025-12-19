@@ -25,7 +25,7 @@ class _ProviderManageAvailabilityViewState
     extends State<ProviderManageAvailabilityView> {
   late final ProviderAvailabilityViewModel _vm;
 
-  int _tabIndex = 0; // 0 weekly, 1 exceptions
+  int _tabIndex = 0; // 0 = أيام العمل, 1 = التقويم
 
   DateTime _focusedMonth =
       DateTime(DateTime.now().year, DateTime.now().month, 1);
@@ -39,6 +39,8 @@ class _ProviderManageAvailabilityViewState
   void initState() {
     super.initState();
     _vm = ProviderAvailabilityViewModel();
+    // ✅ تحميل البيانات من الباك-إند أول ما تفتح الشاشة
+    _vm.loadFromApi();
   }
 
   @override
@@ -48,7 +50,9 @@ class _ProviderManageAvailabilityViewState
   }
 
   void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   int _minutes(TimeOfDay t) => t.hour * 60 + t.minute;
@@ -86,7 +90,7 @@ class _ProviderManageAvailabilityViewState
       _isSameDate(_dateOnly(d), _dateOnly(DateTime.now()));
 
   List<DateTime> _buildCalendarCells(DateTime monthFirstDay) {
-    // ✅ week starts Sunday
+    // الأسبوع يبدأ من الأحد
     final first = DateTime(monthFirstDay.year, monthFirstDay.month, 1);
     final shift = first.weekday % 7; // Sunday => 0
     final start = first.subtract(Duration(days: shift));
@@ -155,7 +159,7 @@ class _ProviderManageAvailabilityViewState
                   if (_tabIndex == 0)
                     _weeklyTemplate()
                   else
-                    _exceptionsTabStyled(),
+                    _calendarTab(),
                   SizedBox(height: SizeConfig.h(18)),
                 ],
               ),
@@ -181,8 +185,26 @@ class _ProviderManageAvailabilityViewState
               ),
             ),
           ),
+          if (_vm.isSaving)
+            Padding(
+              padding: EdgeInsetsDirectional.only(end: SizeConfig.w(4)),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           IconButton(
-            onPressed: widget.onClose,
+            onPressed: () async {
+              final ok = await _vm.saveToApi();
+              if (!mounted) return;
+              if (ok) {
+                _snack('تم حفظ التوفر بنجاح.');
+              } else {
+                _snack('تعذر حفظ التوفر، حاول مرة أخرى.');
+              }
+              widget.onClose();
+            },
             icon: const Icon(Icons.close_rounded),
           ),
         ],
@@ -307,7 +329,7 @@ class _ProviderManageAvailabilityViewState
         ),
         Switch(
           value: available,
-          activeThumbColor: AppColors.lightGreen,
+          activeColor: AppColors.lightGreen,
           onChanged: (v) => _vm.toggleWeeklyDay(weekday, v),
         ),
         SizedBox(width: SizeConfig.w(6)),
@@ -370,24 +392,20 @@ class _ProviderManageAvailabilityViewState
       );
 
   // =======================
-  // 2) Exceptions UI (Styled like design)
+  // 2) Calendar UI (closed days only)
   // =======================
 
-  Widget _exceptionsTabStyled() {
+  Widget _calendarTab() {
     final cells = _buildCalendarCells(_focusedMonth);
-
-    final weeklyDefault = _vm.weeklyForDate(_selectedDate);
-    final currentException = _vm.exceptionOf(_selectedDate);
-
-    final customExceptions = _vm.exceptions.entries
-        .where((e) => e.value.type == AvailabilityExceptionType.customHours)
-        .toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
 
     final closedDays = _vm.exceptions.entries
         .where((e) => e.value.type == AvailabilityExceptionType.closedDay)
         .toList()
       ..sort((a, b) => a.key.compareTo(b.key));
+
+    final currentException = _vm.exceptionOf(_selectedDate);
+    final isSelectedClosed =
+        currentException?.type == AvailabilityExceptionType.closedDay;
 
     return Column(
       children: [
@@ -475,29 +493,50 @@ class _ProviderManageAvailabilityViewState
                   final ex = _vm.exceptionOf(d);
                   final isClosed = ex?.type ==
                       AvailabilityExceptionType.closedDay;
-                  final isCustom =
-                      ex?.type == AvailabilityExceptionType.customHours;
 
-                  Color bg = inMonth ? Colors.white : AppColors.background;
+                  final bg = inMonth ? Colors.white : AppColors.background;
                   Color border =
                       AppColors.borderLight.withValues(alpha: 0.9);
-                  Color textColor = inMonth
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary.withValues(alpha: 0.35);
-
-                  if (isClosed) {
-                    bg = Colors.red.withValues(alpha: 0.15);
-                    border = Colors.red;
-                    textColor = Colors.red.shade800;
-                  } else if (isCustom) {
-                    bg = Colors.orange.withValues(alpha: 0.12);
-                    border = Colors.orange;
-                  }
 
                   if (isSelected) {
                     border = AppColors.lightGreen;
-                    bg = bg
-                        .withValues(alpha: isClosed || isCustom ? 0.9 : 0.15);
+                  }
+
+                  final textColor = inMonth
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary.withValues(alpha: 0.35);
+
+                  Widget dayChild = Text(
+                    '${d.day}',
+                    style: TextStyle(
+                      fontSize: SizeConfig.ts(12.6),
+                      fontWeight: FontWeight.w900,
+                      color: textColor,
+                    ),
+                  );
+
+                  // اليوم المغلق → دائرة حمراء حول الرقم
+                  if (inMonth && isClosed) {
+                    dayChild = Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.red,
+                          width: 1.6,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '${d.day}',
+                        style: TextStyle(
+                          fontSize: SizeConfig.ts(12.4),
+                          fontWeight: FontWeight.w900,
+                          color: Colors.red.shade800,
+                        ),
+                      ),
+                    );
                   }
 
                   return InkWell(
@@ -517,19 +556,10 @@ class _ProviderManageAvailabilityViewState
                       ),
                       child: Stack(
                         children: [
-                          Center(
-                            child: Text(
-                              '${d.day}',
-                              style: TextStyle(
-                                fontSize: SizeConfig.ts(12.6),
-                                fontWeight: FontWeight.w900,
-                                color: textColor,
-                              ),
-                            ),
-                          ),
+                          Center(child: dayChild),
                           if (isToday)
                             Positioned(
-                              bottom: 4,
+                              bottom: 5,
                               left: 0,
                               right: 0,
                               child: Center(
@@ -553,18 +583,13 @@ class _ProviderManageAvailabilityViewState
               const Row(
                 children: [
                   _LegendDot(
-                    color: Colors.orange,
-                    label: 'استثناء',
-                  ),
-                  SizedBox(width: 10),
-                  _LegendDot(
                     color: Colors.red,
-                    label: 'مغلق',
+                    label: 'اليوم المغلق (دائرة حمراء)',
                   ),
                   SizedBox(width: 10),
                   _LegendDot(
                     color: AppColors.lightGreen,
-                    label: 'اليوم',
+                    label: 'اليوم الحالي',
                   ),
                 ],
               ),
@@ -574,109 +599,51 @@ class _ProviderManageAvailabilityViewState
 
         SizedBox(height: SizeConfig.h(12)),
 
-        // ====== Actions row (تعديل الوقت / إغلاق يوم) ======
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () async {
-                  final defaultRange = weeklyDefault.range ??
-                      const TimeRange(
-                        start: TimeOfDay(hour: 9, minute: 0),
-                        end: TimeOfDay(hour: 17, minute: 0),
-                      );
-
-                  final current =
-                      _vm.effectiveRange(_selectedDate) ?? defaultRange;
-
-                  final picked = await _pickRange(
-                    initialStart: current.start,
-                    initialEnd: current.end,
-                  );
-                  if (picked == null) return;
-
-                  _vm.setExceptionCustomHours(_selectedDate, picked);
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.lightGreen),
-                  padding: SizeConfig.padding(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      SizeConfig.radius(14),
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'تعديل الوقت',
-                  style: TextStyle(
-                    color: AppColors.lightGreen,
-                    fontWeight: FontWeight.w900,
-                    fontSize: SizeConfig.ts(12.8),
-                  ),
+        // ====== Toggle close / open day ======
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () {
+              if (isSelectedClosed) {
+                // فتح اليوم
+                _vm.clearException(_selectedDate);
+              } else {
+                // إغلاق اليوم
+                _vm.setExceptionClosed(_selectedDate);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor:
+                  isSelectedClosed ? AppColors.lightGreen : Colors.red,
+              padding: SizeConfig.padding(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.radius(14),
                 ),
               ),
             ),
-            SizedBox(width: SizeConfig.w(10)),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {
-                  _vm.setExceptionClosed(_selectedDate);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  padding: SizeConfig.padding(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(
-                      SizeConfig.radius(14),
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'إغلاق يوم',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: SizeConfig.ts(12.8),
-                  ),
-                ),
+            child: Text(
+              isSelectedClosed ? 'إلغاء الإغلاق' : 'إغلاق اليوم',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: SizeConfig.ts(12.8),
               ),
             ),
-          ],
+          ),
         ),
 
         SizedBox(height: SizeConfig.h(12)),
 
-        // ====== Exceptions times list ======
-        _exceptionsListCard(
-          title: 'أوقات الاستثناءات',
-          emptyText: 'لا توجد أوقات استثناء حتى الآن.',
-          entries: customExceptions,
-          trailingIcon: Icons.access_time,
-          valueBuilder: (e) =>
-              '${e.value.range?.format(context) ?? ''} / ${_fullDateLabel(e.key)}',
-        ),
-
-        SizedBox(height: SizeConfig.h(10)),
-
         // ====== Closed days list ======
-        _exceptionsListCard(
-          title: 'الأيام المغلقة',
-          emptyText: 'لا توجد أيام مغلقة حتى الآن.',
-          entries: closedDays,
-          trailingIcon: Icons.block,
-          valueBuilder: (e) => _fullDateLabel(e.key),
-        ),
+        _closedDaysCard(closedDays),
       ],
     );
   }
 
-  Widget _exceptionsListCard({
-    required String title,
-    required String emptyText,
-    required List<MapEntry<DateTime, AvailabilityException>> entries,
-    required IconData trailingIcon,
-    required String Function(MapEntry<DateTime, AvailabilityException>) valueBuilder,
-  }) {
+  Widget _closedDaysCard(
+    List<MapEntry<DateTime, AvailabilityException>> closedDays,
+  ) {
     return Container(
       padding: SizeConfig.padding(all: 12),
       decoration: BoxDecoration(
@@ -688,7 +655,7 @@ class _ProviderManageAvailabilityViewState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            title,
+            'الأيام المغلقة',
             textAlign: TextAlign.right,
             style: TextStyle(
               fontSize: SizeConfig.ts(13.5),
@@ -697,9 +664,9 @@ class _ProviderManageAvailabilityViewState
             ),
           ),
           SizedBox(height: SizeConfig.h(8)),
-          if (entries.isEmpty)
+          if (closedDays.isEmpty)
             Text(
-              emptyText,
+              'لا توجد أيام مغلقة حتى الآن.',
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: SizeConfig.ts(12),
@@ -708,7 +675,7 @@ class _ProviderManageAvailabilityViewState
               ),
             )
           else
-            ...entries.map(
+            ...closedDays.map(
               (e) => Padding(
                 padding: EdgeInsets.only(bottom: SizeConfig.h(6)),
                 child: Row(
@@ -723,7 +690,7 @@ class _ProviderManageAvailabilityViewState
                     ),
                     Expanded(
                       child: Text(
-                        valueBuilder(e),
+                        _fullDateLabel(e.key),
                         textAlign: TextAlign.right,
                         style: TextStyle(
                           fontSize: SizeConfig.ts(12.5),
@@ -732,12 +699,10 @@ class _ProviderManageAvailabilityViewState
                         ),
                       ),
                     ),
-                    Icon(
-                      trailingIcon,
+                    const Icon(
+                      Icons.block,
                       size: 18,
-                      color: trailingIcon == Icons.block
-                          ? Colors.red
-                          : Colors.orange,
+                      color: Colors.red,
                     ),
                   ],
                 ),

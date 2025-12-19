@@ -3,6 +3,7 @@ import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/providers/locations_providers.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/send_code_button.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/register_form.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/register_header.dart';
@@ -29,6 +30,8 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  int? _selectedCityId;
+
   bool _isSubmitting = false;
 
   @override
@@ -42,7 +45,18 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
   }
 
   Future<void> _onSubmit() async {
+    // هذا رح يشغّل validators تبع الحقول + dropdown
     if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedCityId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('يرجى اختيار المدينة'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     final firstName = _firstNameController.text.trim();
     final lastName = _lastNameController.text.trim();
@@ -63,15 +77,14 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     setState(() => _isSubmitting = true);
 
     try {
-      // ✅ Register عن طريق AuthController (Single source of truth)
       await ref.read(authControllerProvider.notifier).signupCustomer(
             firstName: firstName,
             lastName: lastName,
             phone: phone.isEmpty ? null : phone,
             email: email.isEmpty ? null : email,
             password: password,
-            cityId: 1,
-            areaId: 1,
+            cityId: _selectedCityId!,
+            areaId: 1, // حالياً كما هو (بعدها منربطها مع Area dropdown)
           );
 
       if (!mounted) return;
@@ -83,7 +96,6 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
         ),
       );
 
-      // ✅ واضح وصريح (والراوتر أصلاً رح يتصرف صح)
       context.go(AppRoutes.home);
     } catch (e) {
       if (!mounted) return;
@@ -103,12 +115,18 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
     SizeConfig.init(context);
     final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
 
+    // مجرد مشاهدة الـ provider هون مش إلزامي، بس بفيد يعمل prefetch للمدن
+    ref.watch(citiesProvider);
+
     return Scaffold(
       resizeToAvoidBottomInset: false,
+      backgroundColor: AppColors.background, // ✅ مهم: يمنع أي أبيض من ورا
       body: Directionality(
         textDirection: TextDirection.rtl,
         child: Container(
           color: AppColors.background,
+          width: double.infinity, // ✅
+          height: double.infinity, // ✅ يغطي الشاشة كلها
           child: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -130,13 +148,11 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                         onLoginTap: () => context.go(AppRoutes.login),
                       ),
                       SizedBox(height: space),
-
                       RoleSelectionCard(
                         isProvider: _isProvider,
                         onRoleChanged: (v) => setState(() => _isProvider = v),
                       ),
                       SizedBox(height: space),
-
                       if (!_isProvider) ...[
                         Form(
                           key: _formKey,
@@ -147,11 +163,16 @@ class _RegisterViewState extends ConsumerState<RegisterView> {
                             phoneController: _phoneController,
                             emailController: _emailController,
                             passwordController: _passwordController,
+
+                            // ✅ المدينة
+                            selectedCityId: _selectedCityId,
+                            onCityChanged: (v) =>
+                                setState(() => _selectedCityId = v),
+
                             onSubmit: _onSubmit,
                           ),
                         ),
                         SizedBox(height: space),
-
                         SendCodeButton(
                           onPressed: _isSubmitting ? null : _onSubmit,
                           text: 'إنشاء حساب',

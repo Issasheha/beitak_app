@@ -1,6 +1,9 @@
+// lib/features/user/home/presentation/views/request_service/viewmodels/request_service_controller.dart
+
 import 'dart:io';
 
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:beitak_app/features/user/home/presentation/views/request_service/viewmodels/request_service_draft.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,6 +24,16 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
 
   RequestServiceController(this._vm, this._authLocal)
       : super(const RequestServiceState());
+
+  // ✅ نفس normalization داخل VM (نكررها هون عشان ما نعتمد على private)
+  String _normSlug(String s) {
+    var x = s.trim().toLowerCase();
+    x = x.replaceAll(RegExp(r'\s+'), ' ');
+    x = x.replaceAll('_', ' ');
+    x = x.replaceAll('-', ' ');
+    x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return x;
+  }
 
   // --------- bootstrap ---------
 
@@ -114,9 +127,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       );
     } catch (e) {
       if (!mounted) return;
-      state = state.copyWith(
-        citiesError: _niceError(e),
-      );
+      state = state.copyWith(citiesError: _niceError(e));
     } finally {
       if (!mounted) return;
       state = state.copyWith(citiesLoading: false);
@@ -138,9 +149,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       final slug = city.slug.trim();
       if (slug.isEmpty) {
         if (!mounted) return;
-        state = state.copyWith(
-          areasError: 'لم يتم العثور على slug للمحافظة',
-        );
+        state = state.copyWith(areasError: 'لم يتم العثور على slug للمحافظة');
         return;
       }
 
@@ -153,16 +162,11 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
           areas: const [],
         );
       } else {
-        state = state.copyWith(
-          areas: areas,
-          areasError: null,
-        );
+        state = state.copyWith(areas: areas, areasError: null);
       }
     } catch (e) {
       if (!mounted) return;
-      state = state.copyWith(
-        areasError: _niceError(e),
-      );
+      state = state.copyWith(areasError: _niceError(e));
     } finally {
       if (!mounted) return;
       state = state.copyWith(areasLoading: false);
@@ -189,7 +193,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       areasError: null,
     );
 
-    // fire & forget
     loadAreasForCity(city);
   }
 
@@ -229,6 +232,19 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   void setSelectedHour(String? hour) {
     if (!mounted) return;
     state = state.copyWith(selectedHour: hour);
+  }
+
+  String _apiServiceDateType(ServiceDateType t) {
+    switch (t) {
+      case ServiceDateType.today:
+        return 'today';
+      case ServiceDateType.tomorrow:
+        return 'tomorrow';
+      case ServiceDateType.dayAfter:
+        return 'day_after';
+      case ServiceDateType.other:
+        return 'other';
+    }
   }
 
   // --------- Service type ---------
@@ -305,12 +321,10 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     final ok = formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
-    final name = state.showNameField
-        ? nameCtrl.text.trim()
-        : (state.sessionName ?? '').trim();
-    final phone = state.showPhoneField
-        ? phoneCtrl.text.trim()
-        : (state.sessionPhone ?? '').trim();
+    final name =
+        state.showNameField ? nameCtrl.text.trim() : (state.sessionName ?? '').trim();
+    final phone =
+        state.showPhoneField ? phoneCtrl.text.trim() : (state.sessionPhone ?? '').trim();
 
     if (name.isEmpty) {
       _snack(context, 'الاسم مطلوب');
@@ -321,13 +335,19 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       return;
     }
 
-    final slug = state.selectedServiceType!.categorySlug.trim();
-    final categoryId = state.slugToCategoryId[slug];
+    // ✅✅ أهم سطر: normalize slug قبل ما نجيب id
+    final rawSlug = state.selectedServiceType!.categorySlug;
+    final normalized = _normSlug(rawSlug);
+
+    final categoryId =
+        state.slugToCategoryId[normalized] ?? state.slugToCategoryId[rawSlug.trim()];
 
     if (categoryId == null || categoryId <= 0) {
       _snack(
         context,
-        'تعذر تحديد الفئة من السيرفر.\nتأكد من slugs أو أعد المحاولة.',
+        'تعذر تحديد الفئة من السيرفر.\n'
+        'Slug: "$rawSlug"\n'
+        'جرّب تحديث الشاشة أو تأكد من slugs في /api/categories.',
       );
       return;
     }
@@ -345,7 +365,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     String? guestOtp;
 
     try {
-      // ✅ للضيف: OTP ثم نرسل الطلب على /service-requests/guest
       if (state.isGuest) {
         await _vm.sendServiceReqOtp(phone: phone);
 
@@ -363,18 +382,17 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
           _snack(context, 'لم يتم التحقق من الرقم');
           return;
         }
-
         guestOtp = guestOtp!.trim();
       }
 
-      final serviceDateIso =
-          _resolveSelectedDateIso(state.dateType, state.otherDate);
+      final serviceDateIso = _resolveSelectedDateIso(state.dateType, state.otherDate);
       if (serviceDateIso == null) {
         _snack(context, 'تعذر تحديد التاريخ. حاول مجدداً.');
         return;
       }
 
       final budget = _budgetValue(budgetCtrl.text);
+      final dateTypeApi = _apiServiceDateType(state.dateType);
 
       final draft = ServiceRequestDraft(
         name: name,
@@ -385,11 +403,10 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         description: descCtrl.text.trim(),
         budget: budget,
         serviceDateIso: serviceDateIso,
+        serviceDateType: dateTypeApi,
         serviceTimeHour: state.selectedHour!,
         sharePhoneWithProvider: share,
         files: List<File>.from(state.files),
-
-        // ✅ أهم شي:
         isGuest: state.isGuest,
         otp: state.isGuest ? guestOtp : null,
       );
@@ -437,11 +454,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     final txt = text.trim();
     if (txt.isEmpty) return null;
 
-    final normalized = txt
-        .replaceAll(',', '')
-        .replaceAll('٬', '')
-        .replaceAll('٫', '.');
-
+    final normalized = txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
     return double.tryParse(normalized);
   }
 
@@ -454,14 +467,15 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     } else if (type == ServiceDateType.other) {
       if (otherDate == null) return null;
       date = otherDate;
-    } else {
-      // tomorrow / dayAfter based on index ordering
-      final offset = type.index; // today=0, tomorrow=1, dayAfter=2, other=3
-      date = now.add(Duration(days: offset));
+    } else if (type == ServiceDateType.tomorrow) {
+      date = now.add(const Duration(days: 1));
+    } else if (type == ServiceDateType.dayAfter) {
+      date = now.add(const Duration(days: 2));
     }
 
-    final d = DateTime(date.year, date.month, date.day);
+    if (date == null) return null;
 
+    final d = DateTime(date.year, date.month, date.day);
     String two(int v) => v < 10 ? '0$v' : '$v';
 
     return '${d.year}-${two(d.month)}-${two(d.day)}';
@@ -474,8 +488,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   }
 
   void _snack(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 }

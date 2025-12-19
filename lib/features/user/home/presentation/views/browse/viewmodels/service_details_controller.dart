@@ -1,13 +1,11 @@
+import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/service_details_viewmodel.dart';
+import 'package:beitak_app/features/user/home/presentation/views/browse/widgets/service_details_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
-
-import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/service_details_viewmodel.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../widgets_service_details/location_models.dart';
-
 import 'service_details_state.dart';
 
 class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
@@ -28,7 +26,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     try {
       final s = await _vm.fetchServiceDetails(serviceId);
 
-      // safety: لو كان مختار باقة وانحذفت لاحقًا
       final selectedName = state.selectedPackageName;
       final keepSelected = selectedName != null &&
           s.packages.any((p) => p.name.trim() == selectedName.trim());
@@ -37,36 +34,99 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         service: s,
         loading: false,
         selectedPackageName: keepSelected ? selectedName : null,
-        selectedDate: _todayDateOnly().add(const Duration(days: 1)),
       );
+
+      await _loadAvailabilityDates(providerId: s.providerId);
+
+      final firstBookable = _firstBookableDate(s, state.availableDates);
+      state = state.copyWith(selectedDate: firstBookable);
 
       await loadProfileAndLocations();
     } catch (e) {
       state = state.copyWith(
         loading: false,
-        error: e.toString(),
+        error: _humanizeError(e),
       );
     }
   }
+
+  Future<void> refreshAvailabilityDays() async {
+    final s = state.service;
+    if (s == null) return;
+    await _loadAvailabilityDates(providerId: s.providerId);
+  }
+
+  Future<void> _loadAvailabilityDates({required int providerId}) async {
+    state = state.copyWith(availabilityLoading: true);
+
+    final start = _fmtDate(_todayDateOnly().add(const Duration(days: 1)));
+    final end = _fmtDate(_todayDateOnly().add(const Duration(days: 60)));
+
+    try {
+      final dates = await _vm.fetchAvailableDays(
+        providerId: providerId,
+        startDate: start,
+        endDate: end,
+      );
+
+      if (!mounted) return;
+
+      final cleaned = dates
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+
+      state = state.copyWith(
+        availabilityLoading: false,
+        availableDates: cleaned,
+      );
+
+      // ✅ لو التاريخ المختار صار غير موجود (انحجز/تسكر) انقله لأول يوم متاح
+      final s = state.service;
+      final sel = state.selectedDate;
+      if (s != null && sel != null && cleaned.isNotEmpty) {
+        final selStr = _fmtDate(sel);
+        if (!cleaned.contains(selStr)) {
+          state = state.copyWith(selectedDate: _firstBookableDate(s, cleaned));
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        availabilityLoading: false,
+        availableDates: const [],
+      );
+      if (kDebugMode) debugPrint('availability load failed: $e');
+    }
+  }
+
+  // ===== locations/profile (كما عندك) =====
 
   Future<void> loadProfileAndLocations() async {
     state = state.copyWith(locLoading: true);
 
     try {
-      // 1) profile location
-      final profileRes = await _getAny([ApiConstants.userProfile, '/api/users/profile', '/api/users/me']);
+      final profileRes = await _getAny([
+        ApiConstants.userProfile,
+        '/api/users/profile',
+        '/api/users/me',
+      ]);
       final profileLoc = _parseProfileLoc(profileRes.data);
 
-      // 2) cities
-      final citiesRes = await _getAny([ApiConstants.cities, '/api/locations/cities']);
+      final citiesRes = await _getAny([
+        ApiConstants.cities,
+        '/api/locations/cities',
+      ]);
       final cities = _parseCities(citiesRes.data);
 
-      // 3) choose city (locked > profile > fallback)
       CityOption? selectedCity;
       if (lockedCityId != null) {
         selectedCity = _firstWhereOrNull(cities, (c) => c.id == lockedCityId);
       } else if (profileLoc?.cityId != null) {
-        selectedCity = _firstWhereOrNull(cities, (c) => c.id == profileLoc!.cityId);
+        selectedCity =
+            _firstWhereOrNull(cities, (c) => c.id == profileLoc!.cityId);
       }
 
       selectedCity ??= _firstWhereOrNull(
@@ -75,7 +135,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       );
       selectedCity ??= cities.isNotEmpty ? cities.first : null;
 
-      // 4) areas
       List<AreaOption> areas = const [];
       AreaOption? selectedArea;
 
@@ -110,15 +169,18 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
   }
 
   void setSelectedDate(DateTime dateOnly) {
-    state = state.copyWith(selectedDate: DateTime(dateOnly.year, dateOnly.month, dateOnly.day));
+    state = state.copyWith(
+      selectedDate: DateTime(dateOnly.year, dateOnly.month, dateOnly.day),
+      clearBookingError: true,
+    );
   }
 
   void setSelectedPackageName(String? name) {
-    state = state.copyWith(selectedPackageName: name);
+    state = state.copyWith(selectedPackageName: name, clearBookingError: true);
   }
 
   void setSelectedArea(AreaOption? area) {
-    state = state.copyWith(selectedArea: area);
+    state = state.copyWith(selectedArea: area, clearBookingError: true);
   }
 
   double calcDisplayedPrice() {
@@ -136,8 +198,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
     return price;
   }
-
-  // ===== Booking wrappers (بدون UI) =====
 
   Future<void> createBookingAsUser({
     required String bookingDate,
@@ -167,9 +227,18 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         customerNotes: notes,
       );
 
+      // ✅ 1) Optimistic: سكّر اليوم فوراً بالـ UI (بدون انتظار الريفريش)
+      _optimisticallyCloseDay(bookingDate, s);
+
       state = state.copyWith(bookingLoading: false);
+
+      // ✅ 2) Refresh فعلي من السيرفر لتأكيد التواريخ
+      await _loadAvailabilityDates(providerId: s.providerId);
     } catch (e) {
-      state = state.copyWith(bookingLoading: false, bookingError: e.toString());
+      state = state.copyWith(
+        bookingLoading: false,
+        bookingError: _humanizeError(e),
+      );
       rethrow;
     }
   }
@@ -192,31 +261,136 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     final s = state.service;
     if (s == null) return;
 
-    await _vm.createBookingAsGuest(
-      serviceId: s.id,
-      providerId: s.providerId,
-      bookingDate: bookingDate,
-      bookingTime: bookingTime,
-      durationHours: durationHours,
-      serviceAddress: 'N/A',
-      serviceCity: serviceCity,
-      serviceArea: serviceArea,
-      customerName: customerName,
-      customerPhone: customerPhone,
-      otp: otp,
-      packageSelected: state.selectedPackageName,
-      addOnsSelected: const [],
-      customerNotes: notes,
-    );
+    state = state.copyWith(bookingLoading: true, clearBookingError: true);
+
+    try {
+      await _vm.createBookingAsGuest(
+        serviceId: s.id,
+        providerId: s.providerId,
+        bookingDate: bookingDate,
+        bookingTime: bookingTime,
+        durationHours: durationHours,
+        serviceAddress: 'N/A',
+        serviceCity: serviceCity,
+        serviceArea: serviceArea,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        otp: otp,
+        packageSelected: state.selectedPackageName,
+        addOnsSelected: const [],
+        customerNotes: notes,
+      );
+
+      _optimisticallyCloseDay(bookingDate, s);
+
+      state = state.copyWith(bookingLoading: false);
+
+      await _loadAvailabilityDates(providerId: s.providerId);
+    } catch (e) {
+      state = state.copyWith(
+        bookingLoading: false,
+        bookingError: _humanizeError(e),
+      );
+      rethrow;
+    }
   }
 
   bool isOtpRequiredError(Object e) => _vm.isOtpRequiredError(e);
+
+  // ===== UX Helpers =====
+
+  void _optimisticallyCloseDay(String bookingDate, ServiceDetails s) {
+    final date = bookingDate.trim();
+    if (date.isEmpty) return;
+
+    // لو القائمة فاضية ما بنخرب شي، الريفريش رح يعبيها
+    if (state.availableDates.isNotEmpty) {
+      final set = state.availableDates
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toSet();
+      if (set.remove(date)) {
+        final updated = set.toList()..sort();
+        state = state.copyWith(availableDates: updated);
+      }
+    }
+
+    // لو كان المستخدم مختار نفس اليوم: انقله لأول يوم متاح
+    final sel = state.selectedDate;
+    if (sel != null && _fmtDate(sel) == date) {
+      final next = _firstBookableDate(s, state.availableDates);
+      state = state.copyWith(selectedDate: next);
+    }
+  }
+
+  String _humanizeError(Object e) {
+    final s = e.toString().trim();
+    // ✅ إزالة "Exception:" نهائياً
+    return s
+        .replaceFirst(RegExp(r'^\s*exception:\s*', caseSensitive: false), '')
+        .trim();
+  }
 
   // ===== Helpers =====
 
   DateTime _todayDateOnly() {
     final now = DateTime.now();
     return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime _firstBookableDate(ServiceDetails s, List<String> availableDates) {
+    final start = _todayDateOnly().add(const Duration(days: 1));
+    final end = _todayDateOnly().add(const Duration(days: 60));
+
+    if (availableDates.isNotEmpty) {
+      DateTime? best;
+      for (final str in availableDates) {
+        try {
+          final d = DateTime.parse(str);
+          final dateOnly = DateTime(d.year, d.month, d.day);
+          if (dateOnly.isBefore(start) || dateOnly.isAfter(end)) continue;
+          best ??= dateOnly;
+          if (dateOnly.isBefore(best!)) best = dateOnly;
+        } catch (_) {}
+      }
+      if (best != null) return best!;
+    }
+
+    final allow =
+        s.provider.availableDays.map((e) => e.toLowerCase().trim()).toSet();
+    DateTime cur = start;
+    while (!cur.isAfter(end)) {
+      final key = _weekdayKey(cur);
+      if (allow.contains(key)) return cur;
+      cur = cur.add(const Duration(days: 1));
+    }
+    return start;
+  }
+
+  String _weekdayKey(DateTime d) {
+    switch (d.weekday) {
+      case DateTime.monday:
+        return 'monday';
+      case DateTime.tuesday:
+        return 'tuesday';
+      case DateTime.wednesday:
+        return 'wednesday';
+      case DateTime.thursday:
+        return 'thursday';
+      case DateTime.friday:
+        return 'friday';
+      case DateTime.saturday:
+        return 'saturday';
+      case DateTime.sunday:
+      default:
+        return 'sunday';
+    }
+  }
+
+  String _fmtDate(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
   }
 
   Future<Response> _getAny(List<String> paths) async {
@@ -226,18 +400,24 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         return await _dio.get(p);
       } on DioException catch (e) {
         lastDio = e;
-        if (kDebugMode) debugPrint('GET failed: $p -> ${e.response?.statusCode}');
+        if (kDebugMode)
+          debugPrint('GET failed: $p -> ${e.response?.statusCode}');
       }
     }
-    throw Exception(lastDio?.message ?? 'Request failed');
+    throw Exception(
+      'تعذر جلب البيانات من السيرفر. حاول مرة أخرى.',
+    );
   }
 
   UserLocationProfile? _parseProfileLoc(dynamic data) {
     try {
       if (data is Map) {
         final m = data.cast<String, dynamic>();
-        final root = (m['data'] is Map) ? (m['data'] as Map).cast<String, dynamic>() : m;
-        final user = (root['user'] is Map) ? (root['user'] as Map).cast<String, dynamic>() : root;
+        final root =
+            (m['data'] is Map) ? (m['data'] as Map).cast<String, dynamic>() : m;
+        final user = (root['user'] is Map)
+            ? (root['user'] as Map).cast<String, dynamic>()
+            : root;
         final loc = (user['location'] is Map)
             ? (user['location'] as Map).cast<String, dynamic>()
             : (root['location'] is Map)
@@ -260,28 +440,28 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     return list.map((e) => AreaOption.fromJson(e)).toList();
   }
 
-  List<Map<String, dynamic>> _extractList(
-    dynamic data, {
-    required List<String> keys,
-  }) {
+  List<Map<String, dynamic>> _extractList(dynamic data,
+      {required List<String> keys}) {
     if (data is List) {
-      return data.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+      return data
+          .whereType<Map>()
+          .map((e) => e.cast<String, dynamic>())
+          .toList();
     }
-
     if (data is Map) {
       final m = data.cast<String, dynamic>();
-
-      // success wrapper
-      final root = (m['data'] is Map) ? (m['data'] as Map).cast<String, dynamic>() : m;
-
+      final root =
+          (m['data'] is Map) ? (m['data'] as Map).cast<String, dynamic>() : m;
       for (final k in keys) {
         final v = root[k];
         if (v is List) {
-          return v.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+          return v
+              .whereType<Map>()
+              .map((e) => e.cast<String, dynamic>())
+              .toList();
         }
       }
     }
-
     return const [];
   }
 

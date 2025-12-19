@@ -38,5 +38,6 @@ class AppRoutes {
   static const String providerReviews = '/provider/reviews';
   static const String providerAboutView = '/provider/about-view';
   static const ProviderEarningsView = '/provider/earnings';
+static const String providerRatings = '/provider-ratings';
 
 }

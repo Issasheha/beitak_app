@@ -5,21 +5,38 @@ import 'package:beitak_app/features/user/home/presentation/views/browse/widgets/
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+class AppException implements Exception {
+  final String message;
+  AppException(this.message);
+
+  @override
+  String toString() => message; // ✅ بدون "Exception:"
+}
+
 class ServiceDetailsViewModel {
   final Dio _dio = ApiClient.dio;
 
   Future<ServiceDetails> fetchServiceDetails(int id) async {
     try {
-      final res = await _dio.get(ApiConstants.serviceDetails(id));
-      final map = _expectSuccessMap(res.data);
+      final res = await _dio.get(
+        ApiConstants.serviceDetails(id),
+        options: Options(validateStatus: (_) => true),
+      );
+
+      final map = _asMap(res.data);
+      if (map['success'] != true) {
+        throw AppException(_readServerMessage(map));
+      }
+
       return ServiceDetailsResponse.fromJson(map).service;
     } on DioException catch (e) {
-      throw Exception(_extractErrorMessage(e));
+      throw AppException(_extractErrorMessage(e));
+    } catch (e) {
+      throw AppException(_stripExceptionPrefix(e.toString()));
     }
   }
 
   /// GET /bookings/available-days/:providerId?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
-  /// returns: { available_days: ["2025-12-01", ...] }
   Future<List<String>> fetchAvailableDays({
     required int providerId,
     required String startDate,
@@ -29,53 +46,59 @@ class ServiceDetailsViewModel {
       final res = await _dio.get(
         ApiConstants.availableDays(providerId),
         queryParameters: {'startDate': startDate, 'endDate': endDate},
+        options: Options(validateStatus: (_) => true),
       );
 
-      final data = res.data;
-      if (data is Map) {
-        final map = data.cast<String, dynamic>();
-        final raw = map['available_days'];
-        if (raw is List) {
-          return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
-        }
+      final map = _asMap(res.data);
+
+      final root = (map['data'] is Map)
+          ? (map['data'] as Map).cast<String, dynamic>()
+          : map;
+
+      final raw = root['available_days'] ?? root['available_dates'];
+      if (raw is List) {
+        return raw
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
-      throw Exception('Invalid available_days response');
+
+      if (map['success'] == false) {
+        throw AppException(_readServerMessage(map));
+      }
+
+      throw AppException('استجابة غير متوقعة من السيرفر (available_days).');
     } on DioException catch (e) {
-      throw Exception(_extractErrorMessage(e));
+      throw AppException(_extractErrorMessage(e));
+    } catch (e) {
+      throw AppException(_stripExceptionPrefix(e.toString()));
     }
   }
 
+  Future<void> sendBookingOtp({required String customerPhone}) async {
+    try {
+      final res = await _dio.post(
+        ApiConstants.bookingsSendOtp,
+        data: {'customer_phone': customerPhone},
+        options: Options(validateStatus: (_) => true),
+      );
 
-Future<void> sendBookingOtp({required String customerPhone}) async {
-  final res = await _dio.post(
-    ApiConstants.bookingsSendOtp,
-    data: {'customer_phone': customerPhone},
-    options: Options(
-      // ✅ خلي Dio ما يرمي exception حتى لو 500
-      validateStatus: (code) => true,
-    ),
-  );
+      final map = _asMap(res.data);
 
-  final code = res.statusCode ?? 0;
+      final code = res.statusCode ?? 0;
+      if (code >= 200 && code < 300) return;
 
-  // ✅ نجاح طبيعي
-  if (code >= 200 && code < 300) return;
+      if (code >= 500) return;
 
-  // ✅ workaround: لو الباك اند ببعث OTP ثم بيرجع 500 (bug عندهم بعد الإرسال)
-  if (code >= 500) {
-    return; // اعتبرها نجاح عشان نفتح خطوة إدخال OTP
+      throw AppException(
+        _readServerMessage(map, fallback: 'فشل إرسال رمز التحقق (OTP).'),
+      );
+    } on DioException catch (e) {
+      throw AppException(_extractErrorMessage(e));
+    } catch (e) {
+      throw AppException(_stripExceptionPrefix(e.toString()));
+    }
   }
-
-  // ✅ أخطاء 4xx غالباً مشكلة ببيانات الطلب
-  final data = res.data;
-  if (data is Map) {
-    final msg = (data['message'] ?? 'فشل إرسال OTP').toString();
-    throw Exception(msg);
-  }
-
-  throw Exception('فشل إرسال OTP (status=$code)');
-}
-
 
   Future<BookingResult> createBookingAsUser({
     required int serviceId,
@@ -109,11 +132,22 @@ Future<void> sendBookingOtp({required String customerPhone}) async {
     });
 
     try {
-      final res = await _dio.post(ApiConstants.bookingsCreate, data: payload);
-      final map = _expectSuccessMap(res.data);
+      final res = await _dio.post(
+        ApiConstants.bookingsCreate,
+        data: payload,
+        options: Options(validateStatus: (_) => true),
+      );
+
+      final map = _asMap(res.data);
+      if (map['success'] != true) {
+        throw AppException(_readServerMessage(map));
+      }
+
       return BookingResult.fromJson(map);
     } on DioException catch (e) {
-      throw Exception(_extractErrorMessage(e));
+      throw AppException(_extractErrorMessage(e));
+    } catch (e) {
+      throw AppException(_stripExceptionPrefix(e.toString()));
     }
   }
 
@@ -157,31 +191,45 @@ Future<void> sendBookingOtp({required String customerPhone}) async {
     });
 
     try {
-      final res = await _dio.post(ApiConstants.bookingsCreate, data: payload);
-      final map = _expectSuccessMap(res.data);
+      final res = await _dio.post(
+        ApiConstants.bookingsCreate,
+        data: payload,
+        options: Options(validateStatus: (_) => true),
+      );
+
+      final map = _asMap(res.data);
+      if (map['success'] != true) {
+        throw AppException(_readServerMessage(map));
+      }
+
       return BookingResult.fromJson(map);
     } on DioException catch (e) {
-      throw Exception(_extractErrorMessage(e));
+      throw AppException(_extractErrorMessage(e));
+    } catch (e) {
+      throw AppException(_stripExceptionPrefix(e.toString()));
     }
   }
 
   bool isOtpRequiredError(Object error) {
     final text = error.toString().toLowerCase();
+
     if (text.contains('otp_required')) return true;
     if (text.contains('otp') && text.contains('required')) return true;
+
+    if (text.contains('رمز') && text.contains('تحقق')) return true;
+    if (text.contains('otp') && text.contains('تحقق')) return true;
 
     return false;
   }
 
-  Map<String, dynamic> _expectSuccessMap(dynamic raw) {
-    if (raw is Map) {
-      final map = raw.cast<String, dynamic>();
-      if (map['success'] != true) {
-        throw Exception((map['message'] ?? 'unknown_error').toString());
-      }
-      return map;
-    }
-    throw Exception('Invalid server response');
+  // ----------------- Helpers -----------------
+
+  Map<String, dynamic> _asMap(dynamic raw) {
+    if (raw is Map) return raw.cast<String, dynamic>();
+    return <String, dynamic>{
+      'success': false,
+      'message': 'invalid_server_response',
+    };
   }
 
   Map<String, dynamic> _clean(Map<String, dynamic> m) {
@@ -194,30 +242,85 @@ Future<void> sendBookingOtp({required String customerPhone}) async {
     return out;
   }
 
+  String _readServerMessage(Map<String, dynamic> map, {String? fallback}) {
+    final msg = map['message']?.toString();
+    if (msg != null && msg.trim().isNotEmpty) {
+      return _localizeApiMessage(msg.trim());
+    }
+
+    final errors = map['errors'];
+    if (errors is Map) {
+      final keys = errors.keys.map((k) => k.toString()).toList();
+      return 'حقول ناقصة: ${keys.join(', ')}';
+    }
+
+    final missing = map['missing_fields'];
+    if (missing is List) {
+      return 'حقول ناقصة: ${missing.map((e) => e.toString()).join(', ')}';
+    }
+
+    return fallback ?? 'تعذر إتمام العملية، حاول مرة أخرى.';
+  }
+
+  String _localizeApiMessage(String m) {
+    final key = m.trim().toLowerCase();
+
+    switch (key) {
+      case 'day_not_available':
+        return 'هذا اليوم غير متاح للحجز لأن مزوّد الخدمة لديه حجز في نفس اليوم.';
+      case 'time_not_available':
+        return 'هذا الوقت غير متاح، اختر وقتاً آخر.';
+      case 'provider_not_available':
+        return 'مزود الخدمة غير متاح حالياً.';
+      case 'otp_required':
+      case 'otp_required_for_guest':
+        return 'لازم تحقق رقم الهاتف (OTP) لإكمال الحجز.';
+      case 'invalid_otp':
+        return 'رمز التحقق غير صحيح.';
+      case 'service_not_found':
+        return 'الخدمة غير موجودة.';
+      case 'provider_not_found':
+        return 'مزود الخدمة غير موجود.';
+      case 'route not found':
+        return 'المسار غير موجود على السيرفر.';
+      case 'invalid_server_response':
+        return 'استجابة غير صالحة من السيرفر.';
+      default:
+        return m;
+    }
+  }
+
   String _extractErrorMessage(DioException e) {
     try {
       final data = e.response?.data;
       if (data is Map) {
         final map = data.cast<String, dynamic>();
-        if (map['message'] != null) return map['message'].toString();
-
-        // أشكال شائعة: errors: {field:[msg]}
-        final errors = map['errors'];
-        if (errors is Map) {
-          final keys = errors.keys.map((k) => k.toString()).toList();
-          return 'Missing required field: ${keys.join(', ')}';
-        }
-
-        final missing = map['missing_fields'];
-        if (missing is List) {
-          return 'Missing required field: ${missing.map((e) => e.toString()).join(', ')}';
-        }
+        return _readServerMessage(
+          map,
+          fallback: 'فشل الطلب (${e.response?.statusCode ?? ''}).',
+        );
       }
     } catch (_) {}
 
     if (kDebugMode) {
-      debugPrint('Dio error: status=${e.response?.statusCode} data=${e.response?.data}');
+      debugPrint(
+        'Dio error: type=${e.type} status=${e.response?.statusCode} data=${e.response?.data}',
+      );
     }
-    return 'Request failed (${e.response?.statusCode ?? ''})';
+
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return 'انتهت مهلة الاتصال، حاول مرة أخرى.';
+    }
+    if (e.type == DioExceptionType.connectionError) {
+      return 'تعذر الاتصال بالسيرفر، تأكد من الإنترنت.';
+    }
+
+    return 'حدث خطأ غير متوقع.';
+  }
+
+  String _stripExceptionPrefix(String s) {
+    return s.replaceFirst(RegExp(r'^\s*exception:\s*', caseSensitive: false), '').trim();
   }
 }

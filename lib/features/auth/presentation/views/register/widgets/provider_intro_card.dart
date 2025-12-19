@@ -1,8 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 class ProviderIntroCard extends StatelessWidget {
   final VoidCallback onStartApplication;
@@ -111,23 +109,6 @@ class ProviderIntroCard extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: AppColors.lightGreen,
                   ),
-                ),
-              ),
-            ),
-
-            SizeConfig.v(8),
-
-            // زر تجريبي لفتح لوحة مزوّد الخدمة
-            TextButton(
-              onPressed: () {
-                context.push(AppRoutes.providerHome);
-              },
-              child: Text(
-                'تجربة لوحة مزوّد الخدمة (تجريبي)',
-                style: TextStyle(
-                  fontSize: SizeConfig.ts(13),
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.white.withValues(alpha: 0.9),
                 ),
               ),
             ),

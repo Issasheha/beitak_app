@@ -5,14 +5,14 @@ import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
+import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
+import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/my_service/providers/provider_my_services_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-import 'package:beitak_app/core/utils/app_text_styles.dart';
 
 class AddServiceView extends ConsumerStatefulWidget {
   const AddServiceView({super.key});
@@ -27,9 +27,28 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
   final _price = TextEditingController();
   final _desc = TextEditingController();
 
-  String? _selectedCategoryKey; // ✅ key ثابت
+  String? _selectedCategoryKey; // key ثابت
+  late final String _initialCategoryKey;
+
   String _priceType = 'hourly'; // hourly | fixed
+  late final String _initialPriceType;
+
   bool _submitting = false;
+
+  // نفس قواعد صفحة التعديل
+  static const double _minPrice = 0.01;
+  static const double _maxPrice = 10000;
+
+  static const int _descMin = 10;
+  static const int _descMax = 250;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialCategoryKey = FixedServiceCategories.all.first.key;
+    _selectedCategoryKey = _initialCategoryKey;
+    _initialPriceType = _priceType;
+  }
 
   @override
   void dispose() {
@@ -40,13 +59,93 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
 
   String _labelFromKey(String k) => FixedServiceCategories.labelArFromKey(k);
 
+  bool get _isDirty {
+    return _price.text.trim().isNotEmpty ||
+        _desc.text.trim().isNotEmpty ||
+        (_selectedCategoryKey != null && _selectedCategoryKey != _initialCategoryKey) ||
+        _priceType != _initialPriceType;
+  }
+
+  Future<bool> _confirmDiscardIfDirty() async {
+    if (!_isDirty) return true;
+
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تجاهل التغييرات؟'),
+          content: const Text('في تغييرات غير محفوظة، بدك تلغيها؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('متابعة'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.lightGreen),
+              child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return res == true;
+  }
+
+  void _doExit() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.providerHome);
+    }
+  }
+
+  Future<void> _exit() async {
+    if (!_isDirty) {
+      _doExit();
+      return;
+    }
+
+    final canLeave = await _confirmDiscardIfDirty();
+    if (!mounted) return;
+    if (canLeave) _doExit();
+  }
+
+  // ===== Validators =====
+
+  String? _validatePrice(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'السعر مطلوب';
+
+    final n = double.tryParse(s);
+    if (n == null) return 'السعر لازم يكون رقم';
+
+    if (n < _minPrice) return 'السعر لازم يكون أكبر من 0';
+    if (n > _maxPrice) return 'السعر كبير جدًا (أقصى حد $_maxPrice)';
+
+    return null;
+  }
+
+  String? _validateDesc(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'الوصف مطلوب';
+    if (s.length < _descMin) return 'الوصف لازم يكون على الأقل $_descMin أحرف';
+    if (s.length > _descMax) return 'الوصف لازم يكون أقل من $_descMax حرف';
+    return null;
+  }
+
+  // ===== Save =====
+
   Future<void> _save() async {
     if (_submitting) return;
 
     final valid = _formKey.currentState?.validate() ?? false;
     if (!valid) return;
 
-    if (_selectedCategoryKey == null) {
+    final key = _selectedCategoryKey;
+    if (key == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -62,17 +161,43 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
     setState(() => _submitting = true);
 
     try {
-      final basePrice = double.parse(_price.text.trim());
+      // ✅ هاد أهم جزء: نجيب category_id الحقيقي من /api/categories
+      final idMap = await ref.read(categoriesIdMapProvider.future);
+      final categoryId = idMap[key];
 
-      final serviceNameKey = _selectedCategoryKey!; // ✅ name = key
-      final categoryOther = _labelFromKey(_selectedCategoryKey!); // ✅ UI label
+      if (categoryId == null) {
+        // إذا ما لقيناه (مش المفروض يصير عندك) بنوقف عشان ما يرجع null ويخرب accept
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تعذر تحديد رقم الفئة (category_id). حدّث البيانات/جرّب مرة ثانية.',
+              style: AppTextStyles.body14.copyWith(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
-      final data = {
+      final basePrice = double.tryParse(_price.text.trim()) ?? 0;
+
+      final serviceNameKey = key; // ✅ نخلي name = key ثابت (plumbing, cleaning...)
+      final categoryOther = _labelFromKey(key); // ✅ عربي للعرض
+
+      final data = <String, dynamic>{
+        // ✅ نرسل الاثنين: category_id الحقيقي + category_other
+        'category_id': categoryId,
+        'category_other': categoryOther,
+
         'name': serviceNameKey,
         'description': _desc.text.trim(),
         'base_price': basePrice,
         'price_type': _priceType,
-        'category_other': categoryOther,
+
+        // اختياري: خليهم فاضيين واضح
+        'packages': [],
+        'add_ons': [],
       };
 
       await ApiClient.dio.post(
@@ -95,17 +220,13 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
         ),
       );
 
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.providerHome);
-      }
-    } catch (e) {
+      _doExit();
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'فشل إنشاء الخدمة: $e',
+            'تعذر إنشاء الخدمة. حاول مرة أخرى.',
             style: AppTextStyles.body14.copyWith(color: Colors.white),
           ),
           backgroundColor: Colors.red,
@@ -119,156 +240,142 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
-
     _selectedCategoryKey ??= FixedServiceCategories.all.first.key;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          title: Text(
-            'إنشاء خدمة جديدة',
-            style: AppTextStyles.title18.copyWith(
-              fontWeight: FontWeight.w900,
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        await _exit();
+      },
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: Text(
+              'إنشاء خدمة جديدة',
+              style: AppTextStyles.title18.copyWith(
+                fontWeight: FontWeight.w900,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            centerTitle: true,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const BackButtonIcon(),
               color: AppColors.textPrimary,
+              onPressed: _exit,
             ),
           ),
-          centerTitle: true,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: AppColors.textPrimary,
-            ),
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go(AppRoutes.providerHome);
-              }
-            },
-          ),
-        ),
-        body: Padding(
-          padding: SizeConfig.padding(all: 20),
-          child: SingleChildScrollView(
-            child: AbsorbPointer(
-              absorbing: _submitting,
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _label('فئة الخدمة *'),
-                    SizeConfig.v(8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: FixedServiceCategories.all.map((c) {
-                        final selected = _selectedCategoryKey == c.key;
-                        return ChoiceChip(
-                          label: Text(
-                            c.labelAr,
-                            style: AppTextStyles.body14.copyWith(
-                              color:
-                                  selected ? Colors.white : AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          selected: selected,
-                          selectedColor: AppColors.lightGreen,
-                          onSelected: (v) => setState(
-                            () => _selectedCategoryKey = v ? c.key : null,
-                          ),
-                        );
-                      }).toList(),
-                    ),
-
-                    SizeConfig.v(18),
-
-                    _label('نوع السعر *'),
-                    SizeConfig.v(6),
-                    _priceTypeSelector(),
-
-                    SizeConfig.v(18),
-
-                    _label('السعر (د.أ) *'),
-                    _input(
-                      _price,
-                      'مثال: 25',
-                      keyboardType: TextInputType.number,
-                    ),
-
-                    SizeConfig.v(18),
-
-                    _label('الوصف *'),
-                    _input(_desc, 'اشرح تفاصيل الخدمة...', maxLines: 4),
-
-                    SizeConfig.v(26),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                context.go(AppRoutes.providerHome);
-                              }
-                            },
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              side: const BorderSide(
-                                color: AppColors.buttonBackground,
-                              ),
-                              padding: SizeConfig.padding(vertical: 14),
-                            ),
-                            child: Text(
-                              'إلغاء',
+          body: Padding(
+            padding: SizeConfig.padding(all: 20),
+            child: SingleChildScrollView(
+              child: AbsorbPointer(
+                absorbing: _submitting,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label('فئة الخدمة *'),
+                      SizeConfig.v(8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: FixedServiceCategories.all.map((c) {
+                          final selected = _selectedCategoryKey == c.key;
+                          return ChoiceChip(
+                            label: Text(
+                              c.labelAr,
                               style: AppTextStyles.body14.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
+                                color: selected ? Colors.white : AppColors.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            selected: selected,
+                            selectedColor: AppColors.lightGreen,
+                            onSelected: (v) => setState(() => _selectedCategoryKey = v ? c.key : null),
+                          );
+                        }).toList(),
+                      ),
+
+                      SizeConfig.v(18),
+
+                      _label('نوع السعر *'),
+                      SizeConfig.v(6),
+                      _priceTypeSelector(),
+
+                      SizeConfig.v(18),
+
+                      _label('السعر (د.أ) *'),
+                      _input(
+                        _price,
+                        'مثال: 25',
+                        keyboardType: TextInputType.number,
+                        validator: _validatePrice,
+                      ),
+
+                      SizeConfig.v(18),
+
+                      _label('الوصف *'),
+                      _input(
+                        _desc,
+                        'اشرح تفاصيل الخدمة...',
+                        maxLines: 4,
+                        validator: _validateDesc,
+                      ),
+
+                      SizeConfig.v(26),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _exit,
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                side: const BorderSide(color: AppColors.buttonBackground),
+                                padding: SizeConfig.padding(vertical: 14),
+                              ),
+                              child: Text(
+                                'إلغاء',
+                                style: AppTextStyles.body14.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        SizeConfig.hSpace(12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _save,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.lightGreen,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                          SizeConfig.hSpace(12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _save,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.lightGreen,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: SizeConfig.padding(vertical: 14),
                               ),
-                              padding: SizeConfig.padding(vertical: 14),
+                              child: _submitting
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Text(
+                                      'حفظ الخدمة',
+                                      style: AppTextStyles.body14.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                             ),
-                            child: _submitting
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : Text(
-                                    'حفظ الخدمة',
-                                    style: AppTextStyles.body14.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -319,6 +426,7 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
     String hint, {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: c,
@@ -342,10 +450,9 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-      validator: (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+      validator: validator ?? (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
     );
   }
 }

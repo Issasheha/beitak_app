@@ -12,17 +12,20 @@ class ProviderAvailabilityStep extends StatefulWidget {
   final ValueChanged<TimeOfDay> onStartChanged;
   final ValueChanged<TimeOfDay> onEndChanged;
 
+  // ✅ Optional cancellation policy
+  final ValueChanged<String> onCancellationPolicyChanged;
+
   const ProviderAvailabilityStep({
     super.key,
     required this.formKey,
     required this.onDaysChanged,
     required this.onStartChanged,
     required this.onEndChanged,
+    required this.onCancellationPolicyChanged,
   });
 
   @override
-  State<ProviderAvailabilityStep> createState() =>
-      _ProviderAvailabilityStepState();
+  State<ProviderAvailabilityStep> createState() => _ProviderAvailabilityStepState();
 }
 
 class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
@@ -56,6 +59,11 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
       widget.onDaysChanged(_selectedDays);
       widget.onStartChanged(_startTime);
       widget.onEndChanged(_endTime);
+      widget.onCancellationPolicyChanged(_cancellationController.text.trim());
+    });
+
+    _cancellationController.addListener(() {
+      widget.onCancellationPolicyChanged(_cancellationController.text.trim());
     });
   }
 
@@ -76,7 +84,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
             'التوفر',
             style: AppTextStyles.title18.copyWith(
               fontSize: SizeConfig.ts(17),
-              fontWeight: FontWeight.w700, // كان bold
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
@@ -111,7 +119,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
                   day,
                   style: AppTextStyles.body14.copyWith(
                     fontSize: SizeConfig.ts(13),
-                    fontWeight: FontWeight.w400, // Regular
+                    fontWeight: FontWeight.w400,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -132,9 +140,7 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedDays.isEmpty) {
-                return 'اختر يومًا واحدًا على الأقل';
-              }
+              if (_selectedDays.isEmpty) return 'اختر يومًا واحدًا على الأقل';
               return null;
             },
             decoration: const InputDecoration(
@@ -192,9 +198,9 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           ),
           SizeConfig.v(16),
 
-          // سياسة الإلغاء
+          // سياسة الإلغاء (اختياري Strict doc)
           Text(
-            'سياسة الإلغاء *',
+            'سياسة الإلغاء (اختياري)',
             style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(14),
               fontWeight: FontWeight.w500,
@@ -221,18 +227,23 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
               ),
             ),
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'سياسة الإلغاء مطلوبة';
-              }
-              if (value.length < 20) {
-                return 'يرجى توضيح سياسة الإلغاء بشكل أكبر (20 حرفًا على الأقل)';
-              }
+              final v = (value ?? '').trim();
+              if (v.isEmpty) return null; // optional
+              if (v.length > 2000) return 'الحد الأقصى 2000 حرف';
+              if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
               return null;
             },
           ),
         ],
       ),
     );
+  }
+
+  static bool _looksLikeScriptOrHtml(String text) {
+    final t = text.toLowerCase();
+    if (t.contains('<') || t.contains('>')) return true;
+    if (t.contains('script')) return true;
+    return false;
   }
 
   Widget _buildTimeField({

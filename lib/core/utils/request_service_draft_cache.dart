@@ -8,27 +8,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 class RequestServiceDraftCache {
   static const String _key = 'draft_request_service';
 
-  static Future<void> save(RequestServiceDraft draft) async {
+  static Future<void> save(ServiceRequestDraft draft) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(draft.toJson()));
   }
 
-  static Future<RequestServiceDraft?> load() async {
+  static Future<ServiceRequestDraft?> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null || raw.trim().isEmpty) return null;
 
-    final decoded = jsonDecode(raw);
+    try {
+      final decoded = jsonDecode(raw);
 
-    if (decoded is Map<String, dynamic>) {
-      return RequestServiceDraft.fromJson(decoded);
+      if (decoded is Map<String, dynamic>) {
+        return ServiceRequestDraft.fromJson(decoded);
+      }
+      if (decoded is Map) {
+        return ServiceRequestDraft.fromJson(
+          decoded.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+      return null;
+    } catch (_) {
+      await clear();
+      return null;
     }
-    if (decoded is Map) {
-      return RequestServiceDraft.fromJson(
-        decoded.map((k, v) => MapEntry(k.toString(), v)),
-      );
-    }
-    return null;
   }
 
   static Future<void> clear() async {

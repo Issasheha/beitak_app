@@ -19,6 +19,10 @@ class ServiceDetailsState {
   final bool bookingLoading;
   final String? bookingError;
 
+  // ✅ NEW: availability (تواريخ متاحة للحجز)
+  final bool availabilityLoading;
+  final List<String> availableDates; // ["2025-12-18", "2025-12-19", ...]
+
   const ServiceDetailsState({
     required this.loading,
     required this.error,
@@ -33,6 +37,8 @@ class ServiceDetailsState {
     required this.selectedArea,
     required this.bookingLoading,
     required this.bookingError,
+    required this.availabilityLoading,
+    required this.availableDates,
   });
 
   factory ServiceDetailsState.initial() => const ServiceDetailsState(
@@ -49,6 +55,8 @@ class ServiceDetailsState {
         selectedArea: null,
         bookingLoading: false,
         bookingError: null,
+        availabilityLoading: false,
+        availableDates: [],
       );
 
   ServiceDetailsState copyWith({
@@ -67,6 +75,10 @@ class ServiceDetailsState {
     String? bookingError,
     bool clearError = false,
     bool clearBookingError = false,
+
+    // ✅ NEW
+    bool? availabilityLoading,
+    List<String>? availableDates,
   }) {
     return ServiceDetailsState(
       loading: loading ?? this.loading,
@@ -82,6 +94,9 @@ class ServiceDetailsState {
       selectedArea: selectedArea ?? this.selectedArea,
       bookingLoading: bookingLoading ?? this.bookingLoading,
       bookingError: clearBookingError ? null : (bookingError ?? this.bookingError),
+
+      availabilityLoading: availabilityLoading ?? this.availabilityLoading,
+      availableDates: availableDates ?? this.availableDates,
     );
   }
 

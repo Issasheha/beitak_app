@@ -122,6 +122,7 @@ class ProviderApplicationController
 
       final response =
           await _dio.post(ApiConstants.providerRegister, data: body);
+
       final data = response.data;
 
       if (data is! Map<String, dynamic>) {
@@ -129,8 +130,13 @@ class ProviderApplicationController
       }
 
       if (data['success'] != true) {
+        // ✅ حاول نقرأ status / errors لو موجودين (pending/rejected/suspended وغيرها)
+        final msg = _extractBackendMessage(data) ?? 'فشل إنشاء حساب المزوّد';
+        final statusText = _extractProviderStatus(data);
+        final finalMsg = _mapProviderStatusMessage(statusText) ?? msg;
+
         throw ServerException(
-          message: data['message']?.toString() ?? 'فشل إنشاء حساب المزوّد',
+          message: finalMsg,
           statusCode: response.statusCode ?? 0,
         );
       }
@@ -138,6 +144,14 @@ class ProviderApplicationController
       final payload = data['data'];
       if (payload is! Map<String, dynamic>) {
         throw const ServerException(message: 'Invalid response payload');
+      }
+
+      // ✅ لو الباك رجع status ضمن data بعد التسجيل
+      final statusText = _extractProviderStatus(data);
+      final statusMsg = _mapProviderStatusMessage(statusText);
+      if (statusMsg != null) {
+        state = state.copyWith(errorMessage: statusMsg);
+        return false;
       }
 
       final sessionModel = AuthSessionModel.fromJson({
@@ -148,10 +162,7 @@ class ProviderApplicationController
       await _local.cacheAuthSession(sessionModel);
       return true;
     } on DioException catch (e) {
-      final resp = e.response?.data;
-      final msg = (resp is Map<String, dynamic>)
-          ? (resp['message']?.toString() ?? 'تعذر الاتصال بالخادم')
-          : 'تعذر الاتصال بالخادم، تأكد من الاتصال بالإنترنت';
+      final msg = _mapDioErrorToMessage(e);
       state = state.copyWith(errorMessage: msg);
       return false;
     } on ServerException catch (e) {
@@ -165,124 +176,275 @@ class ProviderApplicationController
   }
 
   Future<bool> _completeProviderProfile({
-    required String businessName,
-    required String bio,
-    required int experienceYears,
-    required double hourlyRate,
-    required List<String> languages,
-    required List<String> serviceAreas,
-    required List<String> availableDaysAr,
-    required String workingStart,
-    required String workingEnd,
-    String? idDocPath,
-    String? licenseDocPath,
-    String? policeDocPath,
-  }) async {
-    try {
-      const dayMap = {
-        'السبت': 'saturday',
-        'الأحد': 'sunday',
-        'الاثنين': 'monday',
-        'الثلاثاء': 'tuesday',
-        'الأربعاء': 'wednesday',
-        'الخميس': 'thursday',
-        'الجمعة': 'friday',
-      };
+  required String businessName,
+  required String bio,
+  required int experienceYears,
+  required double hourlyRate,
+  required List<String> languages,
+  required List<String> serviceAreas,
+  required List<String> availableDaysAr,
+  required String workingStart,
+  required String workingEnd,
+  String? idDocPath,
+  String? licenseDocPath,
+  String? policeDocPath,
+}) async {
+  try {
+    const dayMap = {
+      'السبت': 'saturday',
+      'الأحد': 'sunday',
+      'الاثنين': 'monday',
+      'الثلاثاء': 'tuesday',
+      'الأربعاء': 'wednesday',
+      'الخميس': 'thursday',
+      'الجمعة': 'friday',
+    };
 
-      final availableDays =
-          availableDaysAr.map((d) => dayMap[d.trim()] ?? d.trim()).toList();
+    final availableDays =
+        availableDaysAr.map((d) => dayMap[d.trim()] ?? d.trim()).toList();
 
-      final workingHoursJson = jsonEncode({
-        'start': workingStart,
-        'end': workingEnd,
-      });
+    final workingHoursJson = jsonEncode({
+      'start': workingStart,
+      'end': workingEnd,
+    });
 
-      final formData = FormData();
+    final formData = FormData();
 
-      formData.fields.addAll([
-        MapEntry('business_name', businessName),
-        MapEntry('bio', bio),
-        MapEntry('experience_years', experienceYears.toString()),
-        MapEntry('hourly_rate', hourlyRate.toString()),
-        MapEntry('working_hours', workingHoursJson),
-      ]);
+    // إذا businessName/bio فاضيين بعد trim → ما نضيفهم للـ FormData
+    final bn = businessName.trim();
+    final b = bio.trim();
 
-      for (final lang in languages) {
-        formData.fields.add(MapEntry('languages[]', lang));
-      }
-      for (final area in serviceAreas) {
-        formData.fields.add(MapEntry('service_areas[]', area));
-      }
-      for (final d in availableDays) {
-        formData.fields.add(MapEntry('available_days[]', d));
-      }
-
-      if (idDocPath != null && idDocPath.isNotEmpty) {
-        formData.files.add(
-          MapEntry(
-            'id_verified_image',
-            await MultipartFile.fromFile(idDocPath,
-                filename: p.basename(idDocPath)),
-          ),
-        );
-      }
-
-      if (licenseDocPath != null && licenseDocPath.isNotEmpty) {
-        formData.files.add(
-          MapEntry(
-            'vocational_license_image',
-            await MultipartFile.fromFile(
-              licenseDocPath,
-              filename: p.basename(licenseDocPath),
-            ),
-          ),
-        );
-      }
-
-      if (policeDocPath != null && policeDocPath.isNotEmpty) {
-        formData.files.add(
-          MapEntry(
-            'police_clearance_image',
-            await MultipartFile.fromFile(
-              policeDocPath,
-              filename: p.basename(policeDocPath),
-            ),
-          ),
-        );
-      }
-
-      final response = await _dio.post(
-        ApiConstants.providerCompleteProfile,
-        data: formData,
-        options: Options(contentType: 'multipart/form-data'),
-      );
-
-      final data = response.data;
-      if (data is! Map<String, dynamic>) {
-        throw const ServerException(message: 'Invalid response format');
-      }
-
-      if (data['success'] != true) {
-        throw ServerException(
-          message: data['message']?.toString() ?? 'فشل إكمال ملف مزوّد الخدمة',
-        );
-      }
-
-      return true;
-    } on DioException catch (e) {
-      final resp = e.response?.data;
-      final msg = (resp is Map<String, dynamic>)
-          ? (resp['message']?.toString() ?? 'تعذر إكمال ملف مزوّد الخدمة')
-          : 'تعذر الاتصال بالخادم أثناء إكمال الملف';
-      state = state.copyWith(errorMessage: msg);
-      return false;
-    } on ServerException catch (e) {
-      state = state.copyWith(errorMessage: e.message);
-      return false;
-    } catch (_) {
-      state =
-          state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إكمال الملف');
-      return false;
+    if (bn.isNotEmpty) {
+      formData.fields.add(MapEntry('business_name', bn));
     }
+
+    if (b.isNotEmpty) {
+      formData.fields.add(MapEntry('bio', b));
+    }
+
+    formData.fields.addAll([
+      MapEntry('experience_years', experienceYears.toString()),
+      MapEntry('hourly_rate', hourlyRate.toString()),
+      MapEntry('working_hours', workingHoursJson),
+    ]);
+
+    for (final lang in languages) {
+      final v = lang.trim();
+      if (v.isNotEmpty) formData.fields.add(MapEntry('languages[]', v));
+    }
+
+    for (final area in serviceAreas) {
+      final v = area.trim();
+      if (v.isNotEmpty) formData.fields.add(MapEntry('service_areas[]', v));
+    }
+
+    for (final d in availableDays) {
+      final v = d.trim();
+      if (v.isNotEmpty) formData.fields.add(MapEntry('available_days[]', v));
+    }
+
+    if (idDocPath != null && idDocPath.isNotEmpty) {
+      formData.files.add(
+        MapEntry(
+          'id_verified_image',
+          await MultipartFile.fromFile(
+            idDocPath,
+            filename: p.basename(idDocPath),
+          ),
+        ),
+      );
+    }
+
+    if (licenseDocPath != null && licenseDocPath.isNotEmpty) {
+      formData.files.add(
+        MapEntry(
+          'vocational_license_image',
+          await MultipartFile.fromFile(
+            licenseDocPath,
+            filename: p.basename(licenseDocPath),
+          ),
+        ),
+      );
+    }
+
+    if (policeDocPath != null && policeDocPath.isNotEmpty) {
+      formData.files.add(
+        MapEntry(
+          'police_clearance_image',
+          await MultipartFile.fromFile(
+            policeDocPath,
+            filename: p.basename(policeDocPath),
+          ),
+        ),
+      );
+    }
+
+    final response = await _dio.post(
+      ApiConstants.providerCompleteProfile,
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+
+    final data = response.data;
+    if (data is! Map<String, dynamic>) {
+      throw const ServerException(message: 'Invalid response format');
+    }
+
+    if (data['success'] != true) {
+      final msg = _extractBackendMessage(data) ?? 'فشل إكمال ملف مزوّد الخدمة';
+      final statusText = _extractProviderStatus(data);
+      final finalMsg = _mapProviderStatusMessage(statusText) ?? msg;
+      throw ServerException(message: finalMsg);
+    }
+
+    // ✅ status مثل pending بعد النجاح = معلومة فقط
+    // لا نعمل return false ولا نخزنها في errorMessage
+    // (اعرضها بالـ UI إذا بدك بعد ok==true)
+    return true;
+  } on DioException catch (e) {
+    final msg = _mapDioErrorToMessage(e);
+    state = state.copyWith(errorMessage: msg);
+    return false;
+  } on ServerException catch (e) {
+    state = state.copyWith(errorMessage: e.message);
+    return false;
+  } catch (_) {
+    state = state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إكمال الملف');
+    return false;
+  }
+}
+
+
+  // =========================
+  // Helpers (Strict, Form-level)
+  // =========================
+
+  String _mapDioErrorToMessage(DioException e) {
+    final statusCode = e.response?.statusCode;
+    final resp = e.response?.data;
+
+    // ✅ Duplicate check (الأكثر شيوعاً 409)
+    if (statusCode == 409) {
+      return 'رقم الجوال أو البريد الإلكتروني مستخدم مسبقًا';
+    }
+
+    if (resp is Map<String, dynamic>) {
+      // لو في message
+      final msg = _extractBackendMessage(resp);
+
+      // لو في errors (Laravel-style) مثلاً: {errors: {email:[...], phone:[...]}}
+      final errorsMsg = _extractErrorsAsSingleMessage(resp);
+      final combined = (errorsMsg ?? msg)?.trim();
+
+      // إذا الرسالة بتدل على duplicate حتى لو مش 409
+      final duplicateDetected = _looksLikeDuplicate(combined);
+
+      if (duplicateDetected) {
+        return 'رقم الجوال أو البريد الإلكتروني مستخدم مسبقًا';
+      }
+
+      // pending/rejected/suspended من الرسالة نفسها
+      final statusText = _extractProviderStatus(resp) ?? combined;
+      final statusMsg = _mapProviderStatusMessage(statusText);
+      if (statusMsg != null) return statusMsg;
+
+      if (combined != null && combined.isNotEmpty) return combined;
+    }
+
+    return 'تعذر الاتصال بالخادم، تأكد من الاتصال بالإنترنت';
+  }
+
+  String? _extractBackendMessage(Map<String, dynamic> data) {
+    final m = data['message'];
+    if (m == null) return null;
+    final s = m.toString().trim();
+    return s.isEmpty ? null : s;
+    }
+
+  String? _extractErrorsAsSingleMessage(Map<String, dynamic> data) {
+    final errors = data['errors'];
+    if (errors is! Map) return null;
+
+    final buffer = <String>[];
+    errors.forEach((k, v) {
+      if (v is List && v.isNotEmpty) {
+        buffer.add(v.first.toString());
+      }
+    });
+
+    if (buffer.isEmpty) return null;
+    // رسالة واحدة Form-level
+    return buffer.join('\n');
+  }
+
+  bool _looksLikeDuplicate(String? msg) {
+    if (msg == null) return false;
+    final t = msg.toLowerCase();
+    return t.contains('already') ||
+        t.contains('exists') ||
+        t.contains('taken') ||
+        t.contains('duplicate') ||
+        msg.contains('موجود') ||
+        msg.contains('مستخدم') ||
+        msg.contains('مسجل') ||
+        msg.contains('سابقاً') ||
+        msg.contains('سابقًا');
+  }
+
+  // نحاول نلقط status من أي مكان محتمل بالريسبونس
+  String? _extractProviderStatus(Map<String, dynamic> data) {
+    // حالات محتملة: data['status'], data['data']['status'], data['data']['provider']['status']...
+    final s1 = data['status'];
+    if (s1 != null) return s1.toString();
+
+    final d = data['data'];
+    if (d is Map<String, dynamic>) {
+      final s2 = d['status'];
+      if (s2 != null) return s2.toString();
+
+      final provider = d['provider'];
+      if (provider is Map<String, dynamic>) {
+        final s3 = provider['status'];
+        if (s3 != null) return s3.toString();
+      }
+    }
+
+    return null;
+  }
+
+  String? _mapProviderStatusMessage(String? statusOrMessage) {
+    if (statusOrMessage == null) return null;
+
+    final t = statusOrMessage.toLowerCase();
+
+    // إنجليزي
+    if (t.contains('pending')) {
+      return 'طلبك قيد المراجعة حاليًا (Pending).';
+    }
+    if (t.contains('rejected')) {
+      return 'تم رفض طلبك (Rejected). يرجى التواصل مع الدعم أو تعديل بياناتك.';
+    }
+    if (t.contains('suspended') || t.contains('blocked')) {
+      return 'حسابك موقوف مؤقتًا (Suspended). يرجى التواصل مع الدعم.';
+    }
+
+    // عربي
+    if (statusOrMessage.contains('قيد المراجعة') ||
+        statusOrMessage.contains('قيد الانتظار') ||
+        statusOrMessage.contains('معلق')) {
+      return 'طلبك قيد المراجعة حاليًا.';
+    }
+
+    if (statusOrMessage.contains('مرفوض') ||
+        statusOrMessage.contains('تم الرفض')) {
+      return 'تم رفض طلبك. يرجى التواصل مع الدعم أو تعديل بياناتك.';
+    }
+
+    if (statusOrMessage.contains('موقوف') ||
+        statusOrMessage.contains('محظور')) {
+      return 'حسابك موقوف مؤقتًا. يرجى التواصل مع الدعم.';
+    }
+
+    return null;
   }
 }
