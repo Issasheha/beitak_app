@@ -36,6 +36,7 @@ import 'package:beitak_app/features/user/home/presentation/views/browse/provider
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/service_details_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/my_service_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/profile/help_center_user_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/profile_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/change_password_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/request_service/request_service_view.dart';
@@ -393,8 +394,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const AboutView(),
       ),
       GoRoute(
-        path: AppRoutes.ProviderEarningsView,
-        name: AppRoutes.ProviderEarningsView,
+        path: AppRoutes.providerEarningsView,
+        name: AppRoutes.providerEarningsView,
         builder: (context, state) => const ProviderEarningsView(),
       ),
       GoRoute(
@@ -411,6 +412,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
+      GoRoute(
+  path: AppRoutes.userTerms,
+  builder: (context, state) => const TermsAndConditionsView(),
+),
+GoRoute(
+  path: AppRoutes.userHelpCenter,
+  builder: (context, state) => const HelpCenterUserView(),
+),
+GoRoute(
+  path: AppRoutes.userAbout,
+  builder: (context, state) => const AboutView(),
+),
+
     ],
   );
 });

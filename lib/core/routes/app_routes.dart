@@ -37,7 +37,9 @@ class AppRoutes {
   static const String providerHistory = '/provider/history';
   static const String providerReviews = '/provider/reviews';
   static const String providerAboutView = '/provider/about-view';
-  static const ProviderEarningsView = '/provider/earnings';
-static const String providerRatings = '/provider-ratings';
-
+  static const String providerEarningsView = '/provider/earnings';
+  static const String providerRatings = '/provider-ratings';
+  static const userTerms = '/user/terms';
+  static const userHelpCenter = '/user/help-center';
+  static const userAbout = '/user/about';
 }

@@ -398,7 +398,7 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
         title: 'أرباح الشهر',
         value: jd(vm.stats.thisMonthEarnings),
         emoji: '💰',
-        onTap: () => context.push(AppRoutes.ProviderEarningsView),
+        onTap: () => context.push(AppRoutes.providerEarningsView),
       ),
       ProviderHeaderStat(
         title: 'القادمة',

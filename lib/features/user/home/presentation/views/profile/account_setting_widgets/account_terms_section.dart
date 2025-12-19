@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/routes/app_routes.dart';
 
 class AccountTermsSection extends StatelessWidget {
   const AccountTermsSection({super.key});
@@ -19,31 +22,19 @@ class AccountTermsSection extends StatelessWidget {
           _Tile(
             title: 'الشروط والأحكام',
             icon: Icons.description_outlined,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('قريبًا: الشروط والأحكام')),
-              );
-            },
+            onTap: () => context.push(AppRoutes.userTerms),
           ),
           _Divider(),
           _Tile(
             title: 'المساعدة والدعم',
             icon: Icons.support_agent,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('قريبًا: المساعدة والدعم')),
-              );
-            },
+            onTap: () => context.push(AppRoutes.userHelpCenter),
           ),
           _Divider(),
           _Tile(
             title: 'حول بيتك',
             icon: Icons.info_outline,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('قريبًا: حول بيتك')),
-              );
-            },
+            onTap: () => context.push(AppRoutes.userAbout),
           ),
         ],
       ),
