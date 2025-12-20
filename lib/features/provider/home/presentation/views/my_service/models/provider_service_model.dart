@@ -60,6 +60,8 @@ class ProviderServiceModel {
   final String? description;
   final double basePrice;
   final String priceType; // hourly | fixed
+
+  /// (موجود بالباك، بس ممكن ما نعتمد عليه بالـ UI)
   final bool isActive;
 
   /// ✅ جديد: إذا موجود من الباك-إند نستخدمه لإظهار Badge "جديد"
@@ -74,16 +76,23 @@ class ProviderServiceModel {
     required this.description,
     required this.basePrice,
     required this.priceType,
-    required this.isActive,
+    this.isActive = true,
+    this.isNew = false,
     required this.packages,
-    required this.isNew,
   });
+
+  static bool _toBool(dynamic v) {
+    if (v == null) return false;
+    if (v is bool) return v;
+    if (v is num) return v == 1;
+    final s = v.toString().trim().toLowerCase();
+    return s == '1' || s == 'true' || s == 'yes';
+  }
 
   factory ProviderServiceModel.fromJson(Map<String, dynamic> json) {
     final pkgsRaw = (json['packages'] is List) ? (json['packages'] as List) : const [];
 
     final isNewRaw = json['is_new'] ?? json['isNew'] ?? json['new'] ?? json['is_new_service'];
-    final parsedIsNew = isNewRaw == true || isNewRaw == 1 || isNewRaw == '1';
 
     return ProviderServiceModel(
       id: (json['id'] as num).toInt(),
@@ -94,9 +103,11 @@ class ProviderServiceModel {
           ? (json['base_price'] as num).toDouble()
           : double.tryParse('${json['base_price']}') ?? 0,
       priceType: (json['price_type'] ?? 'hourly').toString(),
-      isActive: (json['is_active'] == true),
-      isNew: parsedIsNew,
-      packages: pkgsRaw.map((e) => ProviderServicePackage.fromJson(Map<String, dynamic>.from(e))).toList(),
+      isActive: _toBool(json['is_active']),
+      isNew: _toBool(isNewRaw),
+      packages: pkgsRaw
+          .map((e) => ProviderServicePackage.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
     );
   }
 }

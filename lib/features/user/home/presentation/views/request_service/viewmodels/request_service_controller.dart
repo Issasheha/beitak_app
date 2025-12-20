@@ -44,8 +44,9 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       await _loadCities();
       await _loadCategories();
     } finally {
-      if (!mounted) return;
-      state = state.copyWith(sessionLoading: false);
+      if (mounted) {
+        state = state.copyWith(sessionLoading: false);
+      }
     }
   }
 
@@ -129,8 +130,9 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       if (!mounted) return;
       state = state.copyWith(citiesError: _niceError(e));
     } finally {
-      if (!mounted) return;
-      state = state.copyWith(citiesLoading: false);
+      if (mounted) {
+        state = state.copyWith(citiesLoading: false);
+      }
     }
   }
 
@@ -168,8 +170,9 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       if (!mounted) return;
       state = state.copyWith(areasError: _niceError(e));
     } finally {
-      if (!mounted) return;
-      state = state.copyWith(areasLoading: false);
+      if (mounted) {
+        state = state.copyWith(areasLoading: false);
+      }
     }
   }
 
@@ -270,7 +273,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       if (!mounted) return;
       state = state.copyWith(files: newFiles);
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       _snack(context, _niceError(e));
     }
   }
@@ -321,10 +324,12 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     final ok = formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
-    final name =
-        state.showNameField ? nameCtrl.text.trim() : (state.sessionName ?? '').trim();
-    final phone =
-        state.showPhoneField ? phoneCtrl.text.trim() : (state.sessionPhone ?? '').trim();
+    final name = state.showNameField
+        ? nameCtrl.text.trim()
+        : (state.sessionName ?? '').trim();
+    final phone = state.showPhoneField
+        ? phoneCtrl.text.trim()
+        : (state.sessionPhone ?? '').trim();
 
     if (name.isEmpty) {
       _snack(context, 'الاسم مطلوب');
@@ -352,11 +357,14 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       return;
     }
 
+    // show share dialog (context used before await ok)
     final share = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (_) => SharePhoneDialog(phone: phone),
     );
+
+    if (!context.mounted) return;
     if (share == null) return;
 
     if (!mounted) return;
@@ -367,6 +375,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     try {
       if (state.isGuest) {
         await _vm.sendServiceReqOtp(phone: phone);
+        if (!context.mounted) return;
 
         guestOtp = await showDialog<String>(
           context: context,
@@ -378,16 +387,19 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
           ),
         );
 
-        if (guestOtp == null || guestOtp!.trim().isEmpty) {
+        if (!context.mounted) return;
+
+        if (guestOtp == null || guestOtp.trim().isEmpty) {
           _snack(context, 'لم يتم التحقق من الرقم');
           return;
         }
-        guestOtp = guestOtp!.trim();
+        guestOtp = guestOtp.trim();
       }
 
-      final serviceDateIso = _resolveSelectedDateIso(state.dateType, state.otherDate);
+      final serviceDateIso =
+          _resolveSelectedDateIso(state.dateType, state.otherDate);
       if (serviceDateIso == null) {
-        _snack(context, 'تعذر تحديد التاريخ. حاول مجدداً.');
+        if (context.mounted) _snack(context, 'تعذر تحديد التاريخ. حاول مجدداً.');
         return;
       }
 
@@ -412,7 +424,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       );
 
       await _vm.submitServiceRequest(draft);
-
+      if (!context.mounted) return;
       if (!mounted) return;
 
       await showDialog<void>(
@@ -420,7 +432,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         barrierDismissible: false,
         builder: (_) => const SuccessDialog(),
       );
-
+      if (!context.mounted) return;
       if (!mounted) return;
 
       nameCtrl.clear();
@@ -440,11 +452,12 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         files: const [],
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       _snack(context, _niceError(e));
     } finally {
-      if (!mounted) return;
-      state = state.copyWith(submitting: false);
+      if (mounted) {
+        state = state.copyWith(submitting: false);
+      }
     }
   }
 
@@ -454,7 +467,8 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     final txt = text.trim();
     if (txt.isEmpty) return null;
 
-    final normalized = txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
+    final normalized =
+        txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
     return double.tryParse(normalized);
   }
 
@@ -488,6 +502,10 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   }
 
   void _snack(BuildContext context, String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    // ملاحظة: دايماً نتحقق من mounted قبل استخدام context (خصوصاً بعد await)
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 }

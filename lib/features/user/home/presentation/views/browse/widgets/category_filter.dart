@@ -31,7 +31,7 @@ class CategoryFilter extends StatelessWidget {
         ),
         SizeConfig.v(8),
         DropdownButtonFormField<String>(
-          value: selectedCategory,
+          initialValue: selectedCategory,
           decoration: InputDecoration(
             contentPadding:
                 SizeConfig.padding(horizontal: 16, vertical: 16),

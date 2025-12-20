@@ -130,7 +130,10 @@ class _PackageSelectorSheetState extends State<PackageSelectorSheet> {
                     ),
                     child: const Text(
                       'تأكيد',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ),
@@ -146,7 +149,10 @@ class _PackageSelectorSheetState extends State<PackageSelectorSheet> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.w900)),
+                    child: const Text(
+                      'إلغاء',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
                   ),
                 ),
               ],
@@ -213,10 +219,14 @@ class _RadioCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.lightGreen.withOpacity(0.10) : Colors.white,
+          color: selected
+              ? AppColors.lightGreen.withValues(alpha: 0.10)
+              : Colors.white,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: selected ? AppColors.lightGreen.withOpacity(0.35) : AppColors.borderLight,
+            color: selected
+                ? AppColors.lightGreen.withValues(alpha: 0.35)
+                : AppColors.borderLight,
           ),
         ),
         child: Row(
@@ -256,11 +266,14 @@ class _RadioCard extends StatelessWidget {
             if (trailingText != null) ...[
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.lightGreen.withOpacity(0.10),
+                  color: AppColors.lightGreen.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.lightGreen.withOpacity(0.20)),
+                  border: Border.all(
+                    color: AppColors.lightGreen.withValues(alpha: 0.20),
+                  ),
                 ),
                 child: Text(
                   trailingText!,

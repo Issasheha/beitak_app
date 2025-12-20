@@ -39,31 +39,31 @@ class ProviderHistoryController
       final customer = raw['customer'] ?? {};
       final service = raw['service'] ?? {};
 
-      String _s(dynamic v) => (v ?? '').toString();
-      double _d(dynamic v) {
+      String s(dynamic v) => (v ?? '').toString();
+      double d(dynamic v) {
         if (v is num) return v.toDouble();
         return double.tryParse(v?.toString() ?? '0') ?? 0.0;
       }
 
-      final bookingDate = _s(raw['booking_date']); // 2025-12-10
-      final bookingTime = _s(raw['booking_time']); // 04:00:00
+      final bookingDate = s(raw['booking_date']); // 2025-12-10
+      final bookingTime = s(raw['booking_time']); // 04:00:00
 
       final dateLabel = bookingDate; // ممكن نعمل فورمات أجمل لاحقاً
       final timeLabel = bookingTime; // أو: "04:00"
 
-      final status = _s(raw['status']).toLowerCase();
+      final status = s(raw['status']).toLowerCase();
 
-      final city = _s(raw['service_city']);
+      final city = s(raw['service_city']);
       final area = raw['service_area']?.toString();
 
-      final firstName = _s(customer['first_name']);
-      final lastName = _s(customer['last_name']);
+      final firstName = s(customer['first_name']);
+      final lastName = s(customer['last_name']);
       final customerName = (firstName.isEmpty && lastName.isEmpty)
           ? 'عميل'
           : '$firstName $lastName';
 
       final serviceName =
-          _s(service['name_ar'].toString().isNotEmpty
+          s(service['name_ar'].toString().isNotEmpty
               ? service['name_ar']
               : service['name']);
 
@@ -76,7 +76,7 @@ class ProviderHistoryController
         area: area,
         dateLabel: dateLabel,
         timeLabel: timeLabel,
-        totalPrice: _d(raw['total_price']),
+        totalPrice: d(raw['total_price']),
         cancellationReason:
             raw['cancellation_reason']?.toString().trim().isEmpty ?? true
                 ? null
@@ -134,28 +134,28 @@ class ProviderHistoryController
         final customer = raw['customer'] ?? {};
         final service = raw['service'] ?? {};
 
-        String _s(dynamic v) => (v ?? '').toString();
-        double _d(dynamic v) {
+        String s(dynamic v) => (v ?? '').toString();
+        double d(dynamic v) {
           if (v is num) return v.toDouble();
           return double.tryParse(v?.toString() ?? '0') ?? 0.0;
         }
 
-        final bookingDate = _s(raw['booking_date']);
-        final bookingTime = _s(raw['booking_time']);
+        final bookingDate = s(raw['booking_date']);
+        final bookingTime = s(raw['booking_time']);
 
-        final status = _s(raw['status']).toLowerCase();
+        final status = s(raw['status']).toLowerCase();
 
-        final city = _s(raw['service_city']);
+        final city = s(raw['service_city']);
         final area = raw['service_area']?.toString();
 
-        final firstName = _s(customer['first_name']);
-        final lastName = _s(customer['last_name']);
+        final firstName = s(customer['first_name']);
+        final lastName = s(customer['last_name']);
         final customerName = (firstName.isEmpty && lastName.isEmpty)
             ? 'عميل'
             : '$firstName $lastName';
 
         final serviceName =
-            _s(service['name_ar'].toString().isNotEmpty
+            s(service['name_ar'].toString().isNotEmpty
                 ? service['name_ar']
                 : service['name']);
 
@@ -168,7 +168,7 @@ class ProviderHistoryController
           area: area,
           dateLabel: bookingDate,
           timeLabel: bookingTime,
-          totalPrice: _d(raw['total_price']),
+          totalPrice: d(raw['total_price']),
           cancellationReason:
               raw['cancellation_reason']?.toString().trim().isEmpty ?? true
                   ? null

@@ -201,7 +201,9 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final k = r.toLowerCase();
     if (k.contains('provider')) return 'تم الإلغاء من قبل المزود';
-    if (k.contains('customer') || k.contains('user')) return 'تم الإلغاء من قبل العميل';
+    if (k.contains('customer') || k.contains('user')) {
+      return 'تم الإلغاء من قبل العميل';
+    }
     if (k.contains('system')) return 'تم الإلغاء تلقائياً';
     return 'سبب الإلغاء غير محدد';
   }
@@ -349,7 +351,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 ),
               ),
               SizeConfig.v(18),
-
               DetailsLine(
                 icon: Icons.calendar_today_rounded,
                 iconColor: AppColors.textSecondary,
@@ -386,7 +387,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   icon: Icons.phone_rounded,
                   iconColor: AppColors.textSecondary,
                   label: 'الهاتف:',
-                  value: _toArabicDigits(providerPhone!),
+                  // ✅ إزالة ! (غير ضروري) لأنه داخل شرط يضمن عدم null
+                  value: _toArabicDigits(providerPhone),
                 ),
               if (isCancelled)
                 DetailsLine(
@@ -395,7 +397,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   label: 'سبب الإلغاء:',
                   value: cancelReason.isEmpty ? 'غير محدد' : cancelReason,
                 ),
-
               if (state.isLoading) ...[
                 SizeConfig.v(14),
                 const Center(child: CircularProgressIndicator()),
@@ -420,23 +421,19 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   ),
                 ),
               ],
-
               SizeConfig.v(18),
-
               StatusFooterBox(
                 text: ui.footerText,
                 bg: ui.bg,
                 border: ui.border,
                 textColor: ui.color,
               ),
-
               if (!isCancelled && !isCompleted && (isPending || isUpcoming))
                 CancelButton(
                   isLoading:
                       ref.watch(serviceDetailsControllerProvider).isCancelling,
                   onPressed: () => _confirmCancel(status),
                 ),
-
               SizeConfig.v(10),
             ],
           ),
@@ -584,7 +581,11 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       },
     );
 
-    if (ok != true) return;
+    if (ok != true) {
+      // ✅ ملاحظة صغيرة: تنظيف الكنترولر حتى لو المستخدم لغى
+      noteCtrl.dispose();
+      return;
+    }
 
     final controller = ref.read(serviceDetailsControllerProvider.notifier);
 
@@ -596,12 +597,20 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
           noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
     );
 
+    // ✅ ملاحظة صغيرة: الآن خلصنا من noteCtrl
+    noteCtrl.dispose();
+
     final latest = ref.read(serviceDetailsControllerProvider);
+
+    // ✅ حل تحذيرات use_build_context_synchronously
+    if (!mounted) return;
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم إلغاء الطلب بنجاح')),
       );
+
+      if (!context.mounted) return;
       context.pop(true);
     } else {
       final msg = latest.error ?? 'تعذّر إلغاء الطلب';

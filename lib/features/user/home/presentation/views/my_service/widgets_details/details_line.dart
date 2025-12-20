@@ -38,14 +38,14 @@ class DetailsLine extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: '$label ',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary,
                     ),
                   ),
                   TextSpan(
                     text: value,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       color: AppColors.textSecondary,
                     ),

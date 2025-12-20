@@ -1,5 +1,3 @@
-import 'package:beitak_app/features/provider/home/presentation/views/provider_earnings_view.dart';
-
 class AppRoutes {
   static const String splash = '/';
   static const String onboarding = '/onboarding';

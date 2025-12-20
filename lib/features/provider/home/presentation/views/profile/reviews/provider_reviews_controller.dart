@@ -63,36 +63,36 @@ class ProviderReviewsController
     final pagination = root['pagination'] ?? {};
 
     List<ProviderReviewItem> newItems = rawList.map((raw) {
-      String _s(dynamic v) => (v ?? '').toString();
+      String s(dynamic v) => (v ?? '').toString();
 
       final customer = raw['customer'] ?? {};
       final service = raw['service'] ?? {};
       final booking = raw['booking'] ?? {};
 
-      final firstName = _s(customer['first_name']);
-      final lastName = _s(customer['last_name']);
+      final firstName = s(customer['first_name']);
+      final lastName = s(customer['last_name']);
       final customerName = (firstName.isEmpty && lastName.isEmpty)
           ? 'عميل'
           : '$firstName $lastName';
 
       final serviceName =
-          _s(service['name_ar'].toString().isNotEmpty
+          s(service['name_ar'].toString().isNotEmpty
               ? service['name_ar']
               : service['name']);
 
       // نستخدم booking_date للفورمات
-      final dateStr = _s(booking['booking_date']).isNotEmpty
-          ? _s(booking['booking_date'])
-          : _s(raw['created_at']);
+      final dateStr = s(booking['booking_date']).isNotEmpty
+          ? s(booking['booking_date'])
+          : s(raw['created_at']);
       final dateLabel = _arabicDate(dateStr);
 
-      final rating = int.tryParse(_s(raw['rating'])) ?? 0;
+      final rating = int.tryParse(s(raw['rating'])) ?? 0;
 
       return ProviderReviewItem(
         id: raw['id'] as int,
         rating: rating.clamp(1, 5),
-        review: _s(raw['review']),
-        reviewAr: _s(raw['review_ar']).isEmpty ? null : _s(raw['review_ar']),
+        review: s(raw['review']),
+        reviewAr: s(raw['review_ar']).isEmpty ? null : s(raw['review_ar']),
         customerName: customerName,
         serviceName:
             serviceName.isEmpty ? 'خدمة بدون اسم' : serviceName,

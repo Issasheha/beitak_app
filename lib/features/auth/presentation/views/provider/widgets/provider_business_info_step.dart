@@ -281,8 +281,9 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedServiceAreas.isEmpty)
+              if (_selectedServiceAreas.isEmpty) {
                 return 'اختر منطقة خدمة واحدة على الأقل';
+              }
               return null;
             },
             decoration: const InputDecoration(

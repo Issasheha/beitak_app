@@ -182,8 +182,8 @@ class _ServiceBookingFormSheetState
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close,
-                          color: AppColors.textPrimary),
+                      icon:
+                          const Icon(Icons.close, color: AppColors.textPrimary),
                     ),
                   ],
                 ),
@@ -202,17 +202,16 @@ class _ServiceBookingFormSheetState
                     children: [
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 180),
-                        child: (_inlineMsg == null ||
-                                _inlineMsg!.trim().isEmpty)
-                            ? const SizedBox.shrink()
-                            : _InlineBanner(
-                                key: const ValueKey('inline_banner'),
-                                message: _inlineMsg!,
-                                type: _inlineMsgType,
-                                onClose: _clearInline,
-                              ),
+                        child:
+                            (_inlineMsg == null || _inlineMsg!.trim().isEmpty)
+                                ? const SizedBox.shrink()
+                                : _InlineBanner(
+                                    key: const ValueKey('inline_banner'),
+                                    message: _inlineMsg!,
+                                    type: _inlineMsgType,
+                                    onClose: _clearInline,
+                                  ),
                       ),
-
                       if (availabilityLoading) ...[
                         const SizedBox(height: 10),
                         const _InlineBanner(
@@ -221,10 +220,8 @@ class _ServiceBookingFormSheetState
                           onClose: null,
                         ),
                       ],
-
                       if (_inlineMsg != null || availabilityLoading)
                         const SizedBox(height: 10),
-
                       BookingDetailsCard(
                         loading: st.locLoading,
                         selectedDateLabel: selectedDateLabel,
@@ -256,13 +253,10 @@ class _ServiceBookingFormSheetState
                           _clearInline();
                           ctrl.setSelectedArea(a);
                         },
-                        areaEnabled:
-                            st.areas.isNotEmpty && !st.locLoading,
+                        areaEnabled: st.areas.isNotEmpty && !st.locLoading,
                         notesCtrl: _notesCtrl,
                       ),
-
                       const SizedBox(height: 12),
-
                       PackageSelectorTile(
                         hasPackages: s.packages.isNotEmpty,
                         selectedLabel: selectedPackageLabel,
@@ -273,7 +267,6 @@ class _ServiceBookingFormSheetState
                                 await _openPackagePicker(context, ctrl, s);
                               },
                       ),
-
                       const SizedBox(height: 14),
                     ],
                   ),
@@ -481,8 +474,7 @@ class _ServiceBookingFormSheetState
               margin: EdgeInsets.only(top: SizeConfig.h(120)),
               decoration: const BoxDecoration(
                 color: AppColors.background,
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(22)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -522,11 +514,9 @@ class _ServiceBookingFormSheetState
                   Flexible(
                     child: ListView.separated(
                       shrinkWrap: true,
-                      padding:
-                          const EdgeInsets.fromLTRB(16, 6, 16, 16),
+                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
                       itemCount: slots.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 8),
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (context, i) {
                         final t = slots[i];
                         final selected = (_selectedTime == t);
@@ -540,11 +530,9 @@ class _ServiceBookingFormSheetState
                             ),
                             decoration: BoxDecoration(
                               color: selected
-                                  ? AppColors.lightGreen
-                                      .withValues(alpha: 0.10)
+                                  ? AppColors.lightGreen.withValues(alpha: 0.10)
                                   : Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: selected
                                     ? AppColors.lightGreen
@@ -563,12 +551,10 @@ class _ServiceBookingFormSheetState
                                 Expanded(
                                   child: Text(
                                     t,
-                                    style: AppTextStyles.semiBold
-                                        .copyWith(
+                                    style: AppTextStyles.semiBold.copyWith(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w900,
-                                      fontSize:
-                                          SizeConfig.ts(13.5),
+                                      fontSize: SizeConfig.ts(13.5),
                                     ),
                                   ),
                                 ),
@@ -686,11 +672,9 @@ class _ServiceBookingFormSheetState
         (area?.slug ?? '').trim().isEmpty ? 'abdoun' : area!.slug.toLowerCase();
 
     final bookingDate = _fmtDate(st.selectedDate!);
-    final bookingTime =
-        _toTimeWithSeconds(_selectedTime!.trim()); // HH:mm:ss
+    final bookingTime = _toTimeWithSeconds(_selectedTime!.trim()); // HH:mm:ss
 
-    final durationHours =
-        s.durationHours <= 0 ? 1.0 : s.durationHours;
+    final durationHours = s.durationHours <= 0 ? 1.0 : s.durationHours;
     final notes =
         _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
 
@@ -709,7 +693,8 @@ class _ServiceBookingFormSheetState
         type: _InlineMsgType.success,
       );
       await Future.delayed(const Duration(milliseconds: 750));
-      if (mounted) Navigator.pop(context, true);
+      if (!context.mounted) return;
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (ctrl.isOtpRequiredError(e)) {
         final parentContext = context;
@@ -719,52 +704,53 @@ class _ServiceBookingFormSheetState
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (sheetCtx) => GuestBookingSheet(
-            onSendOtp: (phone) =>
-                ctrl.sendBookingOtp(customerPhone: phone),
-            onConfirm: ({
-              required String name,
-              required String phone,
-              required String otp,
-            }) async {
-              try {
-                await ctrl.createBookingAsGuest(
-                  bookingDate: bookingDate,
-                  bookingTime: bookingTime,
-                  durationHours: durationHours,
-                  serviceCity: citySlug,
-                  serviceArea: areaSlug,
-                  customerName: name,
-                  customerPhone: phone,
-                  otp: otp,
-                  notes: notes,
-                );
+              onSendOtp: (phone) => ctrl.sendBookingOtp(customerPhone: phone),
+              onConfirm: ({
+                required String name,
+                required String phone,
+                required String otp,
+              }) async {
+                final sheetNav = Navigator.of(sheetCtx); // ✅ قبل await
+                final parentNav = Navigator.of(parentContext); // ✅ قبل await
 
-                if (Navigator.canPop(sheetCtx)) {
-                  Navigator.pop(sheetCtx);
-                }
+                try {
+                  await ctrl.createBookingAsGuest(
+                    bookingDate: bookingDate,
+                    bookingTime: bookingTime,
+                    durationHours: durationHours,
+                    serviceCity: citySlug,
+                    serviceArea: areaSlug,
+                    customerName: name,
+                    customerPhone: phone,
+                    otp: otp,
+                    notes: notes,
+                  );
 
-                if (mounted) {
+                  if (sheetNav.canPop()) {
+                    sheetNav.pop();
+                  }
+
+                  if (!mounted) return;
+
                   _showInline(
                     'تم إنشاء الحجز كضيف ✅',
                     type: _InlineMsgType.success,
                   );
-                  await Future.delayed(
-                      const Duration(milliseconds: 750));
-                  if (mounted) {
-                    Navigator.pop(parentContext, true);
-                  }
-                }
-              } catch (e2) {
-                if (mounted) {
+
+                  await Future.delayed(const Duration(milliseconds: 750));
+
+                  if (!parentContext.mounted) return;
+                  parentNav.pop(true);
+                } catch (e2) {
+                  if (!mounted) return;
                   _showInline(
                     'فشل تأكيد الحجز: ${e2.toString()}',
                     type: _InlineMsgType.error,
                   );
                 }
-              }
-            },
-          ),
+              }),
         );
+
         return;
       }
 
@@ -791,11 +777,10 @@ class _ServiceBookingFormSheetState
 
   Set<String> _safeAvailableDateSet(dynamic state) {
     // نطلع تاريخ واحد من أي شكل سترنج
-    String? _extractDate(String s) {
+    String? extractDate(String s) {
       s = s.trim();
       if (s.isEmpty) return null;
 
-      // لو ISO زي 2025-12-21 أو 2025-12-21T...
       final match = RegExp(r'\d{4}-\d{2}-\d{2}').firstMatch(s);
       if (match != null) {
         return match.group(0);
@@ -804,7 +789,7 @@ class _ServiceBookingFormSheetState
     }
 
     // نضيف عنصر واحد (string أو map) للمجموعة
-    void _addOne(dynamic v, Set<String> out) {
+    void addOne(dynamic v, Set<String> out) {
       if (v == null) return;
 
       if (v is Map) {
@@ -812,40 +797,37 @@ class _ServiceBookingFormSheetState
             v['date'] ?? v['day_date'] ?? v['booking_date'] ?? v['dayDate'];
         if (raw != null) {
           final s = raw.toString();
-          final d = _extractDate(s);
+          final d = extractDate(s);
           if (d != null && d.isNotEmpty) out.add(d);
         }
         return;
       }
 
-      // لو سترنج أو أي نوع آخر
-      final d = _extractDate(v.toString());
+      final d = extractDate(v.toString());
       if (d != null && d.isNotEmpty) out.add(d);
     }
 
-    Set<String> _normalize(dynamic raw) {
+    Set<String> normalize(dynamic raw) {
       final out = <String>{};
       if (raw is Iterable) {
         for (final v in raw) {
-          _addOne(v, out);
+          addOne(v, out);
         }
       } else {
-        _addOne(raw, out);
+        addOne(raw, out);
       }
       return out;
     }
 
-    // نحاول availableDates أولاً
     try {
       final raw = (state as dynamic).availableDates;
-      final normalized = _normalize(raw);
+      final normalized = normalize(raw);
       if (normalized.isNotEmpty) return normalized;
     } catch (_) {}
 
-    // fallback: availableDays
     try {
       final raw = (state as dynamic).availableDays;
-      final normalized = _normalize(raw);
+      final normalized = normalize(raw);
       if (normalized.isNotEmpty) return normalized;
     } catch (_) {}
 
@@ -879,9 +861,8 @@ class _ServiceBookingFormSheetState
         return 'saturday';
       case DateTime.sunday:
         return 'sunday';
-      default:
-        return 'monday';
     }
+    return 'monday';
   }
 }
 
@@ -911,13 +892,14 @@ class _InlineBanner extends StatelessWidget {
         border = AppColors.lightGreen.withValues(alpha: 0.35);
         icon = Icons.check_circle_rounded;
         break;
+
       case _InlineMsgType.info:
         bg = AppColors.cardBackground;
         border = AppColors.borderLight;
         icon = Icons.info_outline_rounded;
         break;
+
       case _InlineMsgType.error:
-      default:
         bg = Colors.redAccent.withValues(alpha: 0.08);
         border = Colors.redAccent.withValues(alpha: 0.35);
         icon = Icons.error_outline_rounded;
@@ -987,16 +969,15 @@ class _SheetError extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: const BoxDecoration(
             color: AppColors.background,
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(22)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 message,
-                style: AppTextStyles.body
-                    .copyWith(color: AppColors.textSecondary),
+                style:
+                    AppTextStyles.body.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 12),
               ElevatedButton(

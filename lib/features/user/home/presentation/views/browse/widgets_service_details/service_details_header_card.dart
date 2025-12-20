@@ -27,11 +27,6 @@ class ServiceDetailsHeaderCard extends StatelessWidget {
   final bool bookingLoading;
   final VoidCallback onBookNow;
 
-  bool get _showDuration {
-    final d = durationLabel.trim();
-    return d.isNotEmpty && d != '—';
-  }
-
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);

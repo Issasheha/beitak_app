@@ -128,7 +128,6 @@ class _ProviderServiceDetailsSheetState
       Navigator.of(context).pop(true);
     } catch (_) {
       if (!mounted) return;
-      // ✅ بدون تفاصيل تقنية
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -182,7 +181,7 @@ class _ProviderServiceDetailsSheetState
                 ),
                 SizeConfig.v(12),
 
-                // title row
+                // title row (بدون Badge نشطة/غير نشطة)
                 Row(
                   children: [
                     Expanded(
@@ -193,29 +192,6 @@ class _ProviderServiceDetailsSheetState
                           fontSize: SizeConfig.ts(16.5),
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: (widget.service.isActive
-                                ? AppColors.lightGreen
-                                : Colors.grey)
-                            .withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        widget.service.isActive ? 'نشطة' : 'غير نشطة',
-                        style: AppTextStyles.label12.copyWith(
-                          fontSize: SizeConfig.ts(12),
-                          fontWeight: FontWeight.w700,
-                          color: widget.service.isActive
-                              ? AppColors.lightGreen
-                              : Colors.grey,
                         ),
                       ),
                     ),
@@ -266,28 +242,7 @@ class _ProviderServiceDetailsSheetState
                 // Main actions row
                 Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.lightGreen,
-                          side: const BorderSide(color: AppColors.lightGreen),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding: SizeConfig.padding(vertical: 12),
-                        ),
-                        child: Text(
-                          'إغلاق',
-                          style: AppTextStyles.body14.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.lightGreen,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                   Expanded(
                       child: ElevatedButton(
                         onPressed: () async {
                           final res = await Navigator.of(context).push<bool>(
@@ -326,6 +281,27 @@ class _ProviderServiceDetailsSheetState
                           style: AppTextStyles.body14.copyWith(
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                     Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.lightGreen,
+                          side: const BorderSide(color: AppColors.lightGreen),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          padding: SizeConfig.padding(vertical: 12),
+                        ),
+                        child: Text(
+                          'إغلاق',
+                          style: AppTextStyles.body14.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.lightGreen,
                           ),
                         ),
                       ),

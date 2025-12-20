@@ -188,10 +188,10 @@ class _ProviderManageAvailabilityViewState
           if (_vm.isSaving)
             Padding(
               padding: EdgeInsetsDirectional.only(end: SizeConfig.w(4)),
-              child: SizedBox(
+              child: const SizedBox(
                 width: 18,
                 height: 18,
-                child: const CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
           IconButton(

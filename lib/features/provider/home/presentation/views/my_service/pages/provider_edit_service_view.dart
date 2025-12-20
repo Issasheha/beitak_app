@@ -25,13 +25,11 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
   late final TextEditingController _desc;
 
   late String _priceType; // hourly | fixed
-  late bool _isActive;
 
   // ✅ Dirty tracking
   late final String _initialPrice;
   late final String _initialDesc;
   late final String _initialPriceType;
-  late final bool _initialIsActive;
 
   bool _saving = false;
 
@@ -48,12 +46,10 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
     _initialPrice = widget.service.basePrice.toStringAsFixed(0);
     _initialDesc = (widget.service.description ?? '');
     _initialPriceType = widget.service.priceType;
-    _initialIsActive = widget.service.isActive;
 
     _price = TextEditingController(text: _initialPrice);
     _desc = TextEditingController(text: _initialDesc);
     _priceType = _initialPriceType;
-    _isActive = _initialIsActive;
 
     // ✅ سخّن ماب التصنيفات (اختياري)
     Future.microtask(() => ref.read(categoriesIdMapProvider.future));
@@ -69,8 +65,7 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
   bool get _isDirty {
     return _price.text.trim() != _initialPrice.trim() ||
         _desc.text.trim() != _initialDesc.trim() ||
-        _priceType != _initialPriceType ||
-        _isActive != _initialIsActive;
+        _priceType != _initialPriceType;
   }
 
   Future<bool> _confirmDiscardIfDirty() async {
@@ -134,6 +129,7 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
 
   Future<void> _save() async {
     if (_saving) return;
+
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -146,7 +142,6 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
         'base_price': basePrice,
         'price_type': _priceType,
         'description': _desc.text.trim(),
-        'is_active': _isActive,
       };
 
       // ✅ إصلاح CATEGORY_MISMATCH: نثبت category_id عند أي تعديل
@@ -157,8 +152,7 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
         if (categoryId != null) {
           payload['category_id'] = categoryId;
           payload['category_other'] = FixedServiceCategories.labelArFromKey(key);
-          // كمان نخلي name = key ثابت (لو حبيت)
-          payload['name'] = key;
+          payload['name'] = key; // ✅ name ثابت
         }
       }
 
@@ -224,18 +218,6 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _label('حالة الخدمة'),
-                    SwitchListTile(
-                      value: _isActive,
-                      onChanged: (v) => setState(() => _isActive = v),
-                      activeThumbColor: AppColors.lightGreen,
-                      title: Text(
-                        _isActive ? 'نشطة' : 'غير نشطة',
-                        style: const TextStyle(color: AppColors.textPrimary),
-                      ),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-
                     _label('نوع السعر'),
                     Wrap(
                       spacing: 8,
@@ -283,6 +265,30 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
                     Row(
                       children: [
                         Expanded(
+                          child: ElevatedButton(
+                            onPressed: _save,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.lightGreen,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              padding: SizeConfig.padding(vertical: 12),
+                            ),
+                            child: _saving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'حفظ',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
                           child: OutlinedButton(
                             onPressed: () async {
                               final canLeave = await _confirmDiscardIfDirty();
@@ -296,24 +302,6 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
                               padding: SizeConfig.padding(vertical: 12),
                             ),
                             child: const Text('إلغاء', style: TextStyle(fontWeight: FontWeight.w700)),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _save,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.lightGreen,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                              padding: SizeConfig.padding(vertical: 12),
-                            ),
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                  )
-                                : const Text('حفظ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                           ),
                         ),
                       ],
@@ -355,7 +343,10 @@ class _ProviderEditServiceViewState extends ConsumerState<ProviderEditServiceVie
         hintText: hint,
         filled: true,
         fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       validator: validator,

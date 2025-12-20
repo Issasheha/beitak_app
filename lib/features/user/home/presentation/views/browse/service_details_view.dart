@@ -176,7 +176,7 @@ class _DetailsContent extends StatelessWidget {
     final displayedPrice = _calcDisplayedPrice(state);
 
     // ما عندك category name بالموديل (فقط categoryId) — مؤقتاً ثابت
-    final categoryLabel = 'خدمات المنزل';
+    const categoryLabel = 'خدمات المنزل';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -228,7 +228,7 @@ class _DetailsContent extends StatelessWidget {
 
           // (اختياري) عرض الباقات
           if (s.packages.isNotEmpty) ...[
-            _SectionTitle(title: 'الباقات'),
+            const _SectionTitle(title: 'الباقات'),
             const SizedBox(height: 8),
             ...s.packages.map(
               (pkg) => _InfoTile(
@@ -241,7 +241,7 @@ class _DetailsContent extends StatelessWidget {
           ],
 
           if (s.addOns.isNotEmpty) ...[
-            _SectionTitle(title: 'إضافات'),
+            const _SectionTitle(title: 'إضافات'),
             const SizedBox(height: 8),
             ...s.addOns.map(
               (a) => _InfoTile(

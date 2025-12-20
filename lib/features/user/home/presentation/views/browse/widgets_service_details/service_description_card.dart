@@ -26,7 +26,7 @@ class ServiceDescriptionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SectionHeader(title: 'وصف الخدمة'),
+          const _SectionHeader(title: 'وصف الخدمة'),
           SizeConfig.v(10),
           Text(
             text,

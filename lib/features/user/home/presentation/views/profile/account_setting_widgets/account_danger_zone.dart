@@ -27,7 +27,7 @@ class AccountDangerZone extends StatelessWidget {
         onTap: () async {
           final confirmed = await showDialog<bool>(
             context: context,
-            builder: (ctx) => _ConfirmDangerDialog(
+            builder: (ctx) => const _ConfirmDangerDialog(
               title: 'حذف الحساب',
               message:
                   'هل أنت متأكد أنك تريد حذف حسابك؟\n'

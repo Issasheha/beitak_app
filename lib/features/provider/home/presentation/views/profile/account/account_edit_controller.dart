@@ -26,16 +26,16 @@ class AccountEditController extends StateNotifier<AsyncValue<AccountEditState>> 
   }
 
   AccountEditState _mapResponseToState(dynamic data) {
-    Map<String, dynamic> _asMap(dynamic v) {
+    Map<String, dynamic> asMap(dynamic v) {
       if (v is Map<String, dynamic>) return v;
       if (v is Map) return Map<String, dynamic>.from(v);
       return <String, dynamic>{};
     }
 
-    final root = _asMap(data);
-    final dataNode = _asMap(root['data']);
+    final root = asMap(data);
+    final dataNode = asMap(root['data']);
 
-    final user = _asMap(
+    final user = asMap(
       dataNode['user'] ??
           dataNode['profile'] ??
           (dataNode.isNotEmpty ? dataNode : root['user']),
@@ -55,7 +55,7 @@ class AccountEditController extends StateNotifier<AsyncValue<AccountEditState>> 
     final email = (user['email'] ?? '').toString().trim();
     final phone = (user['phone'] ?? '').toString().trim();
 
-    bool _b(dynamic v) {
+    bool b(dynamic v) {
       if (v == null) return false;
       if (v is bool) return v;
       if (v is num) return v != 0;
@@ -64,8 +64,8 @@ class AccountEditController extends StateNotifier<AsyncValue<AccountEditState>> 
     }
 
     final isEmailVerified =
-        _b(user['is_email_verified'] ?? user['email_verified']);
-    final isPhoneVerified = _b(
+        b(user['is_email_verified'] ?? user['email_verified']);
+    final isPhoneVerified = b(
       user['is_phone_verified'] ?? user['phone_verified'] ?? user['is_verified'],
     );
 

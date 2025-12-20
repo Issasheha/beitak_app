@@ -332,24 +332,6 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                       Row(
                         children: [
                           Expanded(
-                            child: OutlinedButton(
-                              onPressed: _exit,
-                              style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                side: const BorderSide(color: AppColors.buttonBackground),
-                                padding: SizeConfig.padding(vertical: 14),
-                              ),
-                              child: Text(
-                                'إلغاء',
-                                style: AppTextStyles.body14.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          SizeConfig.hSpace(12),
-                          Expanded(
                             child: ElevatedButton(
                               onPressed: _save,
                               style: ElevatedButton.styleFrom(
@@ -370,6 +352,24 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                                         fontWeight: FontWeight.w800,
                                       ),
                                     ),
+                            ),
+                          ),
+                          SizeConfig.hSpace(12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _exit,
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                side: const BorderSide(color: AppColors.buttonBackground),
+                                padding: SizeConfig.padding(vertical: 14),
+                              ),
+                              child: Text(
+                                'إلغاء',
+                                style: AppTextStyles.body14.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
                             ),
                           ),
                         ],

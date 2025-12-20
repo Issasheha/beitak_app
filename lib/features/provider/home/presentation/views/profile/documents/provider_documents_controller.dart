@@ -24,10 +24,10 @@ class ProviderDocumentsController
     final provider = (data['data'] ?? {})['provider'] ?? {};
     // لو الـ backend مختلف شوي، بس عدّل الوصول لهون.
 
-    String? _s(dynamic v) =>
+    String? s(dynamic v) =>
         (v == null || (v is String && v.isEmpty)) ? null : v.toString();
 
-    bool _b(dynamic v) {
+    bool b(dynamic v) {
       if (v is bool) return v;
       if (v is num) return v != 0;
       if (v is String) return v.toLowerCase() == 'true';
@@ -38,8 +38,8 @@ class ProviderDocumentsController
       ProviderDocument(
         kind: ProviderDocKind.idCard,
         title: 'بطاقة الهوية',
-        fileName: _s(provider['id_verified_image']),
-        isVerified: _b(provider['is_id_verified']),
+        fileName: s(provider['id_verified_image']),
+        isVerified: b(provider['is_id_verified']),
         isRequired: true,
         isRecommended: false,
         isUploading: false,
@@ -47,8 +47,8 @@ class ProviderDocumentsController
       ProviderDocument(
         kind: ProviderDocKind.workLicense,
         title: 'رخصة العمل / الترخيص المهني',
-        fileName: _s(provider['vocational_license_image']),
-        isVerified: _b(provider['is_license_verified']),
+        fileName: s(provider['vocational_license_image']),
+        isVerified: b(provider['is_license_verified']),
         isRequired: true,
         isRecommended: false,
         isUploading: false,
@@ -56,8 +56,8 @@ class ProviderDocumentsController
       ProviderDocument(
         kind: ProviderDocKind.policeClearance,
         title: 'شهادة عدم المحكومية',
-        fileName: _s(provider['police_clearance_image']),
-        isVerified: _b(provider['is_police_clearance_verified']),
+        fileName: s(provider['police_clearance_image']),
+        isVerified: b(provider['is_police_clearance_verified']),
         isRequired: false,
         isRecommended: true,
         isUploading: false,
@@ -103,7 +103,7 @@ class ProviderDocumentsController
           file.path,
           filename: file.uri.pathSegments.isNotEmpty
               ? file.uri.pathSegments.last
-              : 'document_${fieldName}',
+              : 'document_$fieldName',
         ),
       });
 
@@ -116,10 +116,10 @@ class ProviderDocumentsController
       final data = res.data;
       final provider = (data['data'] ?? {})['provider'] ?? {};
 
-      String? _s(dynamic v) =>
+      String? s(dynamic v) =>
           (v == null || (v is String && v.isEmpty)) ? null : v.toString();
 
-      bool _b(dynamic v) {
+      bool b(dynamic v) {
         if (v is bool) return v;
         if (v is num) return v != 0;
         if (v is String) return v.toLowerCase() == 'true';
@@ -130,22 +130,22 @@ class ProviderDocumentsController
       final updatedDocs = current.docs.map((d) {
         if (d.kind == ProviderDocKind.idCard) {
           return d.copyWith(
-            fileName: _s(provider['id_verified_image']),
-            isVerified: _b(provider['is_id_verified']),
+            fileName: s(provider['id_verified_image']),
+            isVerified: b(provider['is_id_verified']),
             isUploading: false,
           );
         }
         if (d.kind == ProviderDocKind.workLicense) {
           return d.copyWith(
-            fileName: _s(provider['vocational_license_image']),
-            isVerified: _b(provider['is_license_verified']),
+            fileName: s(provider['vocational_license_image']),
+            isVerified: b(provider['is_license_verified']),
             isUploading: false,
           );
         }
         if (d.kind == ProviderDocKind.policeClearance) {
           return d.copyWith(
-            fileName: _s(provider['police_clearance_image']),
-            isVerified: _b(provider['is_police_clearance_verified']),
+            fileName: s(provider['police_clearance_image']),
+            isVerified: b(provider['is_police_clearance_verified']),
             isUploading: false,
           );
         }

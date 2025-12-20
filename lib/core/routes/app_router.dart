@@ -34,8 +34,8 @@ import 'package:beitak_app/features/user/home/presentation/search_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/browse_service_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/provider_ratings_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
-import 'package:beitak_app/features/user/home/presentation/views/my_service/service_details_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/my_service_view.dart';
+import 'package:beitak_app/features/user/home/presentation/views/my_service/service_details_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/help_center_user_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/profile_view.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/change_password_view.dart';
@@ -88,7 +88,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     AppRoutes.providerMarketplace,
   };
 
-  // صفحات User فقط (نترك HelpCenter متاح للجميع لو حبيت، بس خلّيه هنا إذا بدك ينعزل)
+  // صفحات User فقط
   const userOnlyRoutes = <String>{
     AppRoutes.home,
     AppRoutes.profile,
@@ -102,12 +102,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     AppRoutes.serviceDetail,
   };
 
-  String _encodeFrom(GoRouterState state) {
+  // ✅ لا تبدأ بـ "_" لأنها local داخل function
+  String encodeFrom(GoRouterState state) {
     final full = state.uri.toString(); // يشمل query
     return Uri.encodeComponent(full);
   }
 
-  bool _isSafeFromRaw(String fromRaw) {
+  // ✅ لا تبدأ بـ "_" لأنها local داخل function
+  bool isSafeFromRaw(String fromRaw) {
     if (!fromRaw.startsWith('/')) return false;
 
     const blocked = <String>{
@@ -124,11 +126,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
   }
 
   /// يرجّع from مناسب حسب الدور (وإلا null)
-  String? _safeFromForRole({
+  // ✅ لا تبدأ بـ "_" لأنها local داخل function
+  String? safeFromForRole({
     required String decodedFrom,
     required bool isProvider,
   }) {
-    if (!_isSafeFromRaw(decodedFrom)) return null;
+    if (!isSafeFromRaw(decodedFrom)) return null;
 
     // نقرأ path فقط (بدون query)
     final path = Uri.parse(decodedFrom).path;
@@ -162,8 +165,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       // 2) Onboarding أول مرة
       if (!seenOnboarding) {
-        if (path == AppRoutes.onboarding || path == AppRoutes.splash)
+        // ✅ إضافة أقواس لحل curly_braces_in_flow_control_structures
+        if (path == AppRoutes.onboarding || path == AppRoutes.splash) {
           return null;
+        }
         return AppRoutes.onboarding;
       }
 
@@ -176,14 +181,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       // 4) غير مسجل
       if (auth.status == AuthStatus.unauthenticated) {
         if (publicRoutes.contains(path)) return null;
-        return '${AppRoutes.login}?from=${_encodeFrom(state)}';
+        return '${AppRoutes.login}?from=${encodeFrom(state)}';
       }
 
       // 5) ضيف
       if (auth.status == AuthStatus.guest) {
         // ممنوع على صفحات الحساب الحقيقي
         if (authOnlyRoutes.contains(path)) {
-          return '${AppRoutes.login}?from=${_encodeFrom(state)}';
+          return '${AppRoutes.login}?from=${encodeFrom(state)}';
         }
 
         // ممنوع يفتح صفحات Provider
@@ -212,7 +217,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final from = state.uri.queryParameters['from'];
           if (from != null && from.isNotEmpty) {
             final decoded = Uri.decodeComponent(from);
-            final safe = _safeFromForRole(
+            final safe = safeFromForRole(
               decodedFrom: decoded,
               isProvider: auth.isProvider,
             );
@@ -297,11 +302,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.changePassword,
         builder: (context, state) => const ChangePasswordView(),
       ),
-      // GoRoute(
-      //   path: AppRoutes.helpCenter,
-      //   name: AppRoutes.helpCenter,
-      //   builder: (context, state) => const HelpCenterView(),
-      // ),
       GoRoute(
         path: AppRoutes.providerHome,
         name: AppRoutes.providerHome,
@@ -412,19 +412,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-  path: AppRoutes.userTerms,
-  builder: (context, state) => const TermsAndConditionsView(),
-),
-GoRoute(
-  path: AppRoutes.userHelpCenter,
-  builder: (context, state) => const HelpCenterUserView(),
-),
-GoRoute(
-  path: AppRoutes.userAbout,
-  builder: (context, state) => const AboutView(),
-),
 
+      // User pages
+      GoRoute(
+        path: AppRoutes.userTerms,
+        builder: (context, state) => const TermsAndConditionsView(),
+      ),
+      GoRoute(
+        path: AppRoutes.userHelpCenter,
+        builder: (context, state) => const HelpCenterUserView(),
+      ),
+      GoRoute(
+        path: AppRoutes.userAbout,
+        builder: (context, state) => const AboutView(),
+      ),
     ],
   );
 });

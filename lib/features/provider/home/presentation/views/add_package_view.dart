@@ -24,17 +24,14 @@ class AddPackageView extends ConsumerStatefulWidget {
 class _AddPackageViewState extends ConsumerState<AddPackageView> {
   final _formKey = GlobalKey<FormState>();
 
-  final _name = TextEditingController();
   final _price = TextEditingController();
   final _desc = TextEditingController();
+  final List<TextEditingController> _featuresCtrls = [];
 
   String? _selectedCategoryKey;
   late final String _initialCategoryKey;
 
   bool _submitting = false;
-
-  static const int _nameMin = 2;
-  static const int _nameMax = 60;
 
   static const double _minPrice = 0.01;
   static const double _maxPrice = 10000;
@@ -42,28 +39,108 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   static const int _descMin = 10;
   static const int _descMax = 250;
 
+  static const int _featureMin = 3;
+  static const int _featureMax = 60;
+
+  // types
+  static const String _tStandard = 'standard';
+  static const String _tPremium = 'premium';
+  static const String _tEmergency = 'emergency';
+
+  String _selectedType = _tEmergency;
+  late final String _initialType;
+
   @override
   void initState() {
     super.initState();
     _initialCategoryKey = FixedServiceCategories.all.first.key;
     _selectedCategoryKey = _initialCategoryKey;
 
+    _initialType = _selectedType;
+
+    _featuresCtrls.add(TextEditingController());
+
     Future.microtask(() => ref.read(categoriesIdMapProvider.future));
   }
 
   @override
   void dispose() {
-    _name.dispose();
     _price.dispose();
     _desc.dispose();
+    for (final c in _featuresCtrls) {
+      c.dispose();
+    }
     super.dispose();
   }
 
+  String _normalize(String s) => s.trim().toLowerCase().replaceAll(' ', '');
+
+  String _detectTypeFromName(String name) {
+    final n = _normalize(name);
+    if (n.isEmpty) return '';
+
+    final standardAliases = <String>[
+      'standard', 'ستاندرد', 'ستاندر', 'عادي', 'أساسي', 'اساسي',
+    ];
+    final premiumAliases = <String>[
+      'premium', 'بريميوم', 'مميز', 'مميّز',
+    ];
+    final emergencyAliases = <String>[
+      'emergency', 'طوارئ', 'عاجل', 'طارئة', 'طارئ',
+    ];
+
+    if (standardAliases.any((a) => _normalize(a) == n)) return _tStandard;
+    if (premiumAliases.any((a) => _normalize(a) == n)) return _tPremium;
+    if (emergencyAliases.any((a) => _normalize(a) == n)) return _tEmergency;
+
+    return '';
+  }
+
+  String _typeTitleAr(String t) {
+    switch (t) {
+      case _tStandard:
+        return 'ستاندرد';
+      case _tPremium:
+        return 'بريميوم';
+      case _tEmergency:
+        return 'طوارئ';
+      default:
+        return t;
+    }
+  }
+
+  String _typeSubtitleAr(String t) {
+    switch (t) {
+      case _tStandard:
+        return 'باقة أساسية بخدمات ضرورية';
+      case _tPremium:
+        return 'باقة مميزة بخدمات إضافية';
+      case _tEmergency:
+        return 'باقة خدمة طارئة/عاجلة';
+      default:
+        return '';
+    }
+  }
+
+  bool _typeExistsInService(ProviderServiceModel service, String type) {
+    for (final p in service.packages) {
+      final t = _detectTypeFromName(p.name);
+      if (t == type) return true;
+    }
+    return false;
+  }
+
+  List<String> get _featuresNow => _featuresCtrls
+      .map((c) => c.text.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
   bool get _isDirty {
-    return _name.text.trim().isNotEmpty ||
-        _price.text.trim().isNotEmpty ||
+    return _price.text.trim().isNotEmpty ||
         _desc.text.trim().isNotEmpty ||
-        (_selectedCategoryKey != null && _selectedCategoryKey != _initialCategoryKey);
+        _featuresNow.isNotEmpty ||
+        (_selectedCategoryKey != null && _selectedCategoryKey != _initialCategoryKey) ||
+        _selectedType != _initialType;
   }
 
   Future<bool> _confirmDiscardIfDirty() async {
@@ -113,14 +190,6 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     if (canLeave) _doExit();
   }
 
-  String? _validateName(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return 'اسم الباقة مطلوب';
-    if (s.length < _nameMin) return 'اسم الباقة لازم يكون على الأقل $_nameMin أحرف';
-    if (s.length > _nameMax) return 'اسم الباقة لازم يكون أقل من $_nameMax حرف';
-    return null;
-  }
-
   String? _validatePrice(String? v) {
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'السعر مطلوب';
@@ -142,6 +211,17 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     return null;
   }
 
+  String? _validateFeatures() {
+    final list = _featuresNow;
+    if (list.isEmpty) return 'أضف ميزة واحدة على الأقل';
+
+    for (final f in list) {
+      if (f.length < _featureMin) return 'كل ميزة لازم تكون على الأقل $_featureMin أحرف';
+      if (f.length > _featureMax) return 'كل ميزة لازم تكون أقل من $_featureMax حرف';
+    }
+    return null;
+  }
+
   String? _serviceKeyOf(ProviderServiceModel s) {
     final k1 = FixedServiceCategories.keyFromAnyString(s.name);
     if (k1 != null) return k1;
@@ -160,11 +240,37 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     return null;
   }
 
+  void _addFeature() {
+    setState(() => _featuresCtrls.add(TextEditingController()));
+  }
+
+  void _removeFeature(int index) {
+    if (_featuresCtrls.length <= 1) {
+      _featuresCtrls.first.clear();
+      setState(() {});
+      return;
+    }
+    final c = _featuresCtrls.removeAt(index);
+    c.dispose();
+    setState(() {});
+  }
+
   Future<void> _save(List<ProviderServiceModel> services) async {
     if (_submitting) return;
 
     final valid = _formKey.currentState?.validate() ?? false;
     if (!valid) return;
+
+    final featuresError = _validateFeatures();
+    if (featuresError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(featuresError, style: const TextStyle(color: Colors.white)),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     if (_selectedCategoryKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -194,6 +300,17 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
       return;
     }
 
+    // منع تكرار النوع
+    if (_typeExistsInService(service, _selectedType)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('هذا النوع موجود مسبقاً داخل الخدمة.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final price = double.tryParse(_price.text.trim());
     if (price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -208,20 +325,19 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
       return;
     }
 
-    // ✅ حافظنا على packages القديمة بالكامل (features وغيرها) باستخدام toJson()
     final newPackages = [
       for (final p in service.packages) p.toJson(),
       {
-        'name': _name.text.trim(),
+        'name': _typeTitleAr(_selectedType), // ✅ نخزنها عربي
         'price': price,
         'description': _desc.text.trim(),
+        'features': _featuresNow,
       }
     ];
 
     setState(() => _submitting = true);
 
     try {
-      // ✅ إصلاح CATEGORY_MISMATCH: ثبت category_id أثناء إضافة الباقة
       final idMap = await ref.read(categoriesIdMapProvider.future);
       final categoryId = idMap[key];
 
@@ -247,10 +363,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'تمت إضافة الباقة بنجاح',
-            style: AppTextStyles.body14.copyWith(color: Colors.white),
-          ),
+          content: const Text('تمت إضافة الباقة بنجاح'),
           backgroundColor: AppColors.lightGreen,
         ),
       );
@@ -259,11 +372,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'تعذر إضافة الباقة. حاول مرة أخرى.',
-            style: AppTextStyles.body14.copyWith(color: Colors.white),
-          ),
+        const SnackBar(
+          content: Text('تعذر إضافة الباقة. حاول مرة أخرى.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -275,8 +385,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
-
     final servicesAsync = ref.watch(providerMyServicesProvider);
+    _selectedCategoryKey ??= FixedServiceCategories.all.first.key;
 
     return PopScope(
       canPop: false,
@@ -310,40 +420,12 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
             child: servicesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, __) => Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.wifi_off_rounded, size: 52, color: AppColors.textSecondary),
-                    SizeConfig.v(10),
-                    Text(
-                      'تعذر تحميل الخدمات حالياً.',
-                      textAlign: TextAlign.center,
-                      style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
-                    ),
-                    SizeConfig.v(12),
-                    ElevatedButton(
-                      onPressed: () => ref.invalidate(providerMyServicesProvider),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.lightGreen,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        padding: SizeConfig.padding(horizontal: 18, vertical: 12),
-                      ),
-                      child: Text(
-                        'إعادة المحاولة',
-                        style: AppTextStyles.body14.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'تعذر تحميل الخدمات حالياً.',
+                  style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
                 ),
               ),
               data: (services) {
-                if (_selectedCategoryKey == null) {
-                  _selectedCategoryKey = FixedServiceCategories.all.first.key;
-                }
-
-                final matchedService = _serviceForKey(services, _selectedCategoryKey!);
-                final hasService = matchedService != null;
-
                 if (services.isEmpty) {
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -371,6 +453,9 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                     ],
                   );
                 }
+
+                final matchedService = _serviceForKey(services, _selectedCategoryKey!);
+                final hasService = matchedService != null;
 
                 return SingleChildScrollView(
                   child: AbsorbPointer(
@@ -415,60 +500,38 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                     ),
                                   ),
                                 ),
-                                if (!hasService)
-                                  TextButton(
-                                    onPressed: () => context.push(AppRoutes.providerAddService),
-                                    child: Text(
-                                      'إنشاء خدمة',
-                                      style: AppTextStyles.body14.copyWith(
-                                        color: AppColors.lightGreen,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
 
                           SizeConfig.v(18),
-                          _label('اسم الباقة *'),
-                          _input(_name, 'مثال: باقة بريميوم', validator: _validateName),
+                          _label('نوع الباقة *'),
+                          SizeConfig.v(8),
+                          _typeSelector(matchedService),
 
                           SizeConfig.v(18),
                           _label('السعر (د.أ) *'),
-                          _input(_price, 'مثال: 120', keyboardType: TextInputType.number, validator: _validatePrice),
+                          _input(_price, 'مثال: 150',
+                              keyboardType: TextInputType.number, validator: _validatePrice),
 
                           SizeConfig.v(18),
                           _label('وصف الباقة *'),
-                          _input(_desc, 'صف ما تتضمنه الباقة...', maxLines: 3, validator: _validateDesc),
+                          _input(_desc, 'صف ما تتضمنه الباقة...',
+                              maxLines: 3, validator: _validateDesc),
+
+                          SizeConfig.v(16),
+                          _featuresSection(),
 
                           SizeConfig.v(26),
                           Row(
                             children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: _exit,
-                                  style: OutlinedButton.styleFrom(
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    side: const BorderSide(color: AppColors.buttonBackground),
-                                    padding: SizeConfig.padding(vertical: 14),
-                                  ),
-                                  child: Text(
-                                    'إلغاء',
-                                    style: AppTextStyles.body14.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              SizeConfig.hSpace(12),
-                              Expanded(
+                               Expanded(
                                 child: ElevatedButton(
                                   onPressed: hasService ? () => _save(services) : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.lightGreen,
-                                    disabledBackgroundColor: AppColors.lightGreen.withValues(alpha: 0.25),
+                                    disabledBackgroundColor:
+                                        AppColors.lightGreen.withValues(alpha: 0.25),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     padding: SizeConfig.padding(vertical: 14),
                                   ),
@@ -487,6 +550,24 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                         ),
                                 ),
                               ),
+                              SizeConfig.hSpace(12),
+                             Expanded(
+                                child: OutlinedButton(
+                                  onPressed: _exit,
+                                  style: OutlinedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    side: const BorderSide(color: AppColors.buttonBackground),
+                                    padding: SizeConfig.padding(vertical: 14),
+                                  ),
+                                  child: Text(
+                                    'إلغاء',
+                                    style: AppTextStyles.body14.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -502,13 +583,147 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     );
   }
 
+  Widget _typeSelector(ProviderServiceModel? service) {
+    bool exists(String type) {
+      if (service == null) return false;
+      return _typeExistsInService(service, type);
+    }
+
+    Widget card(String type) {
+      final selected = _selectedType == type;
+      final already = exists(type);
+
+      return Expanded(
+        child: GestureDetector(
+          onTap: already ? null : () => setState(() => _selectedType = type),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: selected ? AppColors.lightGreen : Colors.black.withValues(alpha: 0.08),
+                width: selected ? 2 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  _typeTitleAr(type),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: already ? AppColors.textSecondary : AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _typeSubtitleAr(type),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(12),
+                    color: already
+                        ? AppColors.textSecondary.withValues(alpha: 0.7)
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                if (already) ...[
+                  const SizedBox(height: 8),
+                  const Text(
+                    'موجودة مسبقاً',
+                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w800),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        card(_tStandard),
+        const SizedBox(width: 10),
+        card(_tPremium),
+        const SizedBox(width: 10),
+        card(_tEmergency),
+      ],
+    );
+  }
+
+  Widget _featuresSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _label('الخدمات/الميزات المشمولة *')),
+            TextButton.icon(
+              onPressed: _addFeature,
+              icon: const Icon(Icons.add, color: AppColors.lightGreen),
+              label: const Text(
+                'إضافة ميزة',
+                style: TextStyle(color: AppColors.lightGreen, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'أدخل الخدمات أو الميزات الموجودة داخل هذه الباقة (ميزة واحدة على الأقل).',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: SizeConfig.ts(12.5),
+            height: 1.3,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ListView.separated(
+          itemCount: _featuresCtrls.length,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) {
+            return Row(
+              children: [
+                Expanded(
+                  child: _input(
+                    _featuresCtrls[i],
+                    'مثال: تنظيف عميق، غسيل شبابيك',
+                    validator: (v) {
+                      final s = (v ?? '').trim();
+                      if (s.isEmpty) return null;
+                      if (s.length < _featureMin) return 'قصيرة جداً';
+                      if (s.length > _featureMax) return 'طويلة جداً';
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  onPressed: () => _removeFeature(i),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   Widget _categoryDropdown() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedCategoryKey,

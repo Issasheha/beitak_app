@@ -57,9 +57,9 @@ class AccountUserCard extends StatelessWidget {
           Container(
             width: SizeConfig.w(64),
             height: SizeConfig.w(64),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF2AA7FF),
+              color: Color(0xFF2AA7FF),
             ),
             alignment: Alignment.center,
             child: Text(
