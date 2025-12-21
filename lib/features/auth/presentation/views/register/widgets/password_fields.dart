@@ -101,8 +101,8 @@ class _PasswordFieldsState extends State<PasswordFields> {
     }
 
     // طول أدنى
-    if (text.length < 6) {
-      return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.';
+    if (text.length < 8) {
+      return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.';
     }
 
     // حرف كبير
