@@ -46,7 +46,7 @@ class RegisterTextField extends StatelessWidget {
           style: AppTextStyles.body14.copyWith(
             color: AppColors.textPrimary,
             fontSize: SizeConfig.ts(14.5),
-            fontWeight: FontWeight.w600, // نفس السابق
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 9),
@@ -69,7 +69,7 @@ class RegisterTextField extends StatelessWidget {
             style: AppTextStyles.body14.copyWith(
               color: AppColors.textPrimary,
               fontSize: SizeConfig.ts(14.5),
-              fontWeight: FontWeight.w500, // نفس السابق
+              fontWeight: FontWeight.w500,
             ),
             decoration: InputDecoration(
               hintText: hint,
@@ -86,10 +86,22 @@ class RegisterTextField extends StatelessWidget {
               suffixIcon: suffixIcon,
               filled: true,
               fillColor: Colors.white,
+
+              // ✅ يخلي رسالة الخطأ ما تنقص
+              errorMaxLines: 4,
+              errorStyle: AppTextStyles.body14.copyWith(
+                color: Colors.red,
+                fontSize: SizeConfig.ts(12.5),
+                height: 1.25,
+                fontWeight: FontWeight.w500,
+              ),
+
+              // ✅ خلي الرسالة تطلع بمساحة مريحة تحت الحقل
               contentPadding: EdgeInsets.symmetric(
                 horizontal: SizeConfig.w(20),
                 vertical: SizeConfig.h(19),
               ),
+
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(18),
                 borderSide: BorderSide.none,
@@ -110,6 +122,15 @@ class RegisterTextField extends StatelessWidget {
                 borderSide: const BorderSide(
                   color: Colors.red,
                   width: 2,
+                ),
+              ),
+
+              // ✅ مهم: إذا الحقل عليه فوكس وفيه خطأ، يضل الإطار أحمر
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(18),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                  width: 2.5,
                 ),
               ),
             ),
