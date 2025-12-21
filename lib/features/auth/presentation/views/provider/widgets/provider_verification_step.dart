@@ -1,5 +1,3 @@
-// lib/features/auth/presentation/views/provider/widgets/provider_verification_step.dart
-
 import 'dart:io';
 
 import 'package:beitak_app/core/constants/colors.dart';
@@ -12,16 +10,31 @@ import 'package:image_picker/image_picker.dart';
 class ProviderVerificationStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
+  // ✅ initial state from parent
+  final String? idPath;
+  final String? licensePath;
+  final String? policePath;
+
+  final String? idFileName;
+  final String? licenseFileName;
+  final String? policeFileName;
+
   final ValueChanged<String?> onIdSelected;
   final ValueChanged<String?> onLicenseSelected;
-  final ValueChanged<String?> onCertificateSelected;
+  final ValueChanged<String?> onPoliceSelected;
 
   const ProviderVerificationStep({
     super.key,
     required this.formKey,
     required this.onIdSelected,
     required this.onLicenseSelected,
-    required this.onCertificateSelected,
+    required this.onPoliceSelected,
+    this.idPath,
+    this.licensePath,
+    this.policePath,
+    this.idFileName,
+    this.licenseFileName,
+    this.policeFileName,
   });
 
   @override
@@ -32,19 +45,36 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
   static const int _maxBytes = 5 * 1024 * 1024; // 5MB
   static const _allowedExt = ['pdf', 'jpg', 'jpeg', 'png'];
 
-  bool _idUploaded = false;
-  bool _licenseUploaded = false;
-  bool _certificateUploaded = false;
+  late bool _idUploaded;
+  late bool _licenseUploaded;
+  late bool _policeUploaded;
 
   String? _idFileName;
   String? _licenseFileName;
-  String? _certificateFileName;
+  String? _policeFileName;
 
   String? _idPath;
   String? _licensePath;
-  String? _certificatePath;
+  String? _policePath;
 
   final ImagePicker _imagePicker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+
+    _idPath = widget.idPath;
+    _licensePath = widget.licensePath;
+    _policePath = widget.policePath;
+
+    _idFileName = widget.idFileName;
+    _licenseFileName = widget.licenseFileName;
+    _policeFileName = widget.policeFileName;
+
+    _idUploaded = (_idPath != null && _idPath!.isNotEmpty);
+    _licenseUploaded = (_licensePath != null && _licensePath!.isNotEmpty);
+    _policeUploaded = (_policePath != null && _policePath!.isNotEmpty);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +93,8 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
           ),
           SizeConfig.v(4),
           Text(
-            'يرجى إرفاق الوثائق المطلوبة للتحقق من هويتك.',
+            'يرجى إرفاق الوثائق المطلوبة للتحقق من هويتك.\n'
+            'ملاحظة: إذا كانت الهوية وجهين يمكنك رفعها كملف PDF واحد.',
             style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
@@ -73,7 +104,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
           SizeConfig.v(16),
 
           _buildUploadTile(
-            title: 'صورة الهوية الشخصية او الاقامه *',
+            title: 'صورة الهوية الشخصية أو الإقامة *',
             subtitle: 'PNG / JPG / PDF (حد أقصى 5MB).',
             uploaded: _idUploaded,
             fileName: _idFileName,
@@ -93,15 +124,15 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
           _buildUploadTile(
             title: 'صورة شهادة عدم المحكومية *',
             subtitle: 'PNG / JPG / PDF (حد أقصى 5MB).',
-            uploaded: _certificateUploaded,
-            fileName: _certificateFileName,
-            onTap: () => _onTileTap(_DocType.certificate),
+            uploaded: _policeUploaded,
+            fileName: _policeFileName,
+            onTap: () => _onTileTap(_DocType.police),
           ),
           SizeConfig.v(12),
 
           TextFormField(
             validator: (_) {
-              if (!_idUploaded || !_licenseUploaded || !_certificateUploaded) {
+              if (!_idUploaded || !_licenseUploaded || !_policeUploaded) {
                 return 'يجب إرفاق جميع وثائق التحقق المطلوبة';
               }
               return null;
@@ -125,7 +156,6 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
       return;
     }
 
-    // لو مرفوع -> خيارات (استبدال / إزالة)
     await showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.cardBackground,
@@ -183,8 +213,8 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
         return _idUploaded;
       case _DocType.license:
         return _licenseUploaded;
-      case _DocType.certificate:
-        return _certificateUploaded;
+      case _DocType.police:
+        return _policeUploaded;
     }
   }
 
@@ -203,11 +233,11 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
           _licensePath = null;
           widget.onLicenseSelected(null);
           break;
-        case _DocType.certificate:
-          _certificateUploaded = false;
-          _certificateFileName = null;
-          _certificatePath = null;
-          widget.onCertificateSelected(null);
+        case _DocType.police:
+          _policeUploaded = false;
+          _policeFileName = null;
+          _policePath = null;
+          widget.onPoliceSelected(null);
           break;
       }
     });
@@ -369,7 +399,7 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
     final file = File(picked.path);
     if (!await file.exists()) return;
 
-    final ok = await _validateFile(file.path);
+    final ok = await _validateFile(file.path, name: picked.name);
     if (!ok) return;
 
     _setFileForType(type, picked.path, picked.name);
@@ -428,11 +458,11 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
           _licensePath = path;
           widget.onLicenseSelected(path);
           break;
-        case _DocType.certificate:
-          _certificateUploaded = true;
-          _certificateFileName = fileName;
-          _certificatePath = path;
-          widget.onCertificateSelected(path);
+        case _DocType.police:
+          _policeUploaded = true;
+          _policeFileName = fileName;
+          _policePath = path;
+          widget.onPoliceSelected(path);
           break;
       }
     });
@@ -449,4 +479,4 @@ class _ProviderVerificationStepState extends State<ProviderVerificationStep> {
   }
 }
 
-enum _DocType { id, license, certificate }
+enum _DocType { id, license, police }

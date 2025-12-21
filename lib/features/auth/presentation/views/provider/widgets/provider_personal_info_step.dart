@@ -1,10 +1,10 @@
-// lib/features/auth/presentation/views/provider/widgets/provider_personal_info_step.dart
-
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/widgets/auth_text_field.dart';
+import 'package:beitak_app/features/auth/presentation/views/provider/providers/provider_onboarding_data_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ProviderPersonalInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
@@ -14,13 +14,19 @@ class ProviderPersonalInfoStep extends StatefulWidget {
   final TextEditingController phoneController;
   final TextEditingController emailController;
   final TextEditingController passwordController;
+  final TextEditingController confirmPasswordController;
 
   // ✅ Terms
   final bool termsAccepted;
   final ValueChanged<bool> onTermsChanged;
 
-  // ✅ City selection (نكتفي بالـ City)
-  final ValueChanged<String?> onCityChanged;
+  // ✅ City
+  final List<CityOption> cities;
+  final int? selectedCityId;
+  final ValueChanged<int?> onCityChanged;
+
+  // ✅ بعد التسجيل المبكر: نقفل تعديل البيانات الشخصية حتى ما نخرب التسجيل
+  final bool lockPersonalInfo;
 
   const ProviderPersonalInfoStep({
     super.key,
@@ -30,50 +36,32 @@ class ProviderPersonalInfoStep extends StatefulWidget {
     required this.phoneController,
     required this.emailController,
     required this.passwordController,
+    required this.confirmPasswordController,
     required this.termsAccepted,
     required this.onTermsChanged,
+    required this.cities,
+    required this.selectedCityId,
     required this.onCityChanged,
+    this.lockPersonalInfo = false,
   });
 
   @override
-  State<ProviderPersonalInfoStep> createState() =>
-      _ProviderPersonalInfoStepState();
+  State<ProviderPersonalInfoStep> createState() => _ProviderPersonalInfoStepState();
 }
 
 class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
   bool _obscurePass = true;
   bool _obscureConfirm = true;
 
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
-
-  String? _selectedCity;
-
-  final _cities = const [
-    'عمان',
-    'إربد',
-    'الزرقاء',
-    'العقبة',
-    'مادبا',
-    'السلط',
-    'الكرك',
-    'المفرق',
-    'جرش',
-    'عجلون',
-    'الطفيلة',
-  ];
-
   @override
   void initState() {
     super.initState();
-
-    // عشان الـ "واحد منهم على الأقل" يشتغل لحظة بلحظة
     widget.phoneController.addListener(_revalidateSoft);
     widget.emailController.addListener(_revalidateSoft);
+    widget.passwordController.addListener(_revalidateSoft);
   }
 
   void _revalidateSoft() {
-    // ما نعمل validate كامل، بس نعمل setState لتحديث الرسائل عند الحاجة
     if (mounted) setState(() {});
   }
 
@@ -81,12 +69,14 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
   void dispose() {
     widget.phoneController.removeListener(_revalidateSoft);
     widget.emailController.removeListener(_revalidateSoft);
-    _confirmPasswordController.dispose();
+    widget.passwordController.removeListener(_revalidateSoft);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final locked = widget.lockPersonalInfo;
+
     return Form(
       key: widget.formKey,
       child: Column(
@@ -102,7 +92,9 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(4),
           Text(
-            'لنبدأ بمعلوماتك الأساسية.',
+            locked
+                ? 'تم إنشاء الحساب بنجاح. أكمل باقي الخطوات لإرسال الطلب.'
+                : 'لنبدأ بمعلوماتك الأساسية.',
             style: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
@@ -111,7 +103,6 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
           ),
           SizeConfig.v(14),
 
-          // الاسم الأول + اسم العائلة
           Row(
             children: [
               Expanded(
@@ -122,6 +113,10 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
                   controller: widget.firstNameController,
                   validator: _nameValidator,
                   onDarkBackground: false,
+                  enabled: !locked,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s{2,}')),
+                  ],
                 ),
               ),
               SizeConfig.hSpace(10),
@@ -133,61 +128,46 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
                   controller: widget.lastNameController,
                   validator: _nameValidator,
                   onDarkBackground: false,
+                  enabled: !locked,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'\s{2,}')),
+                  ],
                 ),
               ),
             ],
           ),
           SizeConfig.v(14),
 
-          // رقم الجوال (مش لازم إذا الإيميل موجود)
           AuthTextField(
             label: 'رقم الجوال',
             hint: '0771234567',
             icon: Icons.phone_outlined,
             keyboardType: TextInputType.phone,
             controller: widget.phoneController,
-            validator: (v) => _phoneValidator(
-              v,
-              email: widget.emailController.text,
-            ),
+            validator: (v) => _phoneValidator(v, email: widget.emailController.text),
             onDarkBackground: false,
+            enabled: !locked,
+            inputFormatters: [
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
           ),
           SizeConfig.v(14),
 
-          // الإيميل (مش لازم إذا الجوال موجود)
           AuthTextField(
             label: 'البريد الإلكتروني',
             hint: 'ahmad@example.com',
             icon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
             controller: widget.emailController,
-            validator: (v) => _emailValidator(
-              v,
-              phone: widget.phoneController.text,
-            ),
+            validator: (v) => _emailValidator(v, phone: widget.phoneController.text),
             onDarkBackground: false,
+            enabled: !locked,
+            inputFormatters: [
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
           ),
-          // SizeConfig.v(14),
+          SizeConfig.v(14),
 
-          // (Hidden) ضمان "واحد منهم على الأقل" حتى لو واحد فيهم ما لمس المستخدم
-          // TextFormField(
-          //   validator: (_) {
-          //     final phone = widget.phoneController.text.trim();
-          //     final email = widget.emailController.text.trim();
-          //     if (phone.isEmpty && email.isEmpty) {
-          //       return 'يجب إدخال رقم الجوال أو البريد على الأقل';
-          //     }
-          //     return null;
-          //   },
-          //   decoration: const InputDecoration(
-          //     border: InputBorder.none,
-          //     isCollapsed: true,
-          //     contentPadding: EdgeInsets.zero,
-          //   ),
-          // ),
-          SizeConfig.v(2),
-
-          // كلمة المرور
           AuthTextField(
             label: 'كلمة المرور *',
             hint: 'مثال: Abc@123',
@@ -203,54 +183,105 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
             ),
             validator: _passwordValidator,
             onDarkBackground: false,
+            enabled: !locked,
           ),
           SizeConfig.v(14),
 
-          // تأكيد كلمة المرور
           AuthTextField(
             label: 'تأكيد كلمة المرور *',
             hint: 'أعد كتابة كلمة المرور',
             icon: Icons.lock_outline,
             obscureText: _obscureConfirm,
-            controller: _confirmPasswordController,
+            controller: widget.confirmPasswordController,
             suffixIcon: IconButton(
               icon: Icon(
                 _obscureConfirm ? Icons.visibility_off : Icons.visibility,
                 color: AppColors.textSecondary,
               ),
-              onPressed: () =>
-                  setState(() => _obscureConfirm = !_obscureConfirm),
+              onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
             ),
             validator: (value) {
               final v = (value ?? '').trim();
               if (v.isEmpty) return 'تأكيد كلمة المرور مطلوب';
-              if (v != widget.passwordController.text) {
-                return 'كلمتا المرور غير متطابقتين';
-              }
+              if (v != widget.passwordController.text) return 'كلمتا المرور غير متطابقتين';
               return null;
             },
             onDarkBackground: false,
+            enabled: !locked,
           ),
           SizeConfig.v(14),
 
-          // المحافظة (City فقط)
-          _buildDropdown(
-            label: 'المحافظة *',
-            hint: 'اختر المحافظة',
-            value: _selectedCity,
-            items: _cities,
-            onChanged: (value) {
-              setState(() => _selectedCity = value);
-              widget.onCityChanged(value);
-            },
-            validator: (v) => v == null ? 'المحافظة مطلوبة' : null,
+          _buildCityDropdown(
+            cities: widget.cities,
+            value: widget.selectedCityId,
+            onChanged: locked ? null : widget.onCityChanged,
           ),
           SizeConfig.v(16),
 
-          // Terms (بدون حقل فاضي)
           _buildTermsSection(),
         ],
       ),
+    );
+  }
+
+  Widget _buildCityDropdown({
+    required List<CityOption> cities,
+    required int? value,
+    required ValueChanged<int?>? onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'المحافظة *',
+          style: AppTextStyles.body14.copyWith(
+            fontSize: SizeConfig.ts(14),
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        SizeConfig.v(6),
+        DropdownButtonFormField<int>(
+          value: value,
+          items: cities
+              .map(
+                (c) => DropdownMenuItem<int>(
+                  value: c.id,
+                  child: Text(
+                    c.displayName,
+                    style: AppTextStyles.body14.copyWith(
+                      fontSize: SizeConfig.ts(13.5),
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: onChanged,
+          validator: (v) => v == null ? 'المحافظة مطلوبة' : null,
+          decoration: InputDecoration(
+            hintText: 'اختر المحافظة',
+            hintStyle: AppTextStyles.body14.copyWith(
+              fontSize: SizeConfig.ts(13),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
+            filled: true,
+            fillColor: onChanged == null
+                ? AppColors.background.withValues(alpha: 0.6)
+                : AppColors.background,
+            contentPadding: EdgeInsets.symmetric(
+              vertical: SizeConfig.h(10),
+              horizontal: SizeConfig.w(12),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -312,69 +343,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     );
   }
 
-  Widget _buildDropdown({
-    required String label,
-    required String hint,
-    required String? value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTextStyles.body14.copyWith(
-            fontSize: SizeConfig.ts(14),
-            fontWeight: FontWeight.w500,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        SizeConfig.v(6),
-        DropdownButtonFormField<String>(
-          value: value,
-          items: items
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(
-                    e,
-                    style: AppTextStyles.body14.copyWith(
-                      fontSize: SizeConfig.ts(13.5),
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: onChanged,
-          validator: validator,
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: AppTextStyles.body14.copyWith(
-              fontSize: SizeConfig.ts(13),
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w400,
-            ),
-            filled: true,
-            fillColor: AppColors.background,
-            contentPadding: EdgeInsets.symmetric(
-              vertical: SizeConfig.h(10),
-              horizontal: SizeConfig.w(12),
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ===== Validators (Strict Doc) =====
+  // ===== Validators =====
 
   static String? _nameValidator(String? value) {
     final v = (value ?? '').trim();
@@ -382,9 +351,8 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     if (v.length < 2) return 'يجب أن يكون حرفين على الأقل';
 
     // عربي/إنجليزي + مسافة بين الكلمات (بدون أرقام/رموز)
-    final ok = RegExp(
-      r'^[a-zA-Z\u0600-\u06FF]+(?:\s[a-zA-Z\u0600-\u06FF]+)*$',
-    ).hasMatch(v);
+    final ok = RegExp(r'^[a-zA-Z\u0600-\u06FF]+(?:\s[a-zA-Z\u0600-\u06FF]+)*$')
+        .hasMatch(v);
     if (!ok) return 'يسمح بالحروف فقط';
     return null;
   }
@@ -393,20 +361,14 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     final phone = (value ?? '').trim();
     final e = email.trim();
 
-    // واحد منهم على الأقل
     if (phone.isEmpty && e.isEmpty) {
       return 'يجب إدخال رقم الجوال أو البريد على الأقل';
     }
-
-    // إذا فاضي بس الإيميل موجود -> OK
     if (phone.isEmpty) return null;
 
-    // بدون مسافات/رموز - أرقام فقط
     if (!RegExp(r'^\d+$').hasMatch(phone)) {
       return 'رقم الجوال يجب أن يحتوي أرقام فقط';
     }
-
-    // الأردن 10 أرقام ويبدأ 077/078/079
     final regex = RegExp(r'^07(7|8|9)\d{7}$');
     if (!regex.hasMatch(phone)) {
       return 'يجب أن يبدأ بـ 077 أو 078 أو 079 ويتكوّن من 10 أرقام';
@@ -418,19 +380,13 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     final email = (value ?? '').trim();
     final p = phone.trim();
 
-    // واحد منهم على الأقل
     if (email.isEmpty && p.isEmpty) {
       return 'يجب إدخال رقم الجوال أو البريد على الأقل';
     }
-
-    // إذا فاضي بس الجوال موجود -> OK
     if (email.isEmpty) return null;
 
-    // Strict rules
     if (email.contains(' ')) return 'البريد الإلكتروني غير صالح';
-    if (email.startsWith('.') || email.endsWith('.')) {
-      return 'البريد الإلكتروني غير صالح';
-    }
+    if (email.startsWith('.') || email.endsWith('.')) return 'البريد الإلكتروني غير صالح';
     if (email.contains('..')) return 'البريد الإلكتروني غير صالح';
 
     final emailRegex = RegExp(
@@ -441,36 +397,17 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
     return null;
   }
 
- static String? _passwordValidator(String? value) {
-  final v = (value ?? '');
+  static String? _passwordValidator(String? value) {
+    final v = (value ?? '');
+    if (v.isEmpty) return 'كلمة المرور مطلوبة';
 
-  if (v.isEmpty) return 'كلمة المرور مطلوبة';
-
-  // 1) بدون مسافات
-  if (v.contains(' ')) {
-    return 'كلمة المرور يجب أن لا تحتوي على مسافات';
+    if (v.contains(' ')) return 'كلمة المرور يجب أن لا تحتوي على مسافات';
+    if (v.length < 8) return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+    if (!RegExp(r'[A-Z]').hasMatch(v)) return 'كلمة المرور يجب أن تحتوي على حرف كبير (A-Z)';
+    if (!RegExp(r'\d').hasMatch(v)) return 'كلمة المرور يجب أن تحتوي على رقم واحد على الأقل';
+    if (!RegExp(r'[^A-Za-z0-9]').hasMatch(v)) {
+      return 'كلمة المرور يجب أن تحتوي على رمز خاص (مثل ! @ #)';
+    }
+    return null;
   }
-
-  // 2) الحد الأدنى 8
-  if (v.length < 8) {
-    return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
-  }
-
-  // 3) حرف كبير
-  if (!RegExp(r'[A-Z]').hasMatch(v)) {
-    return 'كلمة المرور يجب أن تحتوي على حرف كبير (A-Z)';
-  }
-
-  // 4) رقم
-  if (!RegExp(r'\d').hasMatch(v)) {
-    return 'كلمة المرور يجب أن تحتوي على رقم واحد على الأقل';
-  }
-
-  // 5) رمز خاص
-  if (!RegExp(r'[^A-Za-z0-9]').hasMatch(v)) {
-    return 'كلمة المرور يجب أن تحتوي على رمز خاص (مثل ! @ #)';
-  }
-
-  return null;
-}
 }

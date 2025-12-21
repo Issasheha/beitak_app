@@ -1,26 +1,32 @@
-// lib/features/auth/presentation/views/provider/widgets/provider_business_info_step.dart
-
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
+import 'package:beitak_app/features/auth/presentation/views/provider/providers/provider_onboarding_data_provider.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/widgets/auth_text_field.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ProviderBusinessInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
   final TextEditingController businessNameController;
   final TextEditingController experienceYearsController;
-
   final TextEditingController hourlyRateController;
-  final TextEditingController fixedPriceController;
-
   final TextEditingController descriptionController;
 
+  final List<CategoryOption> categories;
+  final int? selectedCategoryId;
+  final ValueChanged<int?> onCategoryChanged;
+
+  final Set<String> selectedLanguages;
   final ValueChanged<Set<String>> onLanguagesChanged;
+
+  // ✅ service areas نخزنها كـ slug (متوافق مع الباك لأنه string list)
+  final Set<String> selectedServiceAreas;
   final ValueChanged<Set<String>> onServiceAreasChanged;
 
-  final ValueChanged<String?> onCategoryChanged;
+  // ✅ قائمة المدن (نستعملها لاختيار مناطق الخدمة)
+  final List<CityOption> cities;
 
   const ProviderBusinessInfoStep({
     super.key,
@@ -28,58 +34,23 @@ class ProviderBusinessInfoStep extends StatefulWidget {
     required this.businessNameController,
     required this.experienceYearsController,
     required this.hourlyRateController,
-    required this.fixedPriceController,
     required this.descriptionController,
-    required this.onLanguagesChanged,
-    required this.onServiceAreasChanged,
+    required this.categories,
+    required this.selectedCategoryId,
     required this.onCategoryChanged,
+    required this.selectedLanguages,
+    required this.onLanguagesChanged,
+    required this.selectedServiceAreas,
+    required this.onServiceAreasChanged,
+    required this.cities,
   });
 
   @override
-  State<ProviderBusinessInfoStep> createState() =>
-      _ProviderBusinessInfoStepState();
+  State<ProviderBusinessInfoStep> createState() => _ProviderBusinessInfoStepState();
 }
 
 class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
-  final List<String> _serviceCategories = const [
-    'تنظيف المنازل',
-    'سباكة',
-    'نجارة',
-    'أعمال كهربائية',
-    'تكييف وتبريد',
-    'دهان وديكور',
-    'أعمال ألمنيوم',
-  ];
-
   final List<String> _languages = const ['العربية', 'الإنجليزية', 'لغات أخرى'];
-
-  final List<String> _governorates = const [
-    'عمان',
-    'إربد',
-    'الزرقاء',
-    'العقبة',
-    'مادبا',
-    'السلط',
-    'الكرك',
-    'المفرق',
-    'جرش',
-    'عجلون',
-    'الطفيلة',
-  ];
-
-  String? _selectedCategory;
-  final Set<String> _selectedLanguages = {'العربية'};
-  final Set<String> _selectedServiceAreas = {};
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onLanguagesChanged(_selectedLanguages);
-      widget.onServiceAreasChanged(_selectedServiceAreas);
-      widget.onCategoryChanged(_selectedCategory);
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,28 +77,23 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(16),
+
           AuthTextField(
             label: 'اسم العمل (اختياري)',
             hint: 'اسم شركتك أو عملك',
             icon: Icons.business_center_outlined,
             controller: widget.businessNameController,
-            validator: _optionalSafeTextMin3,
+            validator: _optionalBusinessNameMin3,
             onDarkBackground: false,
+            inputFormatters: [
+              FilteringTextInputFormatter.deny(RegExp(r'\s{2,}')),
+            ],
           ),
           SizeConfig.v(16),
-          _buildDropdown(
-            label: 'فئة الخدمة *',
-            hint: 'اختر فئة الخدمة',
-            value: _selectedCategory,
-            items: _serviceCategories,
-            onChanged: (v) {
-              setState(() => _selectedCategory = v);
-              widget.onCategoryChanged(v);
-            },
-            validator: (v) =>
-                (v == null || v.isEmpty) ? 'فئة الخدمة مطلوبة' : null,
-          ),
+
+          _buildCategoryDropdown(),
           SizeConfig.v(16),
+
           AuthTextField(
             label: 'سنوات الخبرة *',
             hint: 'مثال: 5',
@@ -143,54 +109,36 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
               return null;
             },
             onDarkBackground: false,
-          ),
-          SizeConfig.v(16),
-          Row(
-            children: [
-              Expanded(
-                child: AuthTextField(
-                  label: 'السعر الثابت (دينار)',
-                  hint: 'مثال: 20',
-                  icon: Icons.payments_outlined,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  controller: widget.fixedPriceController,
-                  validator: _nonNegativePriceOptional,
-                  onDarkBackground: false,
-                ),
-              ),
-              SizeConfig.hSpace(10),
-              Expanded(
-                child: AuthTextField(
-                  label: 'السعر بالساعة (دينار)',
-                  hint: 'مثال: 15',
-                  icon: Icons.monetization_on_outlined,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  controller: widget.hourlyRateController,
-                  validator: _nonNegativePriceOptional,
-                  onDarkBackground: false,
-                ),
-              ),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
             ],
           ),
-          SizeConfig.v(4),
-          TextFormField(
-            validator: (_) {
-              final fixed = _parsePrice(widget.fixedPriceController.text);
-              final hourly = _parsePrice(widget.hourlyRateController.text);
-              if ((fixed ?? 0) <= 0 && (hourly ?? 0) <= 0) {
-                return 'يرجى إدخال سعر ثابت أو سعر بالساعة (واحد على الأقل أكبر من صفر)';
-              }
-              return null;
-            },
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: EdgeInsets.zero,
+          SizeConfig.v(16),
+
+          AuthTextField(
+            label: 'السعر بالساعة (دينار) *',
+            hint: 'مثال: 15',
+            icon: Icons.monetization_on_outlined,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            controller: widget.hourlyRateController,
+            validator: _hourlyRateRequired,
+            onDarkBackground: false,
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+              FilteringTextInputFormatter.deny(RegExp(r'\s')),
+            ],
+          ),
+          SizeConfig.v(10),
+          Text(
+            'ملاحظة: يجب أن يكون السعر أكبر من 0 وبحدود منطقية.',
+            style: AppTextStyles.label12.copyWith(
+              fontSize: SizeConfig.ts(12),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
           ),
           SizeConfig.v(14),
+
           Text(
             'اللغات المتقنة *',
             style: AppTextStyles.body14.copyWith(
@@ -204,7 +152,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             spacing: SizeConfig.w(8),
             runSpacing: SizeConfig.h(8),
             children: _languages.map((lang) {
-              final selected = _selectedLanguages.contains(lang);
+              final selected = widget.selectedLanguages.contains(lang);
               return FilterChip(
                 label: Text(
                   lang,
@@ -216,14 +164,14 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                 ),
                 selected: selected,
                 onSelected: (v) {
-                  setState(() {
-                    if (v) {
-                      _selectedLanguages.add(lang);
-                    } else if (_selectedLanguages.length > 1) {
-                      _selectedLanguages.remove(lang);
-                    }
-                    widget.onLanguagesChanged(_selectedLanguages);
-                  });
+                  final next = {...widget.selectedLanguages};
+                  if (v) {
+                    next.add(lang);
+                  } else if (next.length > 1) {
+                    next.remove(lang);
+                  }
+                  widget.onLanguagesChanged(next);
+                  setState(() {});
                 },
               );
             }).toList(),
@@ -231,7 +179,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedLanguages.isEmpty) return 'اختر لغة واحدة على الأقل';
+              if (widget.selectedLanguages.isEmpty) return 'اختر لغة واحدة على الأقل';
               return null;
             },
             decoration: const InputDecoration(
@@ -241,6 +189,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(14),
+
           Text(
             'مناطق الخدمة *',
             style: AppTextStyles.body14.copyWith(
@@ -253,11 +202,13 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           Wrap(
             spacing: SizeConfig.w(8),
             runSpacing: SizeConfig.h(8),
-            children: _governorates.map((gov) {
-              final selected = _selectedServiceAreas.contains(gov);
+            children: widget.cities.map((c) {
+              final slug = (c.slug ?? c.id.toString()).trim();
+              final selected = widget.selectedServiceAreas.contains(slug);
+
               return FilterChip(
                 label: Text(
-                  gov,
+                  c.displayName,
                   style: AppTextStyles.body14.copyWith(
                     fontSize: SizeConfig.ts(13),
                     fontWeight: FontWeight.w400,
@@ -266,14 +217,14 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                 ),
                 selected: selected,
                 onSelected: (v) {
-                  setState(() {
-                    if (v) {
-                      _selectedServiceAreas.add(gov);
-                    } else {
-                      _selectedServiceAreas.remove(gov);
-                    }
-                    widget.onServiceAreasChanged(_selectedServiceAreas);
-                  });
+                  final next = {...widget.selectedServiceAreas};
+                  if (v) {
+                    next.add(slug);
+                  } else {
+                    next.remove(slug);
+                  }
+                  widget.onServiceAreasChanged(next);
+                  setState(() {});
                 },
               );
             }).toList(),
@@ -281,7 +232,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           SizeConfig.v(4),
           TextFormField(
             validator: (_) {
-              if (_selectedServiceAreas.isEmpty) {
+              if (widget.selectedServiceAreas.isEmpty) {
                 return 'اختر منطقة خدمة واحدة على الأقل';
               }
               return null;
@@ -293,6 +244,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
             ),
           ),
           SizeConfig.v(16),
+
           Text(
             'وصف العمل (اختياري)',
             style: AppTextStyles.body14.copyWith(
@@ -305,6 +257,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           TextFormField(
             controller: widget.descriptionController,
             maxLines: 4,
+            maxLength: 1000,
             decoration: InputDecoration(
               hintText: 'صف خدماتك وطريقة عملك بإيجاز.',
               hintStyle: AppTextStyles.body14.copyWith(
@@ -320,26 +273,19 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
                 borderSide: BorderSide.none,
               ),
             ),
-            validator: _optionalSafeLongTextMax1000,
+            validator: _optionalCleanLongTextMax1000,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDropdown({
-    required String label,
-    required String hint,
-    required String? value,
-    required List<String> items,
-    required ValueChanged<String?> onChanged,
-    String? Function(String?)? validator,
-  }) {
+  Widget _buildCategoryDropdown() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
+          'فئة الخدمة *',
           style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(14),
             fontWeight: FontWeight.w500,
@@ -347,25 +293,27 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
           ),
         ),
         SizeConfig.v(6),
-        DropdownButtonFormField<String>(
-          value: value,
-          items: items
-              .map((e) => DropdownMenuItem(
-                    value: e,
-                    child: Text(
-                      e,
-                      style: AppTextStyles.body14.copyWith(
-                        fontSize: SizeConfig.ts(13.5),
-                        fontWeight: FontWeight.w400,
-                        color: AppColors.textPrimary,
-                      ),
+        DropdownButtonFormField<int>(
+          value: widget.selectedCategoryId,
+          items: widget.categories
+              .map(
+                (c) => DropdownMenuItem<int>(
+                  value: c.id,
+                  child: Text(
+                    c.displayName,
+                    style: AppTextStyles.body14.copyWith(
+                      fontSize: SizeConfig.ts(13.5),
+                      fontWeight: FontWeight.w400,
+                      color: AppColors.textPrimary,
                     ),
-                  ))
+                  ),
+                ),
+              )
               .toList(),
-          onChanged: onChanged,
-          validator: validator,
+          onChanged: (v) => widget.onCategoryChanged(v),
+          validator: (v) => v == null ? 'فئة الخدمة مطلوبة' : null,
           decoration: InputDecoration(
-            hintText: hint,
+            hintText: 'اختر فئة الخدمة',
             hintStyle: AppTextStyles.body14.copyWith(
               fontSize: SizeConfig.ts(13),
               color: AppColors.textSecondary,
@@ -394,12 +342,44 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
     return double.tryParse(normalized);
   }
 
-  static String? _nonNegativePriceOptional(String? value) {
+  // ✅ Required hourly, >0, منطقي
+  static String? _hourlyRateRequired(String? value) {
     final v = (value ?? '').trim();
-    if (v.isEmpty) return null;
+    if (v.isEmpty) return 'السعر بالساعة مطلوب';
     final p = _parsePrice(v);
     if (p == null) return 'أدخل رقمًا صحيحًا';
-    if (p < 0) return 'لا يمكن أن يكون السعر سالبًا';
+
+    // حدود منطقية (عدلها إذا بدكم)
+    if (p <= 0) return 'يجب أن يكون السعر أكبر من 0';
+    if (p > 500) return 'السعر غير منطقي (أقصى حد 500)';
+
+    return null;
+  }
+
+  // ✅ اسم عمل: حروف/أرقام/مسافات فقط (بدون رموز/إيموجي) + min 3
+  static String? _optionalBusinessNameMin3(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+
+    if (v.length < 3) return 'يرجى إدخال 3 أحرف على الأقل';
+    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
+    if (_containsEmojiOrSymbols(v)) return 'يرجى إدخال نص صالح بدون رموز';
+
+    final ok = RegExp(r'^[a-zA-Z0-9\u0600-\u06FF]+(?:\s[a-zA-Z0-9\u0600-\u06FF]+)*$')
+        .hasMatch(v);
+    if (!ok) return 'يرجى إدخال نص صالح بدون رموز';
+    return null;
+  }
+
+  // ✅ وصف: نص نظيف ≤1000 بدون رموز/إيموجي
+  static String? _optionalCleanLongTextMax1000(String? value) {
+    final v = (value ?? '').trim();
+    if (v.isEmpty) return null;
+
+    if (v.length > 1000) return 'الحد الأقصى 1000 حرف';
+    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
+    if (_containsEmojiOrSymbols(v)) return 'يرجى إدخال نص فقط بدون رموز';
+
     return null;
   }
 
@@ -410,19 +390,18 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
     return false;
   }
 
-  static String? _optionalSafeTextMin3(String? value) {
-    final v = (value ?? '').trim();
-    if (v.isEmpty) return null;
-    if (v.length < 3) return 'يرجى إدخال 3 أحرف على الأقل';
-    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
-    return null;
-  }
+  // ✅ يمنع emoji + رموز غير مرغوبة
+  static bool _containsEmojiOrSymbols(String text) {
+    // Emoji ranges + some symbols
+    final emojiRegex = RegExp(
+      r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+      unicode: true,
+    );
+    if (emojiRegex.hasMatch(text)) return true;
 
-  static String? _optionalSafeLongTextMax1000(String? value) {
-    final v = (value ?? '').trim();
-    if (v.isEmpty) return null;
-    if (v.length > 1000) return 'الحد الأقصى 1000 حرف';
-    if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
-    return null;
+    // رموز نمنعها بشكل واضح
+    if (RegExp(r'[<>{}\[\]^$*_=\\|~`]').hasMatch(text)) return true;
+
+    return false;
   }
 }

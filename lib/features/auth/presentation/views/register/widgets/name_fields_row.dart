@@ -1,5 +1,4 @@
 // lib/features/auth/presentation/views/register/widgets/name_fields_row.dart
-
 import 'package:flutter/material.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/register_text_field.dart';
 
@@ -16,6 +15,7 @@ class NameFieldsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start, // ✅ مهم
       children: [
         Expanded(
           child: RegisterTextField(
@@ -24,7 +24,7 @@ class NameFieldsRow extends StatelessWidget {
             hint: 'أحمد',
             icon: Icons.person_outline,
             validator: _firstNameValidator,
-            autofocus: true, // Auto-focus على أول حقل
+            autofocus: true,
           ),
         ),
         const SizedBox(width: 12),
@@ -41,45 +41,47 @@ class NameFieldsRow extends StatelessWidget {
     );
   }
 
-  /// First Name:
-  /// - Required
-  /// - Min 2 chars
-  /// - Letters only (A–Z + Arabic)
-  static String? _firstNameValidator(String? value) {
-    final text = value?.trim() ?? '';
-    if (text.isEmpty || text.length < 2) {
-      return 'الرجاء إدخال اسم أول صحيح (أحرف فقط، حرفان على الأقل).';
-    }
+  // Helpers
+  static bool _hasDigits(String s) => RegExp(r'\d').hasMatch(s);
+  static bool _hasSymbols(String s) =>
+      RegExp(r'[^\p{L}\s-]', unicode: true).hasMatch(s);
+  static bool _lettersOnlyNoSpaces(String s) =>
+      RegExp(r'^[\p{L}]+$', unicode: true).hasMatch(s);
 
-    final regex = RegExp(r'^[A-Za-z\u0600-\u06FF]+$');
-    if (!regex.hasMatch(text)) {
-      return 'الرجاء إدخال اسم أول صحيح (أحرف فقط، حرفان على الأقل).';
-    }
+  static String? _firstNameValidator(String? value) {
+    final raw = value ?? '';
+    final text = raw.trim();
+
+    if (raw.isEmpty) return 'الاسم الأول مطلوب.';
+    if (text.isEmpty) return 'لا يمكن إدخال مسافات فقط في الاسم الأول.';
+    if (text.length < 2) return 'الاسم الأول يجب أن يكون حرفين على الأقل.';
+
+    if (text.contains(' ')) return 'الاسم الأول يجب أن يكون بدون مسافات.';
+    if (_hasDigits(text)) return 'الاسم الأول لا يجوز أن يحتوي أرقام.';
+    if (!_lettersOnlyNoSpaces(text)) return 'الاسم الأول لا يجوز أن يحتوي رموز.';
+
     return null;
   }
 
-  /// Last Name:
-  /// - Required
-  /// - Min 2 chars
-  /// - Letters + spaces + hyphens
-  /// - No leading/trailing spaces
   static String? _lastNameValidator(String? value) {
     final raw = value ?? '';
     final text = raw.trim();
 
-    if (text.isEmpty || text.length < 2) {
-      return 'الرجاء إدخال اسم عائلة صحيح (أحرف، مسافات وشرطات فقط، حرفان على الأقل).';
-    }
+    if (raw.isEmpty) return 'اسم العائلة مطلوب.';
+    if (text.isEmpty) return 'لا يمكن إدخال مسافات فقط في اسم العائلة.';
+    if (text.length < 2) return 'اسم العائلة يجب أن يكون حرفين على الأقل.';
+        if (text.contains(' ')) return 'اسم العائلة يجب أن يكون بدون مسافات.';
 
-    // لا نسمح بمسافة أول/آخر
     if (raw.startsWith(' ') || raw.endsWith(' ')) {
-      return 'الرجاء إدخال اسم عائلة صحيح (أحرف، مسافات وشرطات فقط، حرفان على الأقل).';
+      return 'يرجى إزالة المسافات من بداية/نهاية اسم العائلة.';
     }
 
-    final regex =
-        RegExp(r'^[A-Za-z\u0600-\u06FF]+(?:[ -][A-Za-z\u0600-\u06FF]+)*$');
+    if (_hasDigits(text)) return 'اسم العائلة لا يجوز أن يحتوي أرقام.';
+    if (_hasSymbols(text)) return 'اسم العائلة لا يجوز أن يحتوي رموز.';
+
+    final regex = RegExp(r'^[\p{L}]+(?:[ -][\p{L}]+)*$', unicode: true);
     if (!regex.hasMatch(text)) {
-      return 'الرجاء إدخال اسم عائلة صحيح (أحرف، مسافات وشرطات فقط، حرفان على الأقل).';
+      return 'يرجى إدخال اسم عائلة صحيح (أحرف، مسافات وشرطات فقط).';
     }
 
     return null;

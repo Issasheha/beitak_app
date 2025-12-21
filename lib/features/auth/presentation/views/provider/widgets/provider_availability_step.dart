@@ -1,5 +1,3 @@
-// lib/features/auth/presentation/views/provider/widgets/provider_availability_step.dart
-
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
@@ -8,19 +6,28 @@ import 'package:flutter/material.dart';
 class ProviderAvailabilityStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
 
+  final Set<String> selectedDays;
+  final TimeOfDay startTime;
+  final TimeOfDay endTime;
+
   final ValueChanged<Set<String>> onDaysChanged;
   final ValueChanged<TimeOfDay> onStartChanged;
   final ValueChanged<TimeOfDay> onEndChanged;
 
-  // ✅ Optional cancellation policy
+  // ✅ policy controller من parent عشان ما يضيع
+  final TextEditingController cancellationController;
   final ValueChanged<String> onCancellationPolicyChanged;
 
   const ProviderAvailabilityStep({
     super.key,
     required this.formKey,
+    required this.selectedDays,
+    required this.startTime,
+    required this.endTime,
     required this.onDaysChanged,
     required this.onStartChanged,
     required this.onEndChanged,
+    required this.cancellationController,
     required this.onCancellationPolicyChanged,
   });
 
@@ -39,37 +46,35 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
     'الجمعة',
   ];
 
-  final Set<String> _selectedDays = {
-    'الأحد',
-    'الاثنين',
-    'الثلاثاء',
-    'الأربعاء',
-    'الخميس',
-  };
-
-  TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
-  TimeOfDay _endTime = const TimeOfDay(hour: 18, minute: 0);
-
-  final _cancellationController = TextEditingController();
+  late Set<String> _selectedDays;
+  late TimeOfDay _startTime;
+  late TimeOfDay _endTime;
 
   @override
   void initState() {
     super.initState();
+
+    _selectedDays = {...widget.selectedDays};
+    _startTime = widget.startTime;
+    _endTime = widget.endTime;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onDaysChanged(_selectedDays);
       widget.onStartChanged(_startTime);
       widget.onEndChanged(_endTime);
-      widget.onCancellationPolicyChanged(_cancellationController.text.trim());
+      widget.onCancellationPolicyChanged(widget.cancellationController.text.trim());
     });
 
-    _cancellationController.addListener(() {
-      widget.onCancellationPolicyChanged(_cancellationController.text.trim());
-    });
+    widget.cancellationController.addListener(_onPolicyChange);
+  }
+
+  void _onPolicyChange() {
+    widget.onCancellationPolicyChanged(widget.cancellationController.text.trim());
   }
 
   @override
   void dispose() {
-    _cancellationController.dispose();
+    widget.cancellationController.removeListener(_onPolicyChange);
     super.dispose();
   }
 
@@ -99,7 +104,6 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           ),
           SizeConfig.v(16),
 
-          // الأيام المتاحة
           Text(
             'الأيام المتاحة *',
             style: AppTextStyles.body14.copyWith(
@@ -151,7 +155,6 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           ),
           SizeConfig.v(16),
 
-          // ساعات العمل
           Text(
             'ساعات العمل *',
             style: AppTextStyles.body14.copyWith(
@@ -198,7 +201,6 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           ),
           SizeConfig.v(16),
 
-          // سياسة الإلغاء (اختياري Strict doc)
           Text(
             'سياسة الإلغاء (اختياري)',
             style: AppTextStyles.body14.copyWith(
@@ -209,8 +211,9 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
           ),
           SizeConfig.v(8),
           TextFormField(
-            controller: _cancellationController,
+            controller: widget.cancellationController,
             maxLines: 4,
+            maxLength: 2000,
             decoration: InputDecoration(
               hintText: 'مثال: يمكن إلغاء الموعد مجانًا قبل 24 ساعة من وقت الحجز.',
               hintStyle: AppTextStyles.body14.copyWith(
@@ -228,9 +231,12 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
             ),
             validator: (value) {
               final v = (value ?? '').trim();
-              if (v.isEmpty) return null; // optional
+              if (v.isEmpty) return null;
+
               if (v.length > 2000) return 'الحد الأقصى 2000 حرف';
               if (_looksLikeScriptOrHtml(v)) return 'نص غير صالح';
+              if (_containsEmojiOrSymbols(v)) return 'يرجى إدخال نص فقط بدون رموز';
+
               return null;
             },
           ),
@@ -246,13 +252,23 @@ class _ProviderAvailabilityStepState extends State<ProviderAvailabilityStep> {
     return false;
   }
 
+  static bool _containsEmojiOrSymbols(String text) {
+    final emojiRegex = RegExp(
+      r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]',
+      unicode: true,
+    );
+    if (emojiRegex.hasMatch(text)) return true;
+    if (RegExp(r'[<>{}\[\]^$*_=\\|~`]').hasMatch(text)) return true;
+    return false;
+  }
+
   Widget _buildTimeField({
     required String label,
     required TimeOfDay time,
     required VoidCallback onTap,
   }) {
     final formatted =
-        '${time.hourOfPeriod == 0 ? 12 : time.hourOfPeriod}:${time.minute.toString().padLeft(2, '0')} ${time.period == DayPeriod.am ? 'ص' : 'م'}';
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

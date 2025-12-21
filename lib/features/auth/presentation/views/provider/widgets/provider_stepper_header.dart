@@ -58,12 +58,12 @@ class ProviderStepperHeader extends StatelessWidget {
                   steps[index],
                   textAlign: TextAlign.center,
                   style: AppTextStyles.overline10.copyWith(
-                    fontSize: SizeConfig.ts(10), // نفس السابق
+                    fontSize: SizeConfig.ts(10),
                     fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
                     color: isActive
                         ? AppColors.primaryGreen
                         : AppColors.textSecondary,
-                    letterSpacing: 0, // نلغي الزيادة الموجودة في overline10
+                    letterSpacing: 0,
                   ),
                 ),
               );

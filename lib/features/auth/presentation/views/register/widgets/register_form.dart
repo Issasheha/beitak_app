@@ -1,3 +1,4 @@
+// lib/features/auth/presentation/views/register/widgets/register_form.dart
 import 'package:flutter/material.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/email_field.dart';
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/name_fields_row.dart';
@@ -19,6 +20,10 @@ class RegisterForm extends StatelessWidget {
 
   final VoidCallback onSubmit;
 
+  /// ✅ أخطاء من الباك لتظهر تحت الحقول
+  final String? emailBackendErrorText;
+  final String? phoneBackendErrorText;
+
   const RegisterForm({
     super.key,
     required this.isProvider,
@@ -30,6 +35,8 @@ class RegisterForm extends StatelessWidget {
     required this.selectedCityId,
     required this.onCityChanged,
     required this.onSubmit,
+    this.emailBackendErrorText,
+    this.phoneBackendErrorText,
   });
 
   @override
@@ -49,10 +56,20 @@ class RegisterForm extends StatelessWidget {
         ),
         SizedBox(height: space),
 
-        PhoneField(controller: phoneController),
+        /// ✅ PhoneField: يقدر يتحقق من emailController + يعرض خطأ المكرر
+        PhoneField(
+          controller: phoneController,
+          emailController: emailController,
+          backendErrorText: phoneBackendErrorText,
+        ),
         SizedBox(height: space),
 
-        EmailField(controller: emailController),
+        /// ✅ EmailField: يقدر يتحقق من phoneController + يعرض خطأ المكرر
+        EmailField(
+          controller: emailController,
+          phoneController: phoneController,
+          backendErrorText: emailBackendErrorText,
+        ),
         SizedBox(height: space),
 
         CityDropdownField(

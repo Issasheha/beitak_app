@@ -1,6 +1,8 @@
+// lib/features/auth/presentation/providers/auth_controller.dart
+import 'dart:io';
+
 import 'package:flutter_riverpod/legacy.dart';
 
-// lib/features/auth/presentation/providers/auth_controller.dart
 import 'package:beitak_app/core/error/exceptions.dart';
 import 'package:beitak_app/features/auth/domain/repositories/auth_repository.dart';
 import 'package:beitak_app/features/auth/presentation/providers/auth_state.dart';
@@ -57,16 +59,20 @@ class AuthController extends StateNotifier<AuthState> {
 
       if (!session.isAuthenticated) {
         throw const ServerException(
-            message: 'تعذر تسجيل الدخول، حاول مرة أخرى.');
+          message: 'تعذر تسجيل الدخول، حاول مرة أخرى.',
+        );
       }
 
       state = AuthState.authenticated(session);
+    } on SocketException {
+      // ✅ عربي بدل إنجليزي
+      throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } on ServerException catch (e) {
       throw Exception(e.message);
     } on CacheException catch (e) {
       throw Exception(e.message);
     } catch (_) {
-      throw Exception('حدث خطأ غير متوقع، حاول مرة أخرى');
+      throw Exception('حدث خطأ غير متوقع، حاول مرة أخرى.');
     }
   }
 
@@ -94,11 +100,15 @@ class AuthController extends StateNotifier<AuthState> {
 
       if (!session.isAuthenticated) {
         throw const ServerException(
-            message: 'تعذر إنشاء الحساب، حاول مرة أخرى.');
+          message: 'تعذر إنشاء الحساب، حاول مرة أخرى.',
+        );
       }
 
       // ✅ صار عندنا session محفوظة + state محدثة
       state = AuthState.authenticated(session);
+    } on SocketException {
+      // ✅ عربي بدل إنجليزي
+      throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } on ServerException catch (e) {
       throw Exception(e.message);
     } on CacheException catch (e) {
@@ -114,8 +124,10 @@ class AuthController extends StateNotifier<AuthState> {
       state = AuthState.guest(session);
     } on CacheException catch (e) {
       throw Exception(e.message);
+    } on SocketException {
+      throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } catch (_) {
-      throw Exception('تعذر المتابعة كزائر، حاول مرة أخرى');
+      throw Exception('تعذر المتابعة كزائر، حاول مرة أخرى.');
     }
   }
 
@@ -123,8 +135,10 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       await _repo.logout();
       state = const AuthState.unauthenticated();
+    } on SocketException {
+      throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } catch (_) {
-      throw Exception('تعذر تسجيل الخروج، حاول مرة أخرى');
+      throw Exception('تعذر تسجيل الخروج، حاول مرة أخرى.');
     }
   }
 }

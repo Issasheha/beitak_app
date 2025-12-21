@@ -1,11 +1,22 @@
-// email_field.dart
+// lib/features/auth/presentation/views/register/widgets/email_field.dart
 import 'package:beitak_app/features/auth/presentation/views/register/widgets/register_text_field.dart';
 import 'package:flutter/material.dart';
 
 class EmailField extends StatelessWidget {
   final TextEditingController? controller;
 
-  const EmailField({super.key, this.controller});
+  /// لقاعدة: لازم رقم أو إيميل
+  final TextEditingController? phoneController;
+
+  /// خطأ من الباك (مثلاً: إيميل مكرر)
+  final String? backendErrorText;
+
+  const EmailField({
+    super.key,
+    this.controller,
+    this.phoneController,
+    this.backendErrorText,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,30 +27,41 @@ class EmailField extends StatelessWidget {
       icon: Icons.email_outlined,
       keyboardType: TextInputType.emailAddress,
       validator: (value) {
-        final v = value?.trim() ?? '';
+        final raw = value ?? '';
+        final v = raw.trim();
+
+        final phoneRaw = phoneController?.text ?? '';
+        final phoneTrim = phoneRaw.trim();
+
+        // ✅ قاعدة: لازم وحدة تواصل (تظهر تحت الحقلين)
+        if (v.isEmpty && phoneTrim.isEmpty) {
+          return 'يرجى إدخال(رقم الجوال أو البريد الإلكتروني).';
+        }
+
+        // إذا فاضي والإيميل مش مطلوب لأنه الهاتف موجود
         if (v.isEmpty) {
-          // مطلوب فقط إذا الهاتف فارغ → هذا متحقق على مستوى الـ Form
           return null;
         }
 
-        final emailRegex =
-            RegExp(r'^[^.][\w\-.]+@([\w-]+\.)+[\w-]{2,4}[^.]$');
+        // مسافات فقط
+        if (raw.isNotEmpty && v.isEmpty) {
+          return 'لا يمكن إدخال مسافات فقط في البريد الإلكتروني.';
+        }
 
-        final hasSpaces = v.contains(' ');
-        final hasDoubleDot = v.contains('..');
-        final hasDoubleAt = v.contains('@@');
-        final hasDot = v.contains('.');
-        final startsWithDot = v.startsWith('.');
-        final endsWithDot = v.endsWith('.');
+        // مسافات داخل البريد
+        if (v.contains(' ')) {
+          return 'البريد الإلكتروني لا يجب أن يحتوي مسافات.';
+        }
 
-        if (!emailRegex.hasMatch(v) ||
-            hasSpaces ||
-            hasDoubleDot ||
-            hasDoubleAt ||
-            !hasDot ||
-            startsWithDot ||
-            endsWithDot) {
-          return 'يرجى إدخال بريد إلكتروني صالح.';
+        // Regex أبسط وواضح
+        final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
+        if (!emailRegex.hasMatch(v)) {
+          return 'صيغة البريد الإلكتروني غير صحيحة (مثال: name@example.com).';
+        }
+
+        // ✅ خطأ من الباك (مكرر مثلاً)
+        if (backendErrorText != null && backendErrorText!.trim().isNotEmpty) {
+          return backendErrorText;
         }
 
         return null;

@@ -30,6 +30,10 @@ class BeitakApp extends ConsumerWidget {
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: 'بيتك',
+
+      // ✅ مهم جداً لتفعيل Restoration عبر التطبيق
+      restorationScopeId: 'app',
+
       theme: ThemeData(
         fontFamily: 'Cairo',
         primaryColor: AppColors.primaryGreen,
@@ -37,7 +41,7 @@ class BeitakApp extends ConsumerWidget {
         textTheme: GoogleFonts.cairoTextTheme(),
         useMaterial3: true,
       ),
-      routerConfig: router, 
+      routerConfig: router,
     );
   }
 }
