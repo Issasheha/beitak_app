@@ -83,13 +83,28 @@ class ProviderBookingCard extends StatelessWidget {
     }
   }
 
-  String _timeShort(String t) {
-    final s = t.trim();
-    if (s.length >= 5) return s.substring(0, 5);
-    return s;
-  }
-
   String _dateNice(String d) => d.trim().replaceAll('-', '/');
+
+  /// ✅ "HH:mm:ss" or "HH:mm" -> "h:mm ص/م"
+  String _time12hAr(String hhmmss) {
+    final s = (hhmmss).trim();
+    if (s.isEmpty) return '—';
+
+    final parts = s.split(':');
+    if (parts.length < 2) return s;
+
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+
+    final isPm = h >= 12;
+    final suffix = isPm ? 'م' : 'ص';
+
+    int hour12 = h % 12;
+    if (hour12 == 0) hour12 = 12;
+
+    final mm = m.toString().padLeft(2, '0');
+    return '$hour12:$mm $suffix';
+  }
 
   // ---------------- Avatar helpers ----------------
 
@@ -191,7 +206,7 @@ class ProviderBookingCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              booking.serviceName,
+                              booking.serviceNameAr, // ✅ عربي
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.title18.copyWith(
@@ -306,7 +321,7 @@ class ProviderBookingCard extends StatelessWidget {
 
                       SizedBox(height: SizeConfig.h(12)),
 
-                      // Date + time (no price as you wanted)
+                      // Date + time
                       Row(
                         children: [
                           _Meta(
@@ -316,7 +331,7 @@ class ProviderBookingCard extends StatelessWidget {
                           SizedBox(width: SizeConfig.w(12)),
                           _Meta(
                             Icons.access_time,
-                            _timeShort(booking.bookingTime),
+                            _time12hAr(booking.bookingTime), // ✅ 12h
                           ),
                           const Spacer(),
                           Container(
@@ -344,7 +359,7 @@ class ProviderBookingCard extends StatelessWidget {
 
                       SizedBox(height: SizeConfig.h(10)),
 
-                      // Location
+                      // Location (✅ بعد إصلاح الموديل ما رح يتكرر)
                       Row(
                         children: [
                           const Icon(
@@ -373,7 +388,7 @@ class ProviderBookingCard extends StatelessWidget {
               ),
             ),
 
-            // ✅ Actions area (outside click region feel)
+            // ✅ Actions area
             if (canShowPendingActions || canShowUpcomingActions) ...[
               Divider(
                 height: 1,

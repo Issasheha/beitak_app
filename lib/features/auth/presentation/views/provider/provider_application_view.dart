@@ -21,7 +21,8 @@ class ProviderApplicationView extends ConsumerStatefulWidget {
       _ProviderApplicationViewState();
 }
 
-class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationView> {
+class _ProviderApplicationViewState
+    extends ConsumerState<ProviderApplicationView> {
   int _currentStep = 0;
 
   final _personalFormKey = GlobalKey<FormState>();
@@ -121,8 +122,9 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           loading: () => _buildLoading(),
           error: (e, _) => _buildError(e.toString()),
           data: (data) {
-            // ✅ ضمان city default إذا فاضي
-            _selectedCityId ??= data.cities.isNotEmpty ? data.cities.first.id : null;
+            // ✅ default city أول مرة فقط
+            _selectedCityId ??=
+                data.cities.isNotEmpty ? data.cities.first.id : null;
 
             return Column(
               children: [
@@ -134,11 +136,17 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
                     child: Container(
                       decoration: BoxDecoration(
                         color: AppColors.cardBackground,
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(20)),
                         boxShadow: [AppColors.primaryShadow],
                       ),
                       child: Padding(
-                        padding: SizeConfig.padding(left: 20, right: 20, top: 18, bottom: 20),
+                        padding: SizeConfig.padding(
+                          left: 20,
+                          right: 20,
+                          top: 18,
+                          bottom: 20,
+                        ),
                         child: _buildStepBody(data),
                       ),
                     ),
@@ -168,12 +176,14 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           children: [
             Text(
               'تعذر تحميل البيانات',
-              style: AppTextStyles.title18.copyWith(color: AppColors.textPrimary),
+              style:
+                  AppTextStyles.title18.copyWith(color: AppColors.textPrimary),
             ),
             SizeConfig.v(8),
             Text(
               msg,
-              style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
+              style:
+                  AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
             SizeConfig.v(12),
@@ -203,7 +213,9 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           cities: data.cities,
           selectedCityId: _selectedCityId,
           onCityChanged: (v) => setState(() => _selectedCityId = v),
-          lockPersonalInfo: ref.watch(providerApplicationControllerProvider).isRegistered,
+          lockPersonalInfo: ref
+              .watch(providerApplicationControllerProvider)
+              .isRegistered,
         );
 
       case 1:
@@ -219,7 +231,8 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           selectedLanguages: _languages,
           onLanguagesChanged: (langs) => setState(() => _languages = langs),
           selectedServiceAreas: _serviceAreas,
-          onServiceAreasChanged: (areas) => setState(() => _serviceAreas = areas),
+          onServiceAreasChanged: (areas) =>
+              setState(() => _serviceAreas = areas),
           cities: data.cities,
         );
 
@@ -274,7 +287,8 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           if (_currentStep > 0)
             Expanded(
               child: OutlinedButton(
-                onPressed: isSubmitting ? null : () => setState(() => _currentStep--),
+                onPressed:
+                    isSubmitting ? null : () => setState(() => _currentStep--),
                 style: OutlinedButton.styleFrom(
                   padding: EdgeInsets.symmetric(vertical: SizeConfig.h(12)),
                   side: const BorderSide(color: AppColors.borderLight),
@@ -295,13 +309,18 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
           if (_currentStep > 0) SizeConfig.hSpace(10),
           Expanded(
             child: ElevatedButton(
-              onPressed: (isSubmitting || disableNextBecauseTerms) ? null : _onNextPressed,
+              onPressed: (isSubmitting || disableNextBecauseTerms)
+                  ? null
+                  : _onNextPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.white,
                 padding: EdgeInsets.symmetric(vertical: SizeConfig.h(12)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-                  side: const BorderSide(color: AppColors.buttonBackground, width: 2),
+                  side: const BorderSide(
+                    color: AppColors.buttonBackground,
+                    width: 2,
+                  ),
                 ),
               ),
               child: isSubmitting
@@ -356,7 +375,9 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
         return;
       }
 
-      final ok = await ref.read(providerApplicationControllerProvider.notifier).registerProviderEarly(
+      final ok = await ref
+          .read(providerApplicationControllerProvider.notifier)
+          .registerProviderEarly(
             firstName: firstName,
             lastName: lastName,
             phone: phone.isNotEmpty ? phone : null,
@@ -374,7 +395,6 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
       }
 
       _showSnack('تم إنشاء الحساب بنجاح، أكمل باقي البيانات.', isError: false);
-
       setState(() => _currentStep++);
       return;
     }
@@ -393,7 +413,10 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
     }
 
     final experienceYears = int.tryParse(_experienceCtrl.text.trim()) ?? 0;
-    final hourlyRate = double.tryParse(_hourlyRateCtrl.text.trim().replaceAll(',', '.')) ?? 0.0;
+    final hourlyRate = double.tryParse(
+          _hourlyRateCtrl.text.trim().replaceAll(',', '.'),
+        ) ??
+        0.0;
 
     String formatTime(TimeOfDay t) =>
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -401,18 +424,23 @@ class _ProviderApplicationViewState extends ConsumerState<ProviderApplicationVie
     final workingStart = formatTime(_startTime);
     final workingEnd = formatTime(_endTime);
 
-    final ok = await ref.read(providerApplicationControllerProvider.notifier).completeProviderProfile(
+    final ok = await ref
+        .read(providerApplicationControllerProvider.notifier)
+        .completeProviderProfile(
           businessName: _businessNameCtrl.text.trim(),
           bio: _bioCtrl.text.trim(),
           experienceYears: experienceYears,
           hourlyRate: hourlyRate,
           categoryId: categoryId,
           languages: _languages.toList(),
-          serviceAreas: _serviceAreas.toList(), // slugs
+          serviceAreas: _serviceAreas.toList(),
           availableDaysAr: _availableDays.toList(),
           workingStart: workingStart,
           workingEnd: workingEnd,
+
+          // ✅ سياسة الإلغاء (والترقيع بيكون جوّا controller)
           cancellationPolicy: _cancellationPolicyCtrl.text.trim(),
+
           idDocPath: _idDocPath,
           licenseDocPath: _licenseDocPath,
           policeDocPath: _policeDocPath,

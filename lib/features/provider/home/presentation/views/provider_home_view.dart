@@ -16,6 +16,7 @@ import 'package:beitak_app/features/provider/home/presentation/widgets/provider_
 import 'package:beitak_app/features/provider/home/presentation/widgets/provider_today_task_details_sheet.dart';
 
 import 'package:beitak_app/core/utils/app_text_styles.dart';
+import 'package:beitak_app/core/utils/time_format.dart';
 
 class ProviderHomeView extends ConsumerStatefulWidget {
   const ProviderHomeView({super.key});
@@ -67,6 +68,84 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
     } finally {
       if (mounted) setState(() => _todayBusy = false);
     }
+  }
+
+  Future<bool> _confirmSimple({
+    required String title,
+    required String desc,
+    required String confirmText,
+  }) async {
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(SizeConfig.radius(22)),
+              ),
+            ),
+            padding: SizeConfig.padding(horizontal: 16, vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const ProviderSheetHandle(),
+                SizedBox(height: SizeConfig.h(10)),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.title18.copyWith(
+                    fontSize: SizeConfig.ts(16),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+                Text(
+                  desc,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: SizeConfig.ts(12.8),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(14)),
+                Row(
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    Expanded(
+                      child: ProviderOutlineActionBtn(
+                        label: 'رجوع',
+                        onTap: _todayBusy ? null : () => Navigator.pop(context, false),
+                      ),
+                    ),
+                    SizedBox(width: SizeConfig.w(10)),
+                    Expanded(
+                      child: ProviderPrimaryActionBtn(
+                        label: confirmText,
+                        isLoading: false,
+                        onTap: _todayBusy ? null : () => Navigator.pop(context, true),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return ok == true;
   }
 
   Future<void> _openCancelDialog(ProviderBookingModel booking) async {
@@ -131,8 +210,7 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                       Container(
                         padding: SizeConfig.padding(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          borderRadius:
-                              BorderRadius.circular(SizeConfig.radius(14)),
+                          borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                           border: Border.all(color: AppColors.borderLight),
                           color: AppColors.background,
                         ),
@@ -160,9 +238,7 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setLocal(
-                              () => selected = v ?? categories.first,
-                            ),
+                            onChanged: (v) => setLocal(() => selected = v ?? categories.first),
                           ),
                         ),
                       ),
@@ -181,23 +257,18 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                           hintTextDirection: TextDirection.rtl,
                           hintStyle: AppTextStyles.body14.copyWith(
                             fontSize: SizeConfig.ts(13),
-                            color: AppColors.textSecondary
-                                .withValues(alpha: 0.7),
+                            color: AppColors.textSecondary.withValues(alpha: 0.7),
                             fontWeight: FontWeight.w600,
                           ),
                           filled: true,
                           fillColor: AppColors.background,
                           border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide:
-                                const BorderSide(color: AppColors.borderLight),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide: const BorderSide(color: AppColors.borderLight),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide:
-                                const BorderSide(color: AppColors.borderLight),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide: const BorderSide(color: AppColors.borderLight),
                           ),
                         ),
                       ),
@@ -208,9 +279,7 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                           Expanded(
                             child: ProviderOutlineActionBtn(
                               label: 'رجوع',
-                              onTap: _todayBusy
-                                  ? null
-                                  : () => Navigator.pop(context, false),
+                              onTap: _todayBusy ? null : () => Navigator.pop(context, false),
                             ),
                           ),
                           SizedBox(width: SizeConfig.w(10)),
@@ -218,9 +287,7 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                             child: ProviderPrimaryActionBtn(
                               label: 'تأكيد الإلغاء',
                               isLoading: false,
-                              onTap: _todayBusy
-                                  ? null
-                                  : () => Navigator.pop(context, true),
+                              onTap: _todayBusy ? null : () => Navigator.pop(context, true),
                             ),
                           ),
                         ],
@@ -252,14 +319,11 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
   Widget build(BuildContext context) {
     SizeConfig.init(context);
 
-    // ✅ Toast/SnackBar عند أي errorMessage جديد
     ref.listen(providerHomeViewModelProvider, (prev, next) {
       final prevMsg = prev?.errorMessage;
       final nextMsg = next.errorMessage;
 
-      if (nextMsg != null &&
-          nextMsg.trim().isNotEmpty &&
-          nextMsg != prevMsg) {
+      if (nextMsg != null && nextMsg.trim().isNotEmpty && nextMsg != prevMsg) {
         final messenger = ScaffoldMessenger.of(context);
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
@@ -323,30 +387,37 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
                           todayBusy: _todayBusy,
                           hasNew: hasNew,
                           hasToday: hasToday,
-                          onToggleNewRequests: () => setState(
-                              () => _expandNewRequests = !_expandNewRequests),
-                          onToggleTodayTask: () => setState(
-                              () => _expandTodayTask = !_expandTodayTask),
+                          onToggleNewRequests: () =>
+                              setState(() => _expandNewRequests = !_expandNewRequests),
+                          onToggleTodayTask: () =>
+                              setState(() => _expandTodayTask = !_expandTodayTask),
                           onNewRequestsTap: _goToPendingRequests,
                           todayTaskUi: hasToday ? _mapTodayTask(vm) : null,
                           newRequestUi: hasNew
                               ? ProviderNewRequestUI(
                                   serviceName: vm.newRequestPreview!.serviceName,
-                                  customerName:
-                                      vm.newRequestPreview!.customerName,
+                                  customerName: vm.newRequestPreview!.customerName,
                                 )
                               : null,
                           onTodayDetailsTap: () => _openTodayTaskDetails(vm),
+
+                          // ✅ Confirm before complete
                           onTodayCompleteTap: hasToday
                               ? () async {
                                   final booking = vm.todayTask!;
+                                  final ok = await _confirmSimple(
+                                    title: 'إنهاء الخدمة',
+                                    desc: 'هل أنت متأكد أنك تريد إنهاء هذه الخدمة؟',
+                                    confirmText: 'تأكيد الإنهاء',
+                                  );
+                                  if (!ok) return;
+
                                   await _runToday(() async {
-                                    await ref
-                                        .read(providerHomeViewModelProvider)
-                                        .complete(booking.id);
+                                    await ref.read(providerHomeViewModelProvider).complete(booking.id);
                                   });
                                 }
                               : null,
+
                           onTodayCancelTap: hasToday
                               ? () async => _openCancelDialog(vm.todayTask!)
                               : null,
@@ -370,7 +441,6 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
       return '$s د.أ';
     }
 
-    // ✅ Skeleton بسيط لأول تحميل فقط (لما ما في بيانات أصلاً)
     final showSkeleton = vm.isLoading &&
         vm.allBookings.isEmpty &&
         vm.totalRequestsCount == 0 &&
@@ -411,12 +481,11 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
 
   ProviderTodayTaskUI _mapTodayTask(ProviderHomeViewModel vm) {
     final b = vm.todayTask!;
-    final timeText = _formatTime(b.bookingTime);
+    final timeText = TimeFormat.to12hAr(b.bookingTime);
     final durationText =
         (b.durationHours <= 0) ? '—' : _formatDurationHours(b.durationHours);
     final locationText = b.locationText.isEmpty ? '—' : b.locationText;
-    final priceText =
-        b.totalPrice <= 0 ? '—' : '${b.totalPrice.toStringAsFixed(0)} د.أ';
+    final priceText = b.totalPrice <= 0 ? '—' : '${b.totalPrice.toStringAsFixed(0)} د.أ';
 
     return ProviderTodayTaskUI(
       serviceName: b.serviceName,
@@ -434,13 +503,5 @@ class _ProviderHomeViewState extends ConsumerState<ProviderHomeView> {
     if (v == 1) return 'ساعة';
     if (v == 2) return 'ساعتين';
     return '$v ساعات';
-  }
-
-  String _formatTime(String hhmmss) {
-    final s = hhmmss.trim();
-    if (s.isEmpty) return '—';
-    final parts = s.split(':');
-    if (parts.length < 2) return s;
-    return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
   }
 }

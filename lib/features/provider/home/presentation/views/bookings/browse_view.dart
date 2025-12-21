@@ -16,7 +16,6 @@ import 'package:beitak_app/features/provider/home/presentation/views/bookings/vi
 class ProviderBrowseView extends StatefulWidget {
   const ProviderBrowseView({super.key, this.initialTab});
 
-  /// expected values from route query: 'pending' | 'upcoming'
   final String? initialTab;
 
   @override
@@ -47,12 +46,127 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
     super.dispose();
   }
 
-  // ✅ FIXED: make bottom sheet take enough height (prevents overflow)
+  Future<bool> _confirmSimple({
+    required String title,
+    required String desc,
+    required String confirmText,
+  }) async {
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(SizeConfig.radius(22)),
+              ),
+            ),
+            padding: SizeConfig.padding(horizontal: 16, vertical: 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.title18.copyWith(
+                    fontSize: SizeConfig.ts(16),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+                Text(
+                  desc,
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.body14.copyWith(
+                    fontSize: SizeConfig.ts(12.8),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(14)),
+                Row(
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          side: const BorderSide(color: AppColors.borderLight),
+                          padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                          ),
+                        ),
+                        child: Text(
+                          'رجوع',
+                          style: AppTextStyles.body14.copyWith(
+                            fontWeight: FontWeight.w900,
+                            fontSize: SizeConfig.ts(13),
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: SizeConfig.w(10)),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.lightGreen,
+                          elevation: 0,
+                          padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                          ),
+                        ),
+                        child: Text(
+                          confirmText,
+                          style: AppTextStyles.body14.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: SizeConfig.ts(13),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return ok == true;
+  }
+
   void _openDetails(BuildContext context, ProviderBookingModel booking) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // ✅ لازم true
-      useSafeArea: true, // ✅ أفضل على الأجهزة الصغيرة/النوتش
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ProviderBookingDetailsSheet(
         booking: booking,
@@ -95,8 +209,7 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Padding(
-            padding:
-                EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -147,8 +260,7 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                       Container(
                         padding: SizeConfig.padding(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          borderRadius:
-                              BorderRadius.circular(SizeConfig.radius(14)),
+                          borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                           border: Border.all(color: AppColors.borderLight),
                           color: AppColors.background,
                         ),
@@ -174,9 +286,7 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setLocal(
-                              () => selected = v ?? categories.first,
-                            ),
+                            onChanged: (v) => setLocal(() => selected = v ?? categories.first),
                           ),
                         ),
                       ),
@@ -197,16 +307,12 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                           filled: true,
                           fillColor: AppColors.background,
                           border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide:
-                                const BorderSide(color: AppColors.borderLight),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide: const BorderSide(color: AppColors.borderLight),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide:
-                                const BorderSide(color: AppColors.borderLight),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide: const BorderSide(color: AppColors.borderLight),
                           ),
                         ),
                       ),
@@ -220,11 +326,9 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.textPrimary,
                                 side: const BorderSide(color: AppColors.borderLight),
-                                padding:
-                                    SizeConfig.padding(horizontal: 16, vertical: 12),
+                                padding: SizeConfig.padding(horizontal: 16, vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(SizeConfig.radius(14)),
+                                  borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                                 ),
                               ),
                               child: Text(
@@ -244,11 +348,9 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.lightGreen,
                                 elevation: 0,
-                                padding:
-                                    SizeConfig.padding(horizontal: 16, vertical: 12),
+                                padding: SizeConfig.padding(horizontal: 16, vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(SizeConfig.radius(14)),
+                                  borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                                 ),
                               ),
                               child: Text(
@@ -334,8 +436,7 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                       padding: SizeConfig.padding(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(16)),
+                        borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
                         border: Border.all(color: AppColors.borderLight),
                       ),
                       child: Text(
@@ -424,9 +525,46 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
           booking: b,
           busy: busy,
           onDetailsTap: () => _openDetails(context, b),
-          onAccept: isPending ? () => _vm.accept(b.id) : null,
-          onReject: isPending ? () => _vm.reject(b.id) : null,
-          onComplete: isUpcoming ? () => _vm.complete(b.id) : null,
+
+          onAccept: isPending
+              ? () async {
+                  if (busy) return;
+                  final ok = await _confirmSimple(
+                    title: 'قبول الطلب',
+                    desc: 'هل أنت متأكد أنك تريد قبول هذا الطلب؟',
+                    confirmText: 'تأكيد القبول',
+                  );
+                  if (!ok) return;
+                  await _vm.accept(b.id);
+                }
+              : null,
+
+          onReject: isPending
+              ? () async {
+                  if (busy) return;
+                  final ok = await _confirmSimple(
+                    title: 'رفض الطلب',
+                    desc: 'هل أنت متأكد أنك تريد رفض هذا الطلب؟',
+                    confirmText: 'تأكيد الرفض',
+                  );
+                  if (!ok) return;
+                  await _vm.reject(b.id);
+                }
+              : null,
+
+          onComplete: isUpcoming
+              ? () async {
+                  if (busy) return;
+                  final ok = await _confirmSimple(
+                    title: 'إتمام المهمة',
+                    desc: 'هل أنت متأكد أنك تريد إتمام هذه المهمة؟',
+                    confirmText: 'تأكيد الإتمام',
+                  );
+                  if (!ok) return;
+                  await _vm.complete(b.id);
+                }
+              : null,
+
           onCancel: isUpcoming ? () => _openCancelDialog(context, b) : null,
         );
       },

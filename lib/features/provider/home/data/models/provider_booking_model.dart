@@ -57,7 +57,6 @@ class ProviderBookingModel {
       final s = (v ?? '').toString().trim();
       if (s.isEmpty) return null;
 
-      // ✅ نمسك N/A هون كمان
       final lower = s.toLowerCase();
       if (lower == 'n/a' || lower == 'na' || lower == 'none' || lower == 'null') return null;
 
@@ -100,18 +99,55 @@ class ProviderBookingModel {
     final key = FixedServiceCategories.keyFromAnyString(raw);
     if (key != null) return FixedServiceCategories.labelArFromKey(key);
 
-    // إذا جاي عربي أصلاً
     final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(raw);
     return hasArabic ? raw : raw;
   }
 
   String? get serviceDescription => service.description.trim().isEmpty ? null : service.description;
 
-  /// raw "amman - abdoun"
+  /// ✅ raw "amman - abdoun" لكن بدون تكرار
+  /// Examples:
+  /// - serviceCity="amman", area="abdoun" => "amman - abdoun"
+  /// - serviceCity="amman - abdoun", area="abdoun" => "amman - abdoun" (بدون تكرار)
   String get locationText {
-    final area = (serviceArea ?? '').trim();
-    if (area.isEmpty) return serviceCity;
-    return '$serviceCity - $area';
+    String clean(String s) {
+      final x = s.trim();
+      if (x.isEmpty) return '';
+      final lower = x.toLowerCase();
+      if (lower == 'n/a' || lower == 'na' || lower == 'none' || lower == 'null' || lower == '-') {
+        return '';
+      }
+      return x;
+    }
+
+    final cityRaw = clean(serviceCity);
+    final areaRaw = clean(serviceArea ?? '');
+
+    // اجمع أجزاء city + area (حتى لو city أصلاً فيه "-")
+    final parts = <String>[];
+
+    void addParts(String s) {
+      final tokens = s
+          .split(RegExp(r'\s*-\s*|\s*,\s*|\s*\/\s*')) // يفصل " - " أو "," أو "/"
+          .map((e) => clean(e))
+          .where((e) => e.isNotEmpty);
+      parts.addAll(tokens);
+    }
+
+    if (cityRaw.isNotEmpty) addParts(cityRaw);
+    if (areaRaw.isNotEmpty) addParts(areaRaw);
+
+    if (parts.isEmpty) return '—';
+
+    // إزالة التكرار (case-insensitive)
+    final seen = <String>{};
+    final unique = <String>[];
+    for (final p in parts) {
+      final k = p.toLowerCase();
+      if (seen.add(k)) unique.add(p);
+    }
+
+    return unique.join(' - ');
   }
 
   static int _asInt(dynamic v) {
@@ -143,8 +179,8 @@ class _PersonModel {
   factory _PersonModel.fromJson(Map<String, dynamic> json) => _PersonModel(
         firstName: (json['first_name'] ?? '').toString(),
         lastName: (json['last_name'] ?? '').toString(),
-        phone: (json['phone'] ?? '')?.toString(),
-        email: (json['email'] ?? '')?.toString(),
+        phone: (json['phone'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
       );
 
   String get fullName => ('$firstName $lastName').trim();

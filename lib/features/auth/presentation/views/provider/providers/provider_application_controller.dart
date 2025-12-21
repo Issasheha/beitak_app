@@ -1,3 +1,5 @@
+// lib/features/auth/presentation/views/provider/providers/provider_application_controller.dart
+
 import 'dart:convert';
 
 import 'package:beitak_app/core/error/exceptions.dart';
@@ -12,8 +14,8 @@ import 'package:path/path.dart' as p;
 
 import 'provider_application_state.dart';
 
-final providerApplicationControllerProvider =
-    StateNotifierProvider<ProviderApplicationController, ProviderApplicationState>(
+final providerApplicationControllerProvider = StateNotifierProvider<
+    ProviderApplicationController, ProviderApplicationState>(
   (ref) {
     final dio = ApiClient.dio;
     final local = AuthLocalDataSourceImpl();
@@ -27,7 +29,8 @@ final providerApplicationControllerProvider =
   },
 );
 
-class ProviderApplicationController extends StateNotifier<ProviderApplicationState> {
+class ProviderApplicationController
+    extends StateNotifier<ProviderApplicationState> {
   final Dio _dio;
   final AuthLocalDataSource _local;
   final Future<void> Function() _authControllerReload;
@@ -42,8 +45,10 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
         super(const ProviderApplicationState());
 
   // =========================
-  // ✅ 1) Register EARLY (Step 0)
+  // Public API (Used by UI)
   // =========================
+
+  /// Step 0: Register early (so you catch duplicate phone/email early)
   Future<bool> registerProviderEarly({
     required String firstName,
     required String lastName,
@@ -51,6 +56,7 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
     String? email,
     required String password,
     required int cityId,
+    int? areaId,
   }) async {
     state = state.copyWith(isSubmitting: true, errorMessage: null);
 
@@ -62,21 +68,20 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
         email: email,
         password: password,
         cityId: cityId,
+        areaId: areaId,
       );
+      if (!ok) return false;
 
-      if (ok) {
-        state = state.copyWith(isRegistered: true);
-      }
-
-      return ok;
+      // ✅ important for UI to lock Step 0
+      state = state.copyWith(isRegistered: true);
+      await _authControllerReload();
+      return true;
     } finally {
       state = state.copyWith(isSubmitting: false);
     }
   }
 
-  // =========================
-  // ✅ 2) Complete profile (Last step)
-  // =========================
+  /// Last step: Complete provider profile
   Future<bool> completeProviderProfile({
     required String businessName,
     required String bio,
@@ -123,6 +128,75 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
     }
   }
 
+  /// Optional (if you ever want one-shot submit)
+  Future<bool> submitFullApplication({
+    required String firstName,
+    required String lastName,
+    String? phone,
+    String? email,
+    required String password,
+    required int cityId,
+    int? areaId,
+    required String businessName,
+    required String bio,
+    required int experienceYears,
+    required double hourlyRate,
+    required int categoryId,
+    required List<String> languages,
+    required List<String> serviceAreas,
+    required List<String> availableDaysAr,
+    required String workingStart,
+    required String workingEnd,
+    required String cancellationPolicy,
+    String? idDocPath,
+    String? licenseDocPath,
+    String? policeDocPath,
+  }) async {
+    state = state.copyWith(isSubmitting: true, errorMessage: null);
+
+    try {
+      final registered = await _registerProvider(
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        email: email,
+        password: password,
+        cityId: cityId,
+        areaId: areaId,
+      );
+      if (!registered) return false;
+
+      state = state.copyWith(isRegistered: true);
+
+      final completed = await _completeProviderProfile(
+        businessName: businessName,
+        bio: bio,
+        experienceYears: experienceYears,
+        hourlyRate: hourlyRate,
+        categoryId: categoryId,
+        languages: languages,
+        serviceAreas: serviceAreas,
+        availableDaysAr: availableDaysAr,
+        workingStart: workingStart,
+        workingEnd: workingEnd,
+        cancellationPolicy: cancellationPolicy,
+        idDocPath: idDocPath,
+        licenseDocPath: licenseDocPath,
+        policeDocPath: policeDocPath,
+      );
+      if (!completed) return false;
+
+      await _authControllerReload();
+      return true;
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  // =========================
+  // Internal: Register Provider
+  // =========================
+
   Future<bool> _registerProvider({
     required String firstName,
     required String lastName,
@@ -130,14 +204,19 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
     String? email,
     required String password,
     required int cityId,
+    int? areaId,
   }) async {
     try {
       final Map<String, dynamic> body = {
         'first_name': firstName.trim(),
         'last_name': lastName.trim(),
         'password': password,
-        'city_id': cityId, // ✅ City فقط (بدون Area)
+        'city_id': cityId, // ✅ important
       };
+
+      if (areaId != null) {
+        body['area_id'] = areaId;
+      }
 
       if (phone != null && phone.trim().isNotEmpty) {
         body['phone'] = phone.trim();
@@ -148,8 +227,8 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
       }
 
       final response = await _dio.post(ApiConstants.providerRegister, data: body);
-      final data = response.data;
 
+      final data = response.data;
       if (data is! Map<String, dynamic>) {
         throw const ServerException(message: 'Invalid response format');
       }
@@ -170,6 +249,15 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
         throw const ServerException(message: 'Invalid response payload');
       }
 
+      // Sometimes backend returns provider status as warning
+      final statusText = _extractProviderStatus(data);
+      final statusMsg = _mapProviderStatusMessage(statusText);
+      if (statusMsg != null) {
+        state = state.copyWith(errorMessage: statusMsg);
+        return false;
+      }
+
+      // Cache session
       final sessionModel = AuthSessionModel.fromJson({
         ...payload,
         'is_guest': false,
@@ -185,10 +273,15 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
       state = state.copyWith(errorMessage: e.message);
       return false;
     } catch (_) {
-      state = state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إنشاء الحساب');
+      state =
+          state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إنشاء الحساب');
       return false;
     }
   }
+
+  // =========================
+  // Internal: Complete Profile
+  // =========================
 
   Future<bool> _completeProviderProfile({
     required String businessName,
@@ -238,20 +331,19 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
         formData.fields.add(MapEntry('bio', b));
       }
 
-      // ✅ Backend expects these fields
-      formData.fields.addAll([
-        MapEntry('experience_years', experienceYears.toString()),
-        MapEntry('hourly_rate', hourlyRate.toString()),
-        MapEntry('category_id', categoryId.toString()),
-        MapEntry('working_hours', workingHoursJson),
-      ]);
+      // ✅ most important: send category_id here
+      formData.fields.add(MapEntry('category_id', categoryId.toString()));
 
-      // ✅ cancellation_policy موجود في Provider model (PUT profile)،
-      // لكن complete-profile controller عندك يسمح update fields عامة
-      // رح نبعته هنا كحقل (ولو الباك ما خزنه حاليًا، ما رح يكسر)
+      // ⚠️ we still send it here (harmless) but backend currently ignores it in this endpoint
       if (cp.isNotEmpty) {
         formData.fields.add(MapEntry('cancellation_policy', cp));
       }
+
+      formData.fields.addAll([
+        MapEntry('experience_years', experienceYears.toString()),
+        MapEntry('hourly_rate', hourlyRate.toString()),
+        MapEntry('working_hours', workingHoursJson),
+      ]);
 
       for (final lang in languages) {
         final v = lang.trim();
@@ -319,7 +411,12 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
         final msg = _extractBackendMessage(data) ?? 'فشل إكمال ملف مزوّد الخدمة';
         final statusText = _extractProviderStatus(data);
         final finalMsg = _mapProviderStatusMessage(statusText) ?? msg;
-        throw ServerException(message: finalMsg, statusCode: response.statusCode ?? 0);
+        throw ServerException(message: finalMsg);
+      }
+
+      // ✅ THE PATCH (Confirmed): Save cancellation_policy via PUT /providers/profile
+      if (cp.isNotEmpty) {
+        await _patchCancellationPolicy(cp);
       }
 
       return true;
@@ -336,15 +433,27 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
     }
   }
 
+  Future<void> _patchCancellationPolicy(String policy) async {
+    try {
+      await _dio.put(
+        ApiConstants.providerProfile, // ✅ /providers/profile
+        data: {'cancellation_policy': policy},
+        options: Options(contentType: Headers.jsonContentType),
+      );
+    } on DioException {
+      // ✅ لا نفشل عملية التسجيل كاملة بسبب ترقيع
+      // إذا بدك نخليها تفشل: احكيلي وبخليها throw
+    }
+  }
+
   // =========================
-  // Helpers
+  // Helpers (Strict, Form-level)
   // =========================
 
   String _mapDioErrorToMessage(DioException e) {
     final statusCode = e.response?.statusCode;
     final resp = e.response?.data;
 
-    // ✅ Duplicate check
     if (statusCode == 409) {
       return 'رقم الجوال أو البريد الإلكتروني مستخدم مسبقًا';
     }
@@ -354,7 +463,8 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
       final errorsMsg = _extractErrorsAsSingleMessage(resp);
       final combined = (errorsMsg ?? msg)?.trim();
 
-      if (_looksLikeDuplicate(combined)) {
+      final duplicateDetected = _looksLikeDuplicate(combined);
+      if (duplicateDetected) {
         return 'رقم الجوال أو البريد الإلكتروني مستخدم مسبقًا';
       }
 
@@ -444,7 +554,8 @@ class ProviderApplicationController extends StateNotifier<ProviderApplicationSta
       return 'طلبك قيد المراجعة حاليًا.';
     }
 
-    if (statusOrMessage.contains('مرفوض') || statusOrMessage.contains('تم الرفض')) {
+    if (statusOrMessage.contains('مرفوض') ||
+        statusOrMessage.contains('تم الرفض')) {
       return 'تم رفض طلبك. يرجى التواصل مع الدعم أو تعديل بياناتك.';
     }
 

@@ -34,8 +34,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
   ProviderBookingModel? newRequestPreview;
 
   String get headerTitle => 'لوحة التحكم';
-  String get headerSubtitle =>
-      'أهلًا بك من جديد يا $providerName! إليك لمحة عامة.';
+  String get headerSubtitle => 'أهلًا بك من جديد يا $providerName! إليك لمحة عامة.';
 
   double get totalEarnings => stats.totalEarnings;
   int get completedCount => stats.completedBookings;
@@ -51,6 +50,8 @@ class ProviderHomeViewModel extends ChangeNotifier {
     'provider_arrived',
     'in_progress',
   };
+
+  bool _refreshing = false;
 
   void _log(String msg) {
     debugPrint('[ProviderHomeVM] $msg');
@@ -71,34 +72,42 @@ class ProviderHomeViewModel extends ChangeNotifier {
   }
 
   String _friendlyErrorFromStatus(int? status) {
-    if (status == 401) {
-      return 'انتهت الجلسة أو التوكن غير صالح. أعد تسجيل الدخول.';
-    }
+    if (status == 401) return 'انتهت الجلسة أو التوكن غير صالح. أعد تسجيل الدخول.';
     if (status == 403) return 'ليس لديك صلاحية لتنفيذ هذا الإجراء.';
     if (status == 404) return 'الطلب غير موجود أو تم حذفه.';
-    if (status == 409) {
-      return 'تعذر تنفيذ العملية بسبب تعارض بالحالة الحالية للطلب.';
-    }
-    if (status != null && status >= 500) {
-      return 'مشكلة في السيرفر. حاول لاحقاً.';
-    }
+    if (status == 409) return 'تعذر تنفيذ العملية بسبب تعارض بالحالة الحالية للطلب.';
+    if (status != null && status >= 500) return 'مشكلة في السيرفر. حاول لاحقاً.';
     return 'تعذر تنفيذ العملية. حاول مرة أخرى.';
   }
 
-  // ✅ Refresh partial-fail: stats/bookings independent
-  Future<void> refresh() async {
-    isLoading = true;
-    errorMessage = null;
-    notifyListeners();
+  /// ✅ Refresh يدعم silent polling
+  /// - silent=false: يطلع loading طبيعي
+  /// - silent=true : بدون ما يغير isLoading (ولا يعمل flicker)
+  Future<void> refresh({bool silent = false}) async {
+    if (_refreshing) return;
+    _refreshing = true;
+
+    final bool hadDataBefore = _hasAnyDashboardData();
+
+    if (!silent) {
+      isLoading = true;
+      errorMessage = null;
+      notifyListeners();
+    }
 
     String? statsErr;
     String? bookingsErr;
 
+    bool statsOk = false;
+    bool bookingsOk = false;
+
     try {
       await _resolveProviderNameIfPossible();
 
+      // --- Stats ---
       try {
         stats = await _remote.getDashboardStats();
+        statsOk = true;
       } on DioException catch (e) {
         _logDio('getDashboardStats', e);
         statsErr = _friendlyErrorFromStatus(e.response?.statusCode);
@@ -107,6 +116,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
         statsErr = 'تعذر تحميل الإحصائيات حالياً.';
       }
 
+      // --- Bookings ---
       try {
         allBookings = await _remote.getMyBookings(
           limit: 60,
@@ -114,6 +124,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
           order: 'ASC',
         );
         _computeDashboardFromBookings(allBookings);
+        bookingsOk = true;
       } on DioException catch (e) {
         _logDio('getMyBookings', e);
         bookingsErr = _friendlyErrorFromStatus(e.response?.statusCode);
@@ -122,20 +133,45 @@ class ProviderHomeViewModel extends ChangeNotifier {
         bookingsErr = 'تعذر تحميل الحجوزات حالياً.';
       }
 
-      if (statsErr != null && bookingsErr != null) {
-        errorMessage =
-            'تعذر تحميل بيانات لوحة التحكم. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.';
-      } else if (statsErr != null) {
-        errorMessage = 'تعذر تحميل الإحصائيات حالياً.';
-      } else if (bookingsErr != null) {
-        errorMessage = 'تعذر تحميل الحجوزات حالياً.';
+      // --- Error message policy ---
+      if (!silent) {
+        if (statsErr != null && bookingsErr != null) {
+          errorMessage =
+              'تعذر تحميل بيانات لوحة التحكم. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.';
+        } else if (statsErr != null) {
+          errorMessage = 'تعذر تحميل الإحصائيات حالياً.';
+        } else if (bookingsErr != null) {
+          errorMessage = 'تعذر تحميل الحجوزات حالياً.';
+        } else {
+          errorMessage = null;
+        }
       } else {
-        errorMessage = null;
+        // ✅ Silent: لا تزعج المستخدم بأخطاء أثناء polling
+        // لكن إذا نجحنا نجدد البيانات → امسح أي error قديم
+        final anyOk = statsOk || bookingsOk;
+        if (anyOk) errorMessage = null;
+
+        // إذا ما كان في أي بيانات سابقاً وفشلنا، خليه يضل طبيعي (ما نعمل شي)
+        // (يعني ما نطلّع error جديد في silent)
+        if (!hadDataBefore && !anyOk) {
+          // keep as is
+        }
       }
     } finally {
-      isLoading = false;
+      if (!silent) {
+        isLoading = false;
+      }
+      _refreshing = false;
       notifyListeners();
     }
+  }
+
+  bool _hasAnyDashboardData() {
+    return allBookings.isNotEmpty ||
+        totalRequestsCount > 0 ||
+        upcomingCount > 0 ||
+        completedCount > 0 ||
+        totalEarnings > 0;
   }
 
   // ✅ Accept: local same-day rule + no longer available handling
@@ -145,8 +181,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
     final target = _findBookingById(bookingId);
     if (target != null && _violatesSameDayRule(target)) {
-      errorMessage =
-          'لا يمكنك قبول هذا الطلب لأن لديك حجزاً مجدولاً في نفس اليوم.';
+      errorMessage = 'لا يمكنك قبول هذا الطلب لأن لديك حجزاً مجدولاً في نفس اليوم.';
       notifyListeners();
       return;
     }
@@ -159,7 +194,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
       final status = e.response?.statusCode;
 
-      // ✅ NEW: no longer available message + refresh
       if (status == 404 || status == 409) {
         errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
         notifyListeners();
@@ -189,7 +223,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
       final status = e.response?.statusCode;
 
-      // ✅ NEW: no longer available message + refresh
       if (status == 404 || status == 409) {
         errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
         notifyListeners();
@@ -277,8 +310,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
   }
 
   void _computeDashboardFromBookings(List<ProviderBookingModel> bookings) {
-    newRequests =
-        bookings.where((b) => b.status == _pendingProviderAccept).toList();
+    newRequests = bookings.where((b) => b.status == _pendingProviderAccept).toList();
     newRequests.sort(_byDateThenTime);
 
     totalRequestsCount = newRequests.length;

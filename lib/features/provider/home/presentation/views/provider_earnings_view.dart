@@ -40,28 +40,7 @@ class ProviderEarningsView extends ConsumerWidget {
             color: AppColors.textPrimary,
             onPressed: () => context.pop(),
           ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'الأرباح',
-                style: AppTextStyles.title18.copyWith(
-                  fontSize: SizeConfig.ts(16.5),
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: SizeConfig.h(2)),
-              Text(
-                'معلوماتك المالية',
-                style: AppTextStyles.body14.copyWith(
-                  fontSize: SizeConfig.ts(12),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
+          title: const SizedBox.shrink(), // ✅ remove duplicated title
           centerTitle: false,
         ),
         body: RefreshIndicator(
@@ -91,7 +70,6 @@ class ProviderEarningsView extends ConsumerWidget {
                     ),
                     SizedBox(height: SizeConfig.h(10)),
 
-                    // ✅ هذا الشهر (بدون مقارنات)
                     _EarningsTile(
                       title: 'هذا الشهر',
                       valueText: _jd(monthEarnings),
@@ -99,12 +77,11 @@ class ProviderEarningsView extends ConsumerWidget {
                       iconBg: AppColors.lightGreen.o(0.12),
                       icon: Icons.calendar_month_outlined,
                       iconColor: AppColors.lightGreen,
-                      onTap: null, // لو بدك لاحقاً تفتح تفاصيل شهرية حط callback هون
+                      onTap: null,
                     ),
 
                     SizedBox(height: SizeConfig.h(10)),
 
-                    // ✅ الوظائف المكتملة (نكتفي فيها)
                     _EarningsTile(
                       title: 'الوظائف المكتملة',
                       valueText: '$completedJobs وظيفة',
@@ -200,7 +177,6 @@ class _GreenHeaderWithSummaryCard extends StatelessWidget {
               ),
             ),
           ),
-
           Positioned(
             left: 16,
             right: 16,
@@ -330,7 +306,6 @@ class _EarningsTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
-            // ✅ Border أقوى + مميز “كليكابل”
             border: Border.all(
               color: AppColors.lightGreen.o(clickable ? 0.55 : 0.22),
               width: clickable ? 1.6 : 1.2,
@@ -397,13 +372,15 @@ class _EarningsTile extends StatelessWidget {
                 ),
               ),
 
-              // ✅ Chevron يعطي إحساس “تفاصيل/دخول” حتى لو onTap فاضي حالياً
-              SizedBox(width: SizeConfig.w(10)),
-              Icon(
-                Icons.chevron_left_rounded,
-                size: SizeConfig.ts(22),
-                color: AppColors.textSecondary.o(0.75),
-              ),
+              // ✅ Only show chevron if clickable
+              if (clickable) ...[
+                SizedBox(width: SizeConfig.w(10)),
+                Icon(
+                  Icons.chevron_left_rounded,
+                  size: SizeConfig.ts(22),
+                  color: AppColors.textSecondary.o(0.75),
+                ),
+              ],
             ],
           ),
         ),

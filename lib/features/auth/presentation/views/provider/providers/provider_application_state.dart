@@ -1,8 +1,10 @@
+// lib/features/auth/presentation/views/provider/providers/provider_application_state.dart
+
 class ProviderApplicationState {
   final bool isSubmitting;
   final String? errorMessage;
 
-  // ✅ لتثبيت حالة التسجيل المبكر (حتى نمنع إعادة register)
+  /// ✅ صار عندنا تسجيل مبكر: إذا true يعني Step 0 تم وتخزن التوكن
   final bool isRegistered;
 
   const ProviderApplicationState({
