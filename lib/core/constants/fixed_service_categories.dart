@@ -1,7 +1,7 @@
 // lib/core/constants/fixed_service_categories.dart
 
 class FixedServiceCategory {
-  final String key; // internal (backend-friendly)
+  final String key; // internal key
   final String labelAr; // UI label (Arabic)
   const FixedServiceCategory({required this.key, required this.labelAr});
 }
@@ -30,9 +30,10 @@ class FixedServiceCategories {
   static String _normAr(String s) {
     var x = s.trim();
 
-    // remove spaces + tatweel
+    // remove whitespace + tatweel + tashkeel
     x = x.replaceAll(RegExp(r'\s+'), '');
     x = x.replaceAll('ـ', '');
+    x = x.replaceAll(RegExp(r'[\u064B-\u0652]'), ''); // تشكيل
 
     // normalize alef variants
     x = x.replaceAll('أ', 'ا').replaceAll('إ', 'ا').replaceAll('آ', 'ا');
@@ -41,7 +42,7 @@ class FixedServiceCategories {
     x = x.replaceAll('ى', 'ي');
     x = x.replaceAll('ة', 'ه');
 
-    // remove Arabic "ال" prefix (optional)
+    // optional: remove "ال"
     if (x.startsWith('ال')) x = x.substring(2);
 
     return x;
@@ -50,13 +51,38 @@ class FixedServiceCategories {
   static String _normKey(String s) {
     var x = s.trim().toLowerCase();
 
-    // ✅ أهم تعديل: لا تحذف المسافات، حولها إلى underscore
+    // ✅ لا تحذف المسافات، حولها underscore
     x = x.replaceAll(RegExp(r'\s+'), '_');
     x = x.replaceAll('-', '_');
     x = x.replaceAll(RegExp(r'_+'), '_');
 
     return x;
   }
+
+  // ✅ aliases عربية شائعة -> keys ثابتة عندك
+  static final Map<String, String> _variants = <String, String>{
+    // home maintenance
+    _normAr('صيانة للمنزل'): 'home_maintenance',
+    _normAr('صيانه للمنزل'): 'home_maintenance',
+    _normAr('صيانة المنازل'): 'home_maintenance',
+
+    // appliance maintenance
+    _normAr('صيانة للاجهزة'): 'appliance_maintenance',
+    _normAr('صيانه للاجهزة'): 'appliance_maintenance',
+    _normAr('صيانة للأجهزة'): 'appliance_maintenance',
+    _normAr('صيانة للأجهزه'): 'appliance_maintenance',
+    _normAr('صيانة الأجهزة'): 'appliance_maintenance',
+    _normAr('صيانة الاجهزة'): 'appliance_maintenance',
+
+    // electricity / plumbing / cleaning
+    _normAr('كهرباء'): 'electricity',
+    _normAr('سباكة'): 'plumbing',
+    _normAr('تنظيف'): 'cleaning',
+
+    // ✅ مهم
+    _normAr('مواسرجي'): 'plumbing',
+    _normAr('سباك'): 'plumbing',
+  };
 
   static String? keyFromArabicLabel(String labelAr) {
     final want = _normAr(labelAr);
@@ -65,25 +91,19 @@ class FixedServiceCategories {
       if (_normAr(c.labelAr) == want) return c.key;
     }
 
-    // allow some common variants
-    final variants = <String, String>{
-      _normAr('صيانة للمنزل'): 'home_maintenance',
-      _normAr('صيانه للمنزل'): 'home_maintenance',
-
-      _normAr('صيانة للاجهزة'): 'appliance_maintenance',
-      _normAr('صيانه للاجهزة'): 'appliance_maintenance',
-      _normAr('صيانة للأجهزة'): 'appliance_maintenance',
-
-      _normAr('كهرباء'): 'electricity',
-      _normAr('سباكة'): 'plumbing',
-      _normAr('تنظيف'): 'cleaning',
-    };
-
-    return variants[want];
+    return _variants[want];
   }
 
   static String labelArFromKey(String key) {
     final k = _normKey(key);
+
+    // ✅ Aliases: السيرفر vs مفاتيحك الثابتة
+    if (k == 'electrical') return keyToAr['electricity'] ?? key;
+    if (k == 'general_maintenance' || k == 'general_maintenance') {
+      return keyToAr['home_maintenance'] ?? key;
+    }
+    if (k == 'appliance_repair') return keyToAr['appliance_maintenance'] ?? key;
+
     return keyToAr[k] ?? key;
   }
 
@@ -100,23 +120,19 @@ class FixedServiceCategories {
 
       // ✅ Aliases: السيرفر vs مفاتيحك الثابتة
       if (k == 'electrical') return 'electricity';
-      if (k == 'general_maintenance') return 'home_maintenance';
+      if (k == 'general_maintenance' || k == 'general_maintenance') return 'home_maintenance';
       if (k == 'appliance_repair') return 'appliance_maintenance';
 
+      // direct
       if (keyToAr.containsKey(k)) return k;
-
-      // sometimes slug is "home-maintenance" (بعد _normKey غالباً تصير home_maintenance)
-      final back = k.replaceAll('-', '_');
-      if (keyToAr.containsKey(back)) return back;
 
       return null;
     }
 
-    // assume arabic label
+    // arabic
     return keyFromArabicLabel(s);
   }
 
-  /// Best effort: get key from service json (works with category_other / name / slug / category.slug)
   static String? keyFromServiceJson(Map<String, dynamic> json) {
     // 1) category.slug
     final cat = json['category'];
@@ -131,12 +147,12 @@ class FixedServiceCategories {
     final k2 = keyFromAnyString(other);
     if (k2 != null) return k2;
 
-    // 3) name (could be key OR arabic)
+    // 3) name
     final name = json['name']?.toString();
     final k3 = keyFromAnyString(name);
     if (k3 != null) return k3;
 
-    // 4) slug (could be key)
+    // 4) slug
     final slug = json['slug']?.toString();
     final k4 = keyFromAnyString(slug);
     if (k4 != null) return k4;

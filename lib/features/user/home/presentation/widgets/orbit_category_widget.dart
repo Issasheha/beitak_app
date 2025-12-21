@@ -1,6 +1,5 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/color_x.dart';
-import 'package:beitak_app/core/helpers/search_normalizer.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:flutter/material.dart';
@@ -17,46 +16,48 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  // ✅ نفس الفئات + apiQuery (تركنا subtitle موجودة بالكلاس/البيانات بس مش رح نعرضها)
+  // ✅ نفس الفئات لكن بدل apiQuery صار categoryKey
+  // ✅ استخدمنا slug تبع الباك اند بالضبط (بما فيه المسافات)
   final List<_HomeCategory> _cats = const [
     _HomeCategory(
       title: 'السباكة',
       subtitle: 'مشاكل المياه',
       emoji: '🔧',
-      apiQuery: 'repair',
+      categoryKey: 'plumbing',
     ),
     _HomeCategory(
       title: 'التنظيف',
       subtitle: 'منزل مرتب أجمل',
       emoji: '🧽',
-      apiQuery: 'cleaning',
+      categoryKey: 'cleaning',
     ),
     _HomeCategory(
       title: 'صيانة',
       subtitle: 'شاملة للمنزل',
       emoji: '🪛',
-      apiQuery: 'maintenance',
+      categoryKey: 'general maintenance',
     ),
     _HomeCategory(
       title: 'صيانة الأجهزة',
       subtitle: 'جميع الأجهزة',
       emoji: '🛠️',
-      apiQuery: 'appliance repair',
+      categoryKey: 'appliance repair',
     ),
     _HomeCategory(
       title: 'كهرباء',
       subtitle: 'مشاكلك بكل يسر',
       emoji: '⚡',
-      apiQuery: 'Installation',
+      categoryKey: 'electrical',
     ),
   ];
 
   @override
   void initState() {
     super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 520))
-          ..forward();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    )..forward();
   }
 
   @override
@@ -65,10 +66,15 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
     super.dispose();
   }
 
-  void _openBrowse(BuildContext context, String apiQuery) {
-    final q = SearchNormalizer.normalizeForApi(apiQuery);
+  void _openBrowse(BuildContext context, String categoryKey) {
+    final key = categoryKey.trim();
+    if (key.isEmpty) return;
+
     context.push(
-      Uri(path: AppRoutes.browseServices, queryParameters: {'q': q}).toString(),
+      Uri(
+        path: AppRoutes.browseServices,
+        queryParameters: {'category_key': key}, // ✅ أدق من q
+      ).toString(),
     );
   }
 
@@ -91,7 +97,7 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
                     controller: _controller,
                     child: _CategoryCard(
                       cat: top[i],
-                      onTap: () => _openBrowse(context, top[i].apiQuery),
+                      onTap: () => _openBrowse(context, top[i].categoryKey),
                     ),
                   ),
                 ),
@@ -105,8 +111,7 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
           builder: (context, c) {
             final cardW = (c.maxWidth - (gap * 2)) / 3;
             final twoRowW = (cardW * 2) + gap;
-            final sidePadding =
-                ((c.maxWidth - twoRowW) / 2).clamp(0.0, 999.0);
+            final sidePadding = ((c.maxWidth - twoRowW) / 2).clamp(0.0, 999.0);
 
             return Padding(
               padding: EdgeInsets.symmetric(horizontal: sidePadding),
@@ -120,7 +125,7 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
                         controller: _controller,
                         child: _CategoryCard(
                           cat: bottom[0],
-                          onTap: () => _openBrowse(context, bottom[0].apiQuery),
+                          onTap: () => _openBrowse(context, bottom[0].categoryKey),
                         ),
                       ),
                     ),
@@ -134,7 +139,7 @@ class _OrbitCategoryWidgetState extends State<OrbitCategoryWidget>
                         controller: _controller,
                         child: _CategoryCard(
                           cat: bottom[1],
-                          onTap: () => _openBrowse(context, bottom[1].apiQuery),
+                          onTap: () => _openBrowse(context, bottom[1].categoryKey),
                         ),
                       ),
                     ),
@@ -183,16 +188,16 @@ class _AnimatedTile extends StatelessWidget {
 
 class _HomeCategory {
   final String title;
-  final String? subtitle; // ✅ صارت اختيارية (موجودة للبيانات فقط)
+  final String? subtitle;
   final String emoji;
 
-  final String apiQuery;
+  final String categoryKey; // ✅ بدل apiQuery
 
   const _HomeCategory({
     required this.title,
     this.subtitle,
     required this.emoji,
-    required this.apiQuery,
+    required this.categoryKey,
   });
 }
 
@@ -230,19 +235,14 @@ class _CategoryCard extends StatelessWidget {
               style: TextStyle(
                 color: AppColors.lightGreen,
                 fontWeight: FontWeight.w900,
-                fontSize: SizeConfig.ts(13.2), // ✅ أجمل شوي بعد حذف subtitle
-                height: 1.10, // ✅ تنفّس أفضل
+                fontSize: SizeConfig.ts(13.2),
+                height: 1.10,
               ),
             ),
-
-            // ✅ كان 6، قللناه 4 عشان التناسق بعد حذف subtitle
             SizedBox(height: SizeConfig.h(4)),
-
-            // ✅ الإيموجي بالنص عموديًا
             const Spacer(),
             Text(cat.emoji, style: TextStyle(fontSize: SizeConfig.ts(22))),
             const Spacer(),
-
             SizedBox(height: SizeConfig.h(2)),
           ],
         ),

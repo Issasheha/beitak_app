@@ -2,7 +2,6 @@
 
 import 'dart:async';
 
-
 import 'package:beitak_app/features/user/home/presentation/views/browse/models/service_summary.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_state.dart';
@@ -20,22 +19,14 @@ class BrowseController extends StateNotifier<BrowseState> {
   })  : _viewModel = viewModel,
         super(BrowseState.initial(args));
 
-  /// Call once from the view
   Future<void> bootstrap() async {
     if (state.initialized) return;
     state = state.copyWith(initialized: true);
     await loadInitial();
   }
 
-  List<ServiceSummary> _applyLocalFilters(List<ServiceSummary> list) {
-    final minRating = state.minRating;
-    if (minRating <= 0) return list;
-    return list.where((s) => s.rating >= minRating).toList();
-  }
-
   String _friendlyError(Object e) {
     if (e is DioException) {
-      // Dio v5
       final msg = e.message?.trim();
       if (msg != null && msg.isNotEmpty) return msg;
       return 'تعذر الاتصال بالشبكة. حاول مرة أخرى.';
@@ -44,6 +35,75 @@ class BrowseController extends StateNotifier<BrowseState> {
       return 'حدث خطأ أثناء تحميل الخدمات. حاول مرة أخرى.';
     }
     return 'حدث خطأ غير متوقع.';
+  }
+
+  String _norm(String s) {
+    var x = s.trim().toLowerCase();
+
+    // house+cleaning / house_cleaning / house-cleaning => house cleaning
+    x = x.replaceAll(RegExp(r'[\+_\-]+'), ' ');
+    x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    return x;
+  }
+
+  bool _looksLikeCategoryQuery(String q) {
+    final x = _norm(q);
+    if (x.isEmpty) return false;
+
+    // كلمات "بحث فئة" (إنجليزي + عربي)
+    const exact = <String>{
+      'house cleaning',
+      'cleaning',
+      'plumbing',
+      'plumber',
+      'electrical',
+      'electricity',
+      'electric',
+      'electrician',
+      'maintenance',
+      'repair',
+      'design',
+      'painting',
+
+      // عربي (لو مرّ أحياناً)
+      'تنظيف المنازل',
+      'تنظيف',
+      'سباكة',
+      'كهرباء',
+      'كهربائي',
+      'صيانة',
+      'صيانه',
+      'اصلاح',
+      'إصلاح',
+      'رسم',
+      'دهان',
+      'دهانات',
+    };
+
+    if (exact.contains(x)) return true;
+
+    // أو يحتوي كلمة قوية دالة على فئة
+    const containsAny = <String>[
+      'clean',
+      'plumb',
+      'electr',
+      'mainten',
+      'repair',
+      'paint',
+      'design',
+      'تنظيف',
+      'سباك',
+      'سباكة',
+      'كهرب',
+      'صيانة',
+      'صيانه',
+      'اصلاح',
+      'رسم',
+      'دهان',
+    ];
+
+    return containsAny.any((k) => x.contains(k));
   }
 
   Future<void> loadInitial() async {
@@ -58,28 +118,26 @@ class BrowseController extends StateNotifier<BrowseState> {
 
     try {
       final q = state.searchTerm.trim();
+
       await _viewModel.loadInitialServices(
         searchTerm: q.isEmpty ? null : q,
         categoryKey: state.categoryKey,
         minPrice: state.minPrice,
         maxPrice: state.maxPrice,
-        userCityId: state.userCityId,
-        userAreaId: state.userAreaId,
+        minRating: state.minRating,
         sortBy: state.sortBy,
       );
 
-      // Ignore stale responses
       if (rid != _requestId) return;
 
       final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
-      final visible = List<ServiceSummary>.unmodifiable(_applyLocalFilters(all));
 
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
         hasMore: _viewModel.hasMore,
         services: all,
-        visible: visible,
+        visible: all,
       );
     } catch (e) {
       if (rid != _requestId) return;
@@ -96,44 +154,44 @@ class BrowseController extends StateNotifier<BrowseState> {
   }
 
   Future<void> loadMore() async {
-    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+  if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
 
-    state = state.copyWith(isLoadingMore: true, clearError: true);
+  final rid = _requestId; // ✅ خذ نفس requestId الحالي
+  state = state.copyWith(isLoadingMore: true, clearError: true);
 
-    try {
-      final q = state.searchTerm.trim();
+  try {
+    final q = state.searchTerm.trim();
 
-      await _viewModel.loadMoreServices(
-        searchTerm: q.isEmpty ? null : q,
-        categoryKey: state.categoryKey,
-        minPrice: state.minPrice,
-        maxPrice: state.maxPrice,
-        userCityId: state.userCityId,
-        userAreaId: state.userAreaId,
-        sortBy: state.sortBy,
-      );
+    await _viewModel.loadMoreServices(
+      searchTerm: q.isEmpty ? null : q,
+      categoryKey: state.categoryKey,
+      minPrice: state.minPrice,
+      maxPrice: state.maxPrice,
+      minRating: state.minRating,
+      sortBy: state.sortBy,
+    );
 
-      final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
-      final visible = List<ServiceSummary>.unmodifiable(_applyLocalFilters(all));
+    // ✅ إذا تغيرت الفلاتر أثناء التحميل، تجاهل النتيجة
+    if (rid != _requestId) return;
 
-      state = state.copyWith(
-        isLoadingMore: false,
-        hasMore: _viewModel.hasMore,
-        services: all,
-        visible: visible,
-      );
-    } catch (_) {
-      // لا نوقف الشاشة بسبب loadMore
-      state = state.copyWith(isLoadingMore: false);
-    }
+    final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
+    state = state.copyWith(
+      isLoadingMore: false,
+      hasMore: _viewModel.hasMore,
+      services: all,
+      visible: all,
+    );
+  } catch (_) {
+    if (rid != _requestId) return;
+    state = state.copyWith(isLoadingMore: false);
   }
+}
 
   Future<void> refresh() => loadInitial();
 
   void submitSearch(String value) {
     final v = value.trim();
     state = state.copyWith(searchTerm: v);
-    // نفس سلوكك السابق: البحث على Submit فقط
     unawaited(loadInitial());
   }
 
@@ -143,17 +201,36 @@ class BrowseController extends StateNotifier<BrowseState> {
   }
 
   void applyFilters({
-    required String? categoryKey,
-    required double? minPrice,
-    required double? maxPrice,
-    required double minRating,
-  }) {
-    state = state.copyWith(
-      categoryKey: categoryKey,
-      minPrice: minPrice,
-      maxPrice: maxPrice,
-      minRating: minRating,
-    );
-    unawaited(loadInitial());
-  }
+  required String? categoryKey,
+  required double? minPrice,
+  required double? maxPrice,
+  required double minRating,
+}) {
+  final prevKey = state.categoryKey;
+
+  // normalize: '' => null
+  final newKey = (categoryKey == null || categoryKey.trim().isEmpty)
+      ? null
+      : categoryKey.trim();
+
+  // ✅ هذا هو الفرق:
+  // امسح البحث إذا:
+  // 1) الفئة تغيرت وكان البحث يبدو بحث فئة
+  // أو
+  // 2) المستخدم اختار "الكل" وكان البحث يبدو بحث فئة
+  final shouldClearQuery =
+      _looksLikeCategoryQuery(state.searchTerm) &&
+      ((prevKey != newKey) || newKey == null);
+
+  state = state.copyWith(
+    categoryKey: newKey,
+    minPrice: minPrice,
+    maxPrice: maxPrice,
+    minRating: minRating,
+    searchTerm: shouldClearQuery ? '' : state.searchTerm,
+  );
+
+  unawaited(loadInitial());
+}
+
 }

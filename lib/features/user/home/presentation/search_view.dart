@@ -1,6 +1,8 @@
+// lib/features/user/home/presentation/search_view.dart
+
 import 'package:beitak_app/core/cache/locations_cache.dart';
 import 'package:beitak_app/core/constants/colors.dart';
-import 'package:beitak_app/core/helpers/search_normalizer.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/features/user/home/presentation/search_widgets/search_city_picker_sheet.dart';
@@ -10,7 +12,6 @@ import 'package:beitak_app/features/user/home/presentation/search_widgets/search
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-// ✅ جديد للتعبئة الافتراضية من profile
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
 import 'package:dio/dio.dart';
@@ -31,7 +32,7 @@ class _SearchViewState extends State<SearchView> {
   @override
   void initState() {
     super.initState();
-    _prefillCityFromProfileIfLoggedIn(); // ✅ تعديل 1
+    _prefillCityFromProfileIfLoggedIn();
   }
 
   @override
@@ -50,7 +51,6 @@ class _SearchViewState extends State<SearchView> {
     );
   }
 
-  // ✅ تعديل 1: المدينة الإفتراضية من مدينة المستخدم المسجل بها (إن أمكن)
   Future<void> _prefillCityFromProfileIfLoggedIn() async {
     try {
       final cityId = await _fetchProfileCityId();
@@ -67,15 +67,12 @@ class _SearchViewState extends State<SearchView> {
       if (!mounted || match == null) return;
 
       setState(() => _selectedCity = match);
-    } catch (_) {
-      // تجاهل: ضيف أو مشكلة توكن → المستخدم يختار يدويًا
-    }
+    } catch (_) {}
   }
 
   Future<int?> _fetchProfileCityId() async {
     final Dio dio = ApiClient.dio;
 
-    // 1) /auth/profile
     try {
       final res = await dio.get(ApiConstants.authProfile);
       final root = res.data;
@@ -83,7 +80,6 @@ class _SearchViewState extends State<SearchView> {
       if (root is Map) {
         final data = root['data'];
         if (data is Map) {
-          // بعض الباك اند يرجع user داخل data
           final user = data['user'] ?? data;
           if (user is Map) {
             final v = user['city_id'];
@@ -94,7 +90,6 @@ class _SearchViewState extends State<SearchView> {
       }
     } catch (_) {}
 
-    // 2) fallback: /users/profile
     try {
       final res = await dio.get(ApiConstants.userProfile);
       final root = res.data;
@@ -115,31 +110,130 @@ class _SearchViewState extends State<SearchView> {
     return null;
   }
 
-  void _goBrowseWithText(String displayText) {
-    final text = displayText.trim();
+  // ============================================================
+  // ✅ NEW: Detect category_key from Arabic query (strong improvement)
+  // ============================================================
+  String? _detectCategoryKeyFromArabic(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return null;
 
-    // ✅ إجباري: لازم محافظة
+    // ✅ Normalize (hamza forms, ta marbuta, alif maqsura, tatweel, tashkeel)
+    final normalized = t
+        .replaceAll('ـ', '')
+        .replaceAll(RegExp(r'[\u064B-\u0652]'), '') // تشكيل
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ة', 'ه')
+        .replaceAll('ى', 'ي')
+        .trim();
+
+    // ✅ category_key values MUST match your internal keys (underscore)
+    // and should align with categoriesIdMapProvider output keys.
+    const map = <String, String>{
+      // Cleaning
+      'تنظيف': 'cleaning',
+      'نظافه': 'cleaning',
+      'تنظيف المنازل': 'cleaning',
+      'تنظيف البيت': 'cleaning',
+      'تنظيف منزل': 'cleaning',
+
+      // Plumbing
+      'سباكه': 'plumbing',
+      'سباك': 'plumbing',
+      'مواسرجي': 'plumbing',
+      'مواسير': 'plumbing',
+
+      // Electrical  (✅ align with categoriesIdMapProvider: out['electricity'])
+      'كهرباء': 'electricity',
+      'كهربائي': 'electricity',
+
+      // Painting (⚠️ ensure mapping exists in categoriesIdMapProvider)
+      'رسم': 'painting',
+      'دهان': 'painting',
+      'دهانات': 'painting',
+      'صبغ': 'painting',
+
+      // Appliance Repair (✅ align with categoriesIdMapProvider: out['appliance_maintenance'])
+      'اصلاح الاجهزه': 'appliance_maintenance',
+      'تصليح الاجهزه': 'appliance_maintenance',
+      'صيانه الاجهزه': 'appliance_maintenance',
+      'صيانة الاجهزه': 'appliance_maintenance',
+      'اصلاح الأجهزة': 'appliance_maintenance',
+      'تصليح الأجهزة': 'appliance_maintenance',
+      'صيانة الأجهزة': 'appliance_maintenance',
+      'صيانه الأجهزة': 'appliance_maintenance',
+
+      // General Maintenance (✅ align with categoriesIdMapProvider: out['home_maintenance'])
+      'صيانه عامه': 'home_maintenance',
+      'صيانة عامه': 'home_maintenance',
+      'صيانة عامة': 'home_maintenance',
+      'صيانه عامة': 'home_maintenance',
+    };
+
+    // ✅ IMPORTANT: removed broad words like "صيانة" and "أجهزة" to avoid false positives.
+
+    // 1) Exact match first
+    final exact = map[normalized];
+    if (exact != null) return exact;
+
+    // 2) Contains match (e.g. "تنظيف شقة", "سباك حمام")
+    for (final entry in map.entries) {
+      if (normalized.contains(entry.key)) return entry.value;
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // ✅ UPDATED: If text matches known category, open via category_key
+  // ============================================================
+  void _goBrowseWithText(String displayText) {
+  final text = displayText.trim();
+
+  if (_selectedCity == null) {
+    _toast('الرجاء اختيار المحافظة أولاً');
+    return;
+  }
+  if (text.isEmpty) {
+    _toast('الرجاء إدخال الخدمة المطلوبة');
+    return;
+  }
+
+  _recent.add(text);
+
+  final categoryKey = FixedServiceCategories.keyFromAnyString(text);
+
+  final qp = <String, String>{
+    'city_id': _selectedCity!.id.toString(),
+    if (categoryKey != null) 'category_key': categoryKey,
+    if (categoryKey == null) 'q': text,
+  };
+
+  context.push(Uri(path: AppRoutes.browseServices, queryParameters: qp).toString());
+}
+  void _goBrowseWithCategoryKey({
+    required String categoryKey,
+    required String displayTextForRecent,
+  }) {
     if (_selectedCity == null) {
       _toast('الرجاء اختيار المحافظة أولاً');
       return;
     }
 
-    // ✅ إجباري: لازم خدمة/نص
-    if (text.isEmpty) {
-      _toast('الرجاء إدخال الخدمة المطلوبة');
-      return;
-    }
+    final key = categoryKey.trim();
+    if (key.isEmpty) return;
 
-    final q = SearchNormalizer.normalizeForApi(text);
-
-    _recent.add(text);
+    _recent.add(displayTextForRecent);
 
     final qp = <String, String>{
-      'q': q,
       'city_id': _selectedCity!.id.toString(),
+      'category_key': key,
     };
 
-    context.push(Uri(path: AppRoutes.browseServices, queryParameters: qp).toString());
+    context.push(
+      Uri(path: AppRoutes.browseServices, queryParameters: qp).toString(),
+    );
   }
 
   Future<void> _pickCity() async {
@@ -192,16 +286,13 @@ class _SearchViewState extends State<SearchView> {
                 onSubmitted: _goBrowseWithText,
               ),
               SizeConfig.v(12),
-
               SearchLocationChip(
                 title: _selectedCity?.name ?? 'اختر المحافظة *',
                 onTap: _pickCity,
-                onClear: null, // ✅ ممنوع إزالة المحافظة
+                onClear: null,
               ),
-
               SizeConfig.v(18),
 
-              // Recent searches
               ValueListenableBuilder<List<String>>(
                 valueListenable: _recent.listenable,
                 builder: (_, list, __) {
@@ -213,8 +304,9 @@ class _SearchViewState extends State<SearchView> {
                       leading: Icons.history_rounded,
                       onTap: (t) {
                         _controller.text = t;
-                        _controller.selection =
-                            TextSelection.fromPosition(TextPosition(offset: t.length));
+                        _controller.selection = TextSelection.fromPosition(
+                          TextPosition(offset: t.length),
+                        );
                         _goBrowseWithText(t);
                       },
                       onRemove: (t) => _recent.remove(t),
@@ -225,11 +317,15 @@ class _SearchViewState extends State<SearchView> {
 
               SizeConfig.v(16),
 
-              // Popular services
               SearchSection(
                 title: 'خدمات شائعة',
                 child: PopularServicesList(
-                  onPick: (displayText) => _goBrowseWithText(displayText),
+                  onPick: (item) {
+                    _goBrowseWithCategoryKey(
+                      categoryKey: item.categoryKey,
+                      displayTextForRecent: item.label,
+                    );
+                  },
                 ),
               ),
             ],

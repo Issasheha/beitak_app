@@ -1,5 +1,3 @@
-// lib/features/user/home/presentation/views/browse/browse_service_view.dart
-
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
@@ -19,13 +17,19 @@ class BrowseServiceView extends ConsumerStatefulWidget {
     this.initialSearch,
     this.initialCityId,
     this.initialAreaId,
-    this.initialCategoryId, // legacy (ignored safely)
+    this.initialCategoryId,
+    this.initialCategoryKey,
   });
 
   final String? initialSearch;
   final int? initialCityId;
   final int? initialAreaId;
+
+  // (موجود عندك—ممكن ما يكون مستخدم حاليًا)
   final int? initialCategoryId;
+
+  // ✅ الجديد: تفعيل categoryKey من الروت
+  final String? initialCategoryKey;
 
   @override
   ConsumerState<BrowseServiceView> createState() => _BrowseServiceViewState();
@@ -36,6 +40,8 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
   late final TextEditingController _searchController;
   late final BrowseArgs _args;
 
+  ProviderSubscription<BrowseState>? _syncSub;
+
   @override
   void initState() {
     super.initState();
@@ -44,12 +50,26 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
       initialSearch: widget.initialSearch,
       initialCityId: widget.initialCityId,
       initialAreaId: widget.initialAreaId,
+      initialCategoryKey: widget.initialCategoryKey, // ✅ مهم
     );
 
     _scrollController = ScrollController()..addListener(_onScroll);
     _searchController = TextEditingController(text: widget.initialSearch ?? '');
 
-    // bootstrap once
+    _syncSub = ref.listenManual<BrowseState>(
+      browseControllerProvider(_args),
+      (prev, next) {
+        final desired = next.searchTerm;
+        if (_searchController.text == desired) return;
+
+        _searchController.value = _searchController.value.copyWith(
+          text: desired,
+          selection: TextSelection.collapsed(offset: desired.length),
+          composing: TextRange.empty,
+        );
+      },
+    );
+
     Future.microtask(() {
       ref.read(browseControllerProvider(_args).notifier).bootstrap();
     });
@@ -57,6 +77,8 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
 
   @override
   void dispose() {
+    _syncSub?.close();
+
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
@@ -105,7 +127,7 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
         builder: (_) => ServiceDetailsView(
           serviceId: serviceId,
           lockedCityId: widget.initialCityId,
-          openBookingOnLoad: false, // ✅ تفاصيل فقط
+          openBookingOnLoad: false,
         ),
       ),
     );
@@ -117,7 +139,7 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
         builder: (_) => ServiceDetailsView(
           serviceId: serviceId,
           lockedCityId: widget.initialCityId,
-          openBookingOnLoad: true, // ✅ يفتح فورم الحجز مباشرة
+          openBookingOnLoad: true,
         ),
       ),
     );
@@ -235,11 +257,7 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
 
           return ServiceCard(
             service: serviceMap,
-
-            /// ✅ تفاصيل
             onTap: () => _openDetails(s.id),
-
-            /// ✅ حجز (لازم ServiceCard يدعم onBookNow)
             onBookNow: () => _openBooking(s.id),
           );
         },
@@ -393,4 +411,3 @@ class _ErrorState extends StatelessWidget {
     );
   }
 }
-

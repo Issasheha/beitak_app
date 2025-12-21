@@ -1,14 +1,16 @@
 import 'package:flutter/foundation.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 
 @immutable
 class ProviderBookingModel {
   final int id;
   final String bookingNumber;
-  final String status; 
-  final String bookingDate; 
-  final String bookingTime; 
+  final String status;
+  final String bookingDate;
+  final String bookingTime;
   final double totalPrice;
 
+  /// غالباً جايين slug مثل: amman / abdoun
   final String serviceCity;
   final String? serviceArea;
 
@@ -53,7 +55,13 @@ class ProviderBookingModel {
 
     String? nullableString(dynamic v) {
       final s = (v ?? '').toString().trim();
-      return s.isEmpty ? null : s;
+      if (s.isEmpty) return null;
+
+      // ✅ نمسك N/A هون كمان
+      final lower = s.toLowerCase();
+      if (lower == 'n/a' || lower == 'na' || lower == 'none' || lower == 'null') return null;
+
+      return s;
     }
 
     return ProviderBookingModel(
@@ -75,13 +83,31 @@ class ProviderBookingModel {
     );
   }
 
+  // ---------------- UI helpers ----------------
+
   String get customerName => customer.fullName.isEmpty ? 'عميل' : customer.fullName;
   String? get customerPhone => customer.phone?.trim().isEmpty == true ? null : customer.phone;
   String? get customerEmail => customer.email?.trim().isEmpty == true ? null : customer.email;
 
+  /// raw (قد تكون cleaning)
   String get serviceName => service.name.isEmpty ? 'خدمة' : service.name;
+
+  /// ✅ عربي للفئة (fallback ممتاز حتى لو ما استخدمت AppLocalizer)
+  String get serviceNameAr {
+    final raw = serviceName.trim();
+    if (raw.isEmpty) return 'خدمة';
+
+    final key = FixedServiceCategories.keyFromAnyString(raw);
+    if (key != null) return FixedServiceCategories.labelArFromKey(key);
+
+    // إذا جاي عربي أصلاً
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(raw);
+    return hasArabic ? raw : raw;
+  }
+
   String? get serviceDescription => service.description.trim().isEmpty ? null : service.description;
 
+  /// raw "amman - abdoun"
   String get locationText {
     final area = (serviceArea ?? '').trim();
     if (area.isEmpty) return serviceCity;

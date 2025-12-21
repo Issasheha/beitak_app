@@ -1,4 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/providers/marketplace_providers.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/widgets/marketplace_request_card.dart';
@@ -72,7 +74,7 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
   Widget build(BuildContext context) {
     final state = ref.watch(marketplaceControllerProvider);
 
-    // ✅ NEW: SnackBar لأي uiMessage (رسالة قبول/رفض بدون ما نكسّر UI)
+    // ✅ SnackBar لأي uiMessage
     ref.listen(marketplaceControllerProvider, (prev, next) {
       final msg = next.uiMessage;
       if (msg != null && msg.isNotEmpty && msg != prev?.uiMessage) {
@@ -85,7 +87,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
           ),
         );
 
-        // نمسح الرسالة بعد العرض عشان ما تتكرر
         Future.microtask(() {
           ref.read(marketplaceControllerProvider.notifier).clearUiMessage();
         });
@@ -124,7 +125,7 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
               ),
               const SizedBox(height: 10),
 
-              // ✅ صف الـ Chips فقط (بدون "الفلاتر النشطة")
+              // ✅ صف الـ Chips فقط
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _MarketplaceFourFilterChips(
@@ -141,7 +142,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    // ✅ NEW: لا نعرض Error Screen إذا في بيانات محمّلة
                     if (state.errorMessage != null &&
                         state.allRequests.isEmpty) {
                       return _ErrorState(
@@ -246,13 +246,41 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
     'كهرباء',
   ];
 
+  /// ✅ fallback ثابت لو FixedServiceCategories ما غطّى النص العربي
+  static const Map<String, String> _labelToKeyFallback = {
+    'تنظيف': 'cleaning',
+    'مواسرجي': 'plumbing',
+    'كهرباء': 'electricity',
+    'صيانة المنازل': 'home_maintenance',
+    'صيانة للأجهزة': 'appliance_maintenance',
+  };
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(marketplaceControllerProvider);
     final notifier = ref.read(marketplaceControllerProvider.notifier);
 
     Future<void> setCategory(String? label) async {
-      await notifier.applyFilters(state.filters.copyWith(categoryLabel: label));
+      if (label == null) {
+        await notifier.applyFilters(state.filters.copyWith(clearCategory: true));
+        return;
+      }
+
+      final keyFromFixed = FixedServiceCategories.keyFromAnyString(label);
+      final key = keyFromFixed ?? _labelToKeyFallback[label];
+
+      int? categoryId;
+      if (key != null) {
+        final idMap = await ref.read(categoriesIdMapProvider.future);
+        categoryId = idMap[key];
+      }
+
+      await notifier.applyFilters(
+        state.filters.copyWith(
+          categoryLabel: label,
+          categoryId: categoryId,
+        ),
+      );
     }
 
     Future<void> setCity(int? id) async {

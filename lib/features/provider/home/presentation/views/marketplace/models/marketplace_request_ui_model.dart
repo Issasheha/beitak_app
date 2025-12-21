@@ -6,6 +6,8 @@ class MarketplaceRequestUiModel {
   final int? cityId;
   final int? areaId;
 
+  final int? categoryId; // ✅ NEW (عشان الفلترة الصح)
+
   final String customerName;
   final String? phone;
 
@@ -28,6 +30,7 @@ class MarketplaceRequestUiModel {
     required this.id,
     required this.cityId,
     required this.areaId,
+    required this.categoryId, // ✅
     required this.customerName,
     required this.phone,
     required this.cityName,
@@ -47,6 +50,7 @@ class MarketplaceRequestUiModel {
       id: e.id,
       cityId: e.cityId,
       areaId: e.areaId,
+      categoryId: e.categoryId, // ✅
       customerName: e.customerName,
       phone: e.phone,
       cityName: e.cityName,

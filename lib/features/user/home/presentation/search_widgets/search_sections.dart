@@ -65,14 +65,18 @@ class SearchList extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardBackground.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.6),),
+        border: Border.all(
+          color: AppColors.borderLight.withValues(alpha: 0.6),
+        ),
       ),
       child: ListView.separated(
         itemCount: items.length,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        separatorBuilder: (_, __) =>
-            Divider(height: 1, color: AppColors.borderLight.withValues(alpha: 0.45),),
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: AppColors.borderLight.withValues(alpha: 0.45),
+        ),
         itemBuilder: (_, i) {
           final t = items[i];
           return ListTile(
@@ -97,18 +101,29 @@ class SearchList extends StatelessWidget {
   }
 }
 
+/// ✅ موديل بسيط للخدمات الشائعة
+class PopularServiceItem {
+  final String label; // عربي
+  final String categoryKey; // ✅ لازم يكون FixedServiceCategories key
+
+  const PopularServiceItem({
+    required this.label,
+    required this.categoryKey,
+  });
+}
+
 class PopularServicesList extends StatelessWidget {
   const PopularServicesList({super.key, required this.onPick});
 
-  final void Function(String displayText) onPick;
+  final void Function(PopularServiceItem item) onPick;
 
-  static const _popular = <String>[
-    'تنظيف المنازل',
-    'سباكة',
-    'كهربائي',
-    'صيانه الاجهزة',
-    'صيانه عامه',
-    'رسم',
+  // ✅ categoryKey لازم يطابق keys الثابتة عندك (FixedServiceCategories)
+  static const _popular = <PopularServiceItem>[
+    PopularServiceItem(label: 'تنظيف المنازل', categoryKey: 'cleaning'),
+    PopularServiceItem(label: 'سباكة', categoryKey: 'plumbing'),
+    PopularServiceItem(label: 'كهرباء', categoryKey: 'electricity'),
+    PopularServiceItem(label: 'صيانة الأجهزة', categoryKey: 'appliance_maintenance'),
+    PopularServiceItem(label: 'صيانة عامة', categoryKey: 'home_maintenance'),
   ];
 
   @override
@@ -117,27 +132,34 @@ class PopularServicesList extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardBackground.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.6),),
+        border: Border.all(
+          color: AppColors.borderLight.withValues(alpha: 0.6),
+        ),
       ),
       child: ListView.separated(
         itemCount: _popular.length,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        separatorBuilder: (_, __) =>
-            Divider(height: 1, color: AppColors.borderLight.withValues(alpha: 0.45),),
+        separatorBuilder: (_, __) => Divider(
+          height: 1,
+          color: AppColors.borderLight.withValues(alpha: 0.45),
+        ),
         itemBuilder: (_, i) {
-          final t = _popular[i];
+          final item = _popular[i];
           return ListTile(
-            leading: const Icon(Icons.trending_up_rounded, color: AppColors.textSecondary),
+            leading: const Icon(
+              Icons.trending_up_rounded,
+              color: AppColors.textSecondary,
+            ),
             title: Text(
-              t,
+              item.label,
               style: TextStyle(
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
                 fontSize: SizeConfig.ts(14),
               ),
             ),
-            onTap: () => onPick(t),
+            onTap: () => onPick(item),
           );
         },
       ),

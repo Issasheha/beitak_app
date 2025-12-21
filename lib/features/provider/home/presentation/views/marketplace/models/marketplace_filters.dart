@@ -1,3 +1,5 @@
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+
 enum MarketplaceSort {
   newest,
   oldest;
@@ -22,18 +24,20 @@ enum MarketplaceSort {
 }
 
 class MarketplaceFilters {
-  final String? categoryLabel;
+  final String? categoryLabel; // للـ UI (عربي)
+  final int? categoryId; // ✅ للـ API
 
   final double? minBudget;
   final double? maxBudget;
 
   final MarketplaceSort sort;
 
-  /// المدينة (حسب طلب المانجر)
+  /// المدينة
   final int? cityId;
 
   const MarketplaceFilters({
     required this.categoryLabel,
+    required this.categoryId,
     required this.minBudget,
     required this.maxBudget,
     required this.sort,
@@ -42,6 +46,7 @@ class MarketplaceFilters {
 
   factory MarketplaceFilters.initial() => const MarketplaceFilters(
         categoryLabel: null,
+        categoryId: null,
         minBudget: null,
         maxBudget: null,
         sort: MarketplaceSort.newest,
@@ -50,6 +55,7 @@ class MarketplaceFilters {
 
   MarketplaceFilters copyWith({
     String? categoryLabel,
+    int? categoryId,
     double? minBudget,
     double? maxBudget,
     MarketplaceSort? sort,
@@ -60,6 +66,7 @@ class MarketplaceFilters {
   }) {
     return MarketplaceFilters(
       categoryLabel: clearCategory ? null : (categoryLabel ?? this.categoryLabel),
+      categoryId: clearCategory ? null : (categoryId ?? this.categoryId),
       minBudget: clearBudget ? null : (minBudget ?? this.minBudget),
       maxBudget: clearBudget ? null : (maxBudget ?? this.maxBudget),
       sort: sort ?? this.sort,
@@ -67,7 +74,13 @@ class MarketplaceFilters {
     );
   }
 
-  /// ✅ لازم تكون getter (مش method بدون parameters)
+  /// (اختياري) لو احتجته للديباغ أو للعرض
+  String? get categoryKey {
+    final s = (categoryLabel ?? '').trim();
+    if (s.isEmpty) return null;
+    return FixedServiceCategories.keyFromAnyString(s);
+  }
+
   String? get cityLabel {
     if (cityId == 1) return 'عمّان';
     if (cityId == 4) return 'العقبة';

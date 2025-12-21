@@ -272,16 +272,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.profile,
         builder: (context, state) => const ProfileView(),
       ),
-      GoRoute(
-        path: AppRoutes.browseServices,
-        name: AppRoutes.browseServices,
-        builder: (context, state) {
-          final q = state.uri.queryParameters['q'];
-          final cityId =
-              int.tryParse(state.uri.queryParameters['city_id'] ?? '');
-          return BrowseServiceView(initialSearch: q, initialCityId: cityId);
-        },
-      ),
+     GoRoute(
+  path: AppRoutes.browseServices,
+  name: AppRoutes.browseServices,
+  builder: (context, state) {
+    final q = state.uri.queryParameters['q'];
+    final cityId = int.tryParse(state.uri.queryParameters['city_id'] ?? '');
+    final categoryKey = state.uri.queryParameters['category_key']; // ✅ جديد
+
+    return BrowseServiceView(
+      initialSearch: q,
+      initialCityId: cityId,
+      initialCategoryKey: categoryKey, // ✅ جديد
+    );
+  },
+),
+
       GoRoute(
         path: AppRoutes.requestService,
         name: AppRoutes.requestService,

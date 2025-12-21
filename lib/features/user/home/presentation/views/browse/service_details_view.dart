@@ -176,7 +176,7 @@ class _DetailsContent extends StatelessWidget {
     final displayedPrice = _calcDisplayedPrice(state);
 
     // ما عندك category name بالموديل (فقط categoryId) — مؤقتاً ثابت
-    const categoryLabel = 'خدمات المنزل';
+    final categoryLabel = s.categoryLabel;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

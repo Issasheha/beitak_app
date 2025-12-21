@@ -35,7 +35,8 @@ class MarketplaceApiException implements Exception {
   });
 
   @override
-  String toString() => 'MarketplaceApiException(code: $code, message: $message)';
+  String toString() =>
+      'MarketplaceApiException(code: $code, message: $message)';
 }
 
 class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
@@ -61,8 +62,11 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
     return '$d/$m/$y';
   }
 
-  Map<String, dynamic> _asMap(dynamic v) =>
-      (v is Map<String, dynamic>) ? v : <String, dynamic>{};
+  Map<String, dynamic> _asMap(dynamic v) {
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) return Map<String, dynamic>.from(v);
+    return <String, dynamic>{};
+  }
 
   MarketplaceApiException _apiExceptionFromMap(
     Map<String, dynamic> data, {
@@ -81,8 +85,9 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
     final conflictingDate = _safeStr(data['conflicting_date']);
     final existing = _asMap(data['existing_booking']);
     final existingIdRaw = existing['id'];
-    final existingId =
-        (existingIdRaw is num) ? existingIdRaw.toInt() : int.tryParse('$existingIdRaw');
+    final existingId = (existingIdRaw is num)
+        ? existingIdRaw.toInt()
+        : int.tryParse('$existingIdRaw');
     final existingNumber = _safeStr(existing['booking_number']);
     final existingStatus = _safeStr(existing['status']);
 
@@ -144,6 +149,7 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
       'limit': limit,
       'date_sort': filters.sort.apiValue,
       if (filters.cityId != null) 'city_id': filters.cityId,
+      if (filters.categoryId != null) 'category_id': filters.categoryId, // ✅
     };
 
     try {
@@ -151,7 +157,8 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
 
       final data = _asMap(res.data);
       if (data.isEmpty) {
-        throw const MarketplaceApiException(message: 'استجابة غير صالحة من الخادم');
+        throw const MarketplaceApiException(
+            message: 'استجابة غير صالحة من الخادم');
       }
 
       if (data['success'] != true) {
@@ -171,7 +178,7 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
       final totalPages = (pagination['totalPages'] as num?)?.toInt() ?? 1;
 
       final items = list.map((e) {
-        final m = e as Map<String, dynamic>;
+        final m = Map<String, dynamic>.from(e as Map);
 
         final user = (m['user'] as Map<String, dynamic>?);
         final first = _safeStr(user?['first_name']);
@@ -179,8 +186,9 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
         final fallbackName = ('$first $last').trim();
 
         final name = _safeStr(m['name']);
-        final customerName =
-            name.isNotEmpty ? name : (fallbackName.isNotEmpty ? fallbackName : '—');
+        final customerName = name.isNotEmpty
+            ? name
+            : (fallbackName.isNotEmpty ? fallbackName : '—');
 
         final cityObj = (m['city'] as Map<String, dynamic>?);
         final areaObj = (m['area'] as Map<String, dynamic>?);
@@ -198,7 +206,8 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
         final timeLabel = time.isNotEmpty ? time : '—';
 
         final budget = _toDouble(m['budget']);
-        final createdAt = DateTime.tryParse(_safeStr(m['created_at'])) ?? DateTime.now();
+        final createdAt =
+            DateTime.tryParse(_safeStr(m['created_at'])) ?? DateTime.now();
 
         return MarketplaceRequestEntity(
           id: (m['id'] as num).toInt(),
@@ -211,6 +220,10 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
           title: 'طلب خدمة',
           description: description,
           categoryLabel: categoryNameAr.isEmpty ? null : categoryNameAr,
+          categoryId: (m['category_id'] as num?)?.toInt() ??
+              ((m['category'] is Map)
+                  ? ((m['category']['id'] as num?)?.toInt())
+                  : null),
           dateLabel: date,
           timeLabel: timeLabel,
           budgetMin: budget,
@@ -238,7 +251,8 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
 
       final data = _asMap(res.data);
       if (data.isEmpty) {
-        throw const MarketplaceApiException(message: 'استجابة غير صالحة من الخادم');
+        throw const MarketplaceApiException(
+            message: 'استجابة غير صالحة من الخادم');
       }
 
       if (data['success'] != true) {

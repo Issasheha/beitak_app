@@ -78,9 +78,8 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     _guards[tab] = Timer(const Duration(seconds: 12), () {
       final st = _tabState(tab);
 
-      final stuck = isInitial
-          ? (st.isLoading && st.items.isEmpty)
-          : (st.isLoadingMore);
+      final stuck =
+          isInitial ? (st.isLoading && st.items.isEmpty) : (st.isLoadingMore);
 
       if (!stuck) return;
 
@@ -228,6 +227,7 @@ class MyServicesController extends StateNotifier<MyServicesState> {
               headers: {
                 HttpHeaders.authorizationHeader: 'Bearer $token',
                 HttpHeaders.acceptHeader: 'application/json',
+                HttpHeaders.acceptLanguageHeader: 'ar',
               },
             ),
             cancelToken: cancelToken,
@@ -450,14 +450,42 @@ class MyServicesController extends StateNotifier<MyServicesState> {
         (json['booking_number'] ?? json['id'] ?? '').toString();
     final status = (json['status'] ?? '').toString();
 
+    // ✅ اسم الخدمة: جرّب عربي من الباك، وإذا طلع إنجليزي → fallback عربي
     String serviceName = 'خدمة';
+    String serviceNameRaw = '';
+
     final service = json['service'];
     if (service is Map<String, dynamic>) {
-      serviceName = (service['name_localized'] ??
-              service['name_ar'] ??
+      serviceNameRaw = (service['name_ar'] ??
+              service['nameAr'] ??
+              service['name_localized'] ??
               service['name'] ??
-              'خدمة')
-          .toString();
+              '')
+          .toString()
+          .trim();
+    }
+
+    // category العربي موجود في provider.category.name_ar (زي الريسبونس عندك)
+    String? categoryAr;
+    final provider = json['provider'];
+    if (provider is Map<String, dynamic>) {
+      final cat = provider['category'];
+      if (cat is Map<String, dynamic>) {
+        final v = (cat['name_ar'] ?? cat['nameAr'] ?? '').toString().trim();
+        if (v.isNotEmpty) categoryAr = v;
+      }
+    }
+
+    if (serviceNameRaw.isEmpty) {
+      serviceName = categoryAr == null ? 'خدمة' : 'خدمة $categoryAr';
+    } else if (_hasArabic(serviceNameRaw)) {
+      serviceName = serviceNameRaw;
+    } else {
+      // ✅ إنجليزي → ترجمة محلية
+      serviceName = _fallbackServiceNameAr(
+        englishName: serviceNameRaw,
+        categoryAr: categoryAr,
+      );
     }
 
     final date = json['booking_date']?.toString() ?? '';
@@ -467,16 +495,15 @@ class MyServicesController extends StateNotifier<MyServicesState> {
 
     double? price;
     final rawPrice = json['total_price'] ?? json['base_price'];
-    if (rawPrice is num) price = rawPrice.toDouble();
-    if (price == null && service is Map<String, dynamic>) {
-      final sp = service['base_price'];
-      if (sp is num) price = sp.toDouble();
+    if (rawPrice is num) {
+      price = rawPrice.toDouble();
+    } else if (rawPrice is String) {
+      price = double.tryParse(rawPrice);
     }
 
     String? providerName;
     String? providerPhone;
 
-    final provider = json['provider'];
     if (provider is Map<String, dynamic>) {
       final user = provider['user'];
       if (user is Map<String, dynamic>) {
@@ -507,6 +534,51 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       providerName: providerName,
       providerPhone: providerPhone,
     );
+  }
+
+  // -------------------------
+  // ✅ NEW: Arabic fallback for English service names
+  // -------------------------
+
+  bool _hasArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+
+  String _fallbackServiceNameAr({
+    required String englishName,
+    String? categoryAr,
+  }) {
+    final key = englishName.trim().toLowerCase();
+
+    // 1) قاموس سريع للأسماء الشائعة
+    const dict = <String, String>{
+      'plumbing repair': 'تصليح السباكة',
+      'plumbing': 'سباكة',
+      'cleaning': 'تنظيف',
+      'home cleaning': 'تنظيف منزل',
+      'deep cleaning': 'تنظيف عميق',
+      'electrical repair': 'تصليح كهرباء',
+      'appliance repair': 'تصليح أجهزة',
+      'ac repair': 'تصليح تكييف',
+    };
+
+    final direct = dict[key];
+    if (direct != null) return direct;
+
+    // 2) قواعد بسيطة
+    if (key.contains('repair') && categoryAr != null && categoryAr.isNotEmpty) {
+      // مثال: Repair + categoryAr => تصليح السباكة
+      return 'تصليح $categoryAr';
+    }
+
+    if (key.contains('clean') && categoryAr != null && categoryAr.isNotEmpty) {
+      return 'تنظيف $categoryAr';
+    }
+
+    // 3) آخر fallback: اسم عربي عام من التصنيف
+    if (categoryAr != null && categoryAr.isNotEmpty) {
+      return 'خدمة $categoryAr';
+    }
+
+    return 'خدمة';
   }
 
   String _statusToType(String status) {

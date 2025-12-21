@@ -190,16 +190,21 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
   }
 
   Future<void> applyFilters(MarketplaceFilters filters) async {
-    final old = state.filters;
-    state = state.copyWith(filters: filters);
+  final old = state.filters;
+  state = state.copyWith(filters: filters);
 
-    final serverRelevantChanged =
-        old.sort != filters.sort || old.cityId != filters.cityId;
+  final serverRelevantChanged =
+      old.sort != filters.sort ||
+      old.cityId != filters.cityId ||
+      old.categoryId != filters.categoryId ||       // ✅ مهم
+      old.minBudget != filters.minBudget ||         // ✅ مهم
+      old.maxBudget != filters.maxBudget;           // ✅ مهم
 
-    if (serverRelevantChanged) {
-      await load(refresh: true);
-    }
+  if (serverRelevantChanged) {
+    await load(refresh: true);
   }
+}
+
 
   Future<void> resetFilters() async {
     state = state.copyWith(filters: MarketplaceFilters.initial());

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
-/// BottomSheet لاختيار المحافظة فقط (بدون بحث وبدون خيار "بدون محافظة")
 class SearchCityPickerSheet extends StatefulWidget {
   const SearchCityPickerSheet({
     super.key,

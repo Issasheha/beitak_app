@@ -1,29 +1,31 @@
-// lib/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart
-
-import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/helpers/search_normalizer.dart'; // ✅ جديد
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
+import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/models/service_summary.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class BrowseServicesViewModel {
+  BrowseServicesViewModel(this._ref);
+
+  final Ref _ref;
   final Dio _dio = ApiClient.dio;
 
   final List<ServiceSummary> services = [];
 
   int _page = 1;
-  final int _limit = 20;
+  final int _limit = 10;
 
   bool isLoadingMore = false;
   bool hasMore = true;
 
   Future<void> loadInitialServices({
     String? searchTerm,
-    String? categoryKey, // ✅ بدل categoryId
+    String? categoryKey,
     double? minPrice,
     double? maxPrice,
-    int? userCityId,
-    int? userAreaId,
+    double? minRating,
     String? sortBy,
   }) async {
     _page = 1;
@@ -36,8 +38,7 @@ class BrowseServicesViewModel {
       categoryKey: categoryKey,
       minPrice: minPrice,
       maxPrice: maxPrice,
-      userCityId: userCityId,
-      userAreaId: userAreaId,
+      minRating: minRating,
       sortBy: sortBy,
     );
 
@@ -50,8 +51,7 @@ class BrowseServicesViewModel {
     String? categoryKey,
     double? minPrice,
     double? maxPrice,
-    int? userCityId,
-    int? userAreaId,
+    double? minRating,
     String? sortBy,
   }) async {
     if (!hasMore || isLoadingMore) return;
@@ -59,14 +59,14 @@ class BrowseServicesViewModel {
 
     try {
       final nextPage = _page + 1;
+
       final result = await _fetchPage(
         page: nextPage,
         searchTerm: searchTerm,
         categoryKey: categoryKey,
         minPrice: minPrice,
         maxPrice: maxPrice,
-        userCityId: userCityId,
-        userAreaId: userAreaId,
+        minRating: minRating,
         sortBy: sortBy,
       );
 
@@ -78,30 +78,31 @@ class BrowseServicesViewModel {
     }
   }
 
-  int? _extractProviderCityId(Map<String, dynamic> m) {
-    final provider = m['provider'];
-    if (provider is Map) {
-      final p = provider.cast<String, dynamic>();
+ Future<int?> _categoryIdFromKey(String? key) async {
+  final raw = key?.trim();
+  if (raw == null || raw.isEmpty) return null;
 
-      // 1) provider.user.city_id
-      final user = p['user'];
-      if (user is Map) {
-        final u = user.cast<String, dynamic>();
-        final v = u['city_id'];
-        if (v is num) return v.toInt();
-      }
+  final map = await _ref.read(categoriesIdMapProvider.future);
 
-      // 2) fallback: provider.city_id
-      final v2 = p['city_id'];
-      if (v2 is num) return v2.toInt();
-    }
+  final k = raw.toLowerCase();
 
-    // 3) fallback عام
-    final v3 = m['city_id'];
-    if (v3 is num) return v3.toInt();
+  // 1) exact
+  final exact = map[k];
+  if (exact != null) return exact;
 
-    return null;
-  }
+  // 2) underscore fallback
+  final underscore = k.replaceAll(RegExp(r'\s+'), '_');
+  final byUnderscore = map[underscore];
+  if (byUnderscore != null) return byUnderscore;
+
+  // 3) space fallback (لو جاي underscore)
+  final spaces = k.replaceAll('_', ' ');
+  final bySpaces = map[spaces];
+  if (bySpaces != null) return bySpaces;
+
+  return null;
+}
+
 
   Future<_PageResult> _fetchPage({
     required int page,
@@ -109,78 +110,67 @@ class BrowseServicesViewModel {
     String? categoryKey,
     double? minPrice,
     double? maxPrice,
-    int? userCityId,
-    int? userAreaId,
+    double? minRating,
     String? sortBy,
   }) async {
+    final categoryId = await _categoryIdFromKey(categoryKey);
+
+    // ✅ لو minPrice > maxPrice بدّلهم
+    double? minP = minPrice;
+    double? maxP = maxPrice;
+    if (minP != null && maxP != null && minP > maxP) {
+      final tmp = minP;
+      minP = maxP;
+      maxP = tmp;
+    }
+
+    final String? qRaw =
+        (searchTerm ?? '').trim().isEmpty ? null : searchTerm!.trim();
+
+    // ✅ التطبيع هون فقط (UI يظل عربي)
+    final String? q = qRaw == null ? null : SearchNormalizer.normalizeForApi(qRaw);
+
+    final double? rating =
+        (minRating == null || minRating <= 0) ? null : (minRating > 5 ? 5 : minRating);
+
     final qp = <String, dynamic>{
       'page': page,
       'limit': _limit,
 
-      // search / q
-      if (searchTerm != null && searchTerm.trim().isNotEmpty) ...{
-        'search': searchTerm.trim(),
-        'q': searchTerm.trim(),
-      },
+      if (q != null) 'query': q,
+      if (categoryId != null) 'category': categoryId,
 
-      if (minPrice != null) 'min_price': minPrice,
-      if (maxPrice != null) 'max_price': maxPrice,
+      if (minP != null) 'min_price': minP,
+      if (maxP != null) 'max_price': maxP,
 
-      // city/area (حاول أسماء محتملة)
-      if (userCityId != null) ...{
-        'city_id': userCityId,
-        'user_city_id': userCityId,
-        'provider_city_id': userCityId,
-      },
-      if (userAreaId != null) ...{
-        'area_id': userAreaId,
-        'user_area_id': userAreaId,
-        'provider_area_id': userAreaId,
-      },
+      if (rating != null) 'min_rating': rating,
 
       if (sortBy != null && sortBy.trim().isNotEmpty) 'sort_by': sortBy.trim(),
     };
 
-    final res = await _dio.get(ApiConstants.services, queryParameters: qp);
+    final res = await _dio.get(ApiConstants.search, queryParameters: qp);
     final raw = res.data;
 
-    if (raw is! Map) throw Exception('Invalid services response');
-
+    if (raw is! Map) throw Exception('Invalid search response');
     final map = raw.cast<String, dynamic>();
+
     if (map['success'] != true) {
       throw Exception((map['message'] ?? 'unknown_error').toString());
     }
 
     final data = map['data'];
-    if (data is! Map) throw Exception('Invalid services data');
-
+    if (data is! Map) throw Exception('Invalid search data');
     final dataMap = data.cast<String, dynamic>();
-    final itemsRaw = dataMap['services'] ?? dataMap['items'] ?? dataMap['data'];
-    if (itemsRaw is! List) throw Exception('Invalid services list');
 
-    final rawMaps = itemsRaw
+    final itemsRaw = dataMap['results'];
+    if (itemsRaw is! List) throw Exception('Invalid results list');
+
+    final items = itemsRaw
         .whereType<Map>()
-        .map((e) => e.cast<String, dynamic>())
+        .map((e) => Map<String, dynamic>.from(e))
+        .map(ServiceSummary.fromJson)
         .toList();
 
-    // ✅ فلترة مدينة محلياً
-    Iterable<Map<String, dynamic>> filtered = rawMaps;
-    if (userCityId != null) {
-      filtered = filtered.where((m) => _extractProviderCityId(m) == userCityId);
-    }
-
-    // ✅ فلترة فئة محلياً (أفضل حل مع category_id = null)
-    if (categoryKey != null && categoryKey.trim().isNotEmpty) {
-      final want = categoryKey.trim().toLowerCase();
-      filtered = filtered.where((m) {
-        final k = FixedServiceCategories.keyFromServiceJson(m);
-        return (k ?? '').toLowerCase() == want;
-      });
-    }
-
-    final items = filtered.map((m) => ServiceSummary.fromJson(m)).toList();
-
-    // hasMore من pagination (أصح من length)
     bool hasMoreCalc = items.length == _limit;
     final pagination = dataMap['pagination'];
     if (pagination is Map) {

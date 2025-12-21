@@ -51,7 +51,9 @@ class MarketplaceState {
   MarketplaceState copyWith({
     bool? isLoading,
     String? errorMessage,
+    bool clearError = false,
     String? uiMessage,
+    bool clearUiMessage = false,
     List<MarketplaceRequestUiModel>? allRequests,
     String? searchQuery,
     MarketplaceFilters? filters,
@@ -63,8 +65,8 @@ class MarketplaceState {
   }) {
     return MarketplaceState(
       isLoading: isLoading ?? this.isLoading,
-      errorMessage: errorMessage,
-      uiMessage: uiMessage,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      uiMessage: clearUiMessage ? null : (uiMessage ?? this.uiMessage),
       allRequests: allRequests ?? this.allRequests,
       searchQuery: searchQuery ?? this.searchQuery,
       filters: filters ?? this.filters,
@@ -100,39 +102,64 @@ class MarketplaceState {
   }
 
   List<MarketplaceRequestUiModel> get visibleRequests {
-    final q = searchQuery.trim().toLowerCase();
-    List<MarketplaceRequestUiModel> items = allRequests;
+    Iterable<MarketplaceRequestUiModel> items = allRequests;
 
+    // 🔎 search
+    final q = searchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
       items = items.where((r) {
-        return r.customerName.toLowerCase().contains(q) ||
-            r.title.toLowerCase().contains(q) ||
-            r.description.toLowerCase().contains(q) ||
-            (r.cityName?.toLowerCase().contains(q) ?? false) ||
-            (r.areaName?.toLowerCase().contains(q) ?? false);
-      }).toList();
+        final hay = [
+          r.customerName,
+          r.title,
+          r.description,
+          r.cityName ?? '',
+          r.areaName ?? '',
+          r.categoryLabel ?? '',
+        ].join(' ').toLowerCase();
+
+        return hay.contains(q);
+      });
     }
 
+    // 🏙️ city (حتى لو السيرفر بفلترها، خليه احتياط)
     if (filters.cityId != null) {
-      items = items.where((r) => r.cityId == filters.cityId).toList();
+      items = items.where((r) => r.cityId == filters.cityId);
     }
 
-    final cat = filters.categoryLabel;
-    if (cat != null && cat.trim().isNotEmpty) {
-      items = items.where((r) => r.categoryLabel == cat).toList();
+    // ✅ category (مهم: نفلتر بالـ ID مش بالـ label)
+    if (filters.categoryId != null) {
+      items = items.where((r) => r.categoryId == filters.categoryId);
     }
 
-    if (filters.minBudget != null) {
-      items = items.where((r) => (r.budgetMin ?? 0) >= filters.minBudget!).toList();
-    }
-    if (filters.maxBudget != null) {
-      items = items.where((r) => (r.budgetMax ?? 0) <= filters.maxBudget!).toList();
+    // 💰 budget range (overlap)
+    if (filters.minBudget != null || filters.maxBudget != null) {
+      final fMin = filters.minBudget ?? double.negativeInfinity;
+      final fMax = filters.maxBudget ?? double.infinity;
+
+      items = items.where((r) {
+        final min = r.budgetMin;
+        final max = r.budgetMax ?? min;
+
+        // لو المستخدم فعّل فلتر السعر والطلب ما فيه ميزانية نخفيه
+        if (min == null && max == null) return false;
+
+        final reqMin = min ?? 0.0;
+        final reqMax = max ?? reqMin;
+
+        // overlap range
+        return reqMax >= fMin && reqMin <= fMax;
+      });
     }
 
-    items.sort((a, b) => filters.sort == MarketplaceSort.newest
-        ? b.createdAt.compareTo(a.createdAt)
-        : a.createdAt.compareTo(b.createdAt));
+    final list = items.toList();
 
-    return items;
+    // ترتيب محلي حسب createdAt (حتى لو السيرفر بيرجع مرتب)
+    list.sort(
+      (a, b) => filters.sort == MarketplaceSort.newest
+          ? b.createdAt.compareTo(a.createdAt)
+          : a.createdAt.compareTo(b.createdAt),
+    );
+
+    return list;
   }
 }

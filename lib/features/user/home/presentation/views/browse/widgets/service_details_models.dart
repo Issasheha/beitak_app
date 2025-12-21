@@ -19,8 +19,9 @@ class ServiceDetails {
   final int providerId;
   final int? categoryId;
 
-  final String name;
-  final String description;
+  final String name; // ✅ عربي أولاً
+  final String description; // ✅ عربي أولاً
+  final String categoryLabel; // ✅ عربي أولاً (بدل ثابت "خدمات المنزل")
 
   final double basePrice;
   final String priceType;
@@ -40,6 +41,7 @@ class ServiceDetails {
     required this.categoryId,
     required this.name,
     required this.description,
+    required this.categoryLabel,
     required this.basePrice,
     required this.priceType,
     required this.durationHours,
@@ -54,14 +56,39 @@ class ServiceDetails {
     final packagesRaw = (json['packages'] as List?) ?? const [];
     final addOnsRaw = (json['add_ons'] as List?) ?? const [];
 
+    final catMap = (json['category'] as Map?)?.cast<String, dynamic>();
+    final categoryLabel = _pickTextArFirstFromMap(
+      catMap,
+      arKey: 'name_ar',
+      localizedKey: 'name_localized',
+      fallbackKey: 'name',
+      fallbackValue: 'خدمات المنزل',
+    );
+
     return ServiceDetails(
       id: _asInt(json['id']),
       providerId: _asInt(json['provider_id']),
       categoryId:
           json['category_id'] == null ? null : _asInt(json['category_id']),
-      name: _asString(json['name_localized'] ?? json['name'] ?? ''),
-      description: _asString(
-          json['description_localized'] ?? json['description'] ?? ''),
+
+      // ✅ عربي أولاً
+      name: _pickTextArFirst(
+        json,
+        arKey: 'name_ar',
+        localizedKey: 'name_localized',
+        fallbackKey: 'name',
+      ),
+
+      // ✅ عربي أولاً
+      description: _pickTextArFirst(
+        json,
+        arKey: 'description_ar',
+        localizedKey: 'description_localized',
+        fallbackKey: 'description',
+      ),
+
+      categoryLabel: categoryLabel,
+
       basePrice: _asDouble(json['base_price']),
       priceType: _asString(json['price_type'] ?? 'fixed'),
       durationHours: _asDouble(json['duration_hours']),
@@ -105,16 +132,14 @@ class ProviderDayHours {
 
 class ProviderDetails {
   final int id;
-  final String businessName;
+
+  final String businessName; // ✅ عربي أولاً
   final double ratingAvg;
   final int ratingCount;
 
   final List<String> availableDays; // monday..sunday
 
-  /// ✅ NEW: working hours per day (monday..sunday) with active
   final Map<String, ProviderDayHours> workingHoursByDay;
-
-  /// ✅ keep legacy (used by older UI) - will fallback to first active day
   final WorkingHours workingHours;
 
   final List<String> serviceAreas; // abdoun...
@@ -123,7 +148,7 @@ class ProviderDetails {
   final String firstName;
   final String lastName;
 
-  final String bio;
+  final String bio; // ✅ عربي أولاً
   final int experienceYears;
   final DateTime? createdAt;
 
@@ -158,7 +183,6 @@ class ProviderDetails {
 
     final byDay = _parseWorkingHoursByDay(whRaw);
 
-    // legacy fallback: لو السيرفر رجع {start,end} فقط أو ما رجع أيام
     ProviderDayHours? generic;
     for (final k in _weekKeys) {
       final d = byDay[k];
@@ -177,9 +201,24 @@ class ProviderDetails {
       end: _normalizeHm(generic?.end ?? legacyEnd),
     );
 
+    // ✅ عربي أولاً (لو السيرفر رجع business_name_ar / bio_ar)
+    final businessName = _pickTextArFirst(
+      json,
+      arKey: 'business_name_ar',
+      localizedKey: 'business_name_localized',
+      fallbackKey: 'business_name',
+    );
+
+    final bio = _pickTextArFirst(
+      json,
+      arKey: 'bio_ar',
+      localizedKey: 'bio_localized',
+      fallbackKey: 'bio',
+    );
+
     return ProviderDetails(
       id: _asInt(json['id']),
-      businessName: _asString(json['business_name'] ?? ''),
+      businessName: businessName,
       ratingAvg: _asDouble(json['rating_avg']),
       ratingCount: _asInt(json['rating_count']),
       availableDays: availableDays,
@@ -192,7 +231,7 @@ class ProviderDetails {
       instantBooking: (json['instant_booking'] == true),
       firstName: _asString(user['first_name'] ?? ''),
       lastName: _asString(user['last_name'] ?? ''),
-      bio: _asString(json['bio_localized'] ?? json['bio'] ?? ''),
+      bio: bio,
       experienceYears: _asInt(json['experience_years'] ?? 0),
       createdAt: _parseDate(json['created_at']),
     );
@@ -200,6 +239,7 @@ class ProviderDetails {
 
   String get displayName {
     final full = ('$firstName $lastName').trim();
+    // لو الاسم فاضي خذ businessName (يمكن يكون عربي/انجليزي حسب الموجود)
     return full.isEmpty ? businessName : full;
   }
 
@@ -314,7 +354,6 @@ Map<String, ProviderDayHours> _parseWorkingHoursByDay(
 ) {
   final out = <String, ProviderDayHours>{};
 
-  // إذا كان working_hours بالشكل الجديد: {monday:{start,end,active}, ...}
   bool hasWeekKeys = false;
   for (final k in _weekKeys) {
     if (whRaw[k] is Map) {
@@ -333,7 +372,6 @@ Map<String, ProviderDayHours> _parseWorkingHoursByDay(
     return out;
   }
 
-  // fallback: {start,end} فقط
   final start = _normalizeHm(_asString(whRaw['start'] ?? '09:00'));
   final end = _normalizeHm(_asString(whRaw['end'] ?? '18:00'));
   for (final k in _weekKeys) {
@@ -374,4 +412,40 @@ DateTime? _parseDate(dynamic v) {
   } catch (_) {
     return null;
   }
+}
+
+/// ✅ عربي أولاً: arKey -> localizedKey -> fallbackKey
+String _pickTextArFirst(
+  Map<String, dynamic> json, {
+  required String arKey,
+  required String localizedKey,
+  required String fallbackKey,
+}) {
+  final ar = (json[arKey] ?? '').toString().trim();
+  if (ar.isNotEmpty) return ar;
+
+  final loc = (json[localizedKey] ?? '').toString().trim();
+  if (loc.isNotEmpty) return loc;
+
+  return (json[fallbackKey] ?? '').toString().trim();
+}
+
+/// ✅ نفس الفكرة بس لو الماب null
+String _pickTextArFirstFromMap(
+  Map<String, dynamic>? json, {
+  required String arKey,
+  required String localizedKey,
+  required String fallbackKey,
+  required String fallbackValue,
+}) {
+  if (json == null) return fallbackValue;
+
+  final ar = (json[arKey] ?? '').toString().trim();
+  if (ar.isNotEmpty) return ar;
+
+  final loc = (json[localizedKey] ?? '').toString().trim();
+  if (loc.isNotEmpty) return loc;
+
+  final fb = (json[fallbackKey] ?? '').toString().trim();
+  return fb.isNotEmpty ? fb : fallbackValue;
 }

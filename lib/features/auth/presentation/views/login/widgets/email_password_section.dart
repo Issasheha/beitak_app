@@ -38,47 +38,66 @@ class _EmailPasswordSectionState extends State<EmailPasswordSection> {
 
   void _toggleObscure() => setState(() => _obscure = !_obscure);
 
-  String? _validateIdentifier(String? v) {
-    if (v == null) return 'أدخل بريدك الإلكتروني أو رقم هاتفك';
+ String? _validateIdentifier(String? v) {
+  if (v == null) return 'أدخل بريدك الإلكتروني أو رقم هاتفك';
 
-    final value = v.trim();
-    if (value.isEmpty) return 'أدخل بريدك الإلكتروني أو رقم هاتفك';
+  final value = v.trim();
+  if (value.isEmpty) return 'أدخل بريدك الإلكتروني أو رقم هاتفك';
 
-    final isEmail = value.contains('@');
+  final isEmail = value.contains('@');
 
-    if (isEmail) {
-      final emailRegex = RegExp(r'^[^.][\w\-.]+@([\w-]+\.)+[\w-]{2,4}[^.]$');
-      if (!emailRegex.hasMatch(value) ||
-          value.contains('..') ||
-          value.contains('@@') ||
-          value.contains(' ') ||
-          !value.contains('.') ||
-          value.startsWith('.') ||
-          value.endsWith('.')) {
-        return 'أدخل عنوان بريد إلكتروني صالح';
-      }
-    } else {
-      final normalized = value.replaceAll(RegExp(r'\D'), '');
-      if (normalized.length != 10 ||
-          !normalized.startsWith('07') ||
-          !['5', '7', '8', '9'].contains(normalized[2])) {
-        return 'أدخل رقم هاتف صالح';
-      }
+  if (isEmail) {
+    // قواعد بسيطة + مرنة:
+    // - ممنوع مسافات
+    // - @ واحدة
+    // - الدومين لازم فيه نقطة
+    // - ممنوع يبدأ/ينتهي بنقطة
+    // - ممنوع ".."
+    if (value.contains(' ')) return 'أدخل عنوان بريد إلكتروني صالح';
+
+    final parts = value.split('@');
+    if (parts.length != 2) return 'أدخل عنوان بريد إلكتروني صالح';
+
+    final local = parts[0];
+    final domain = parts[1];
+
+    if (local.isEmpty ||
+        domain.isEmpty ||
+        local.startsWith('.') ||
+        local.endsWith('.') ||
+        domain.startsWith('.') ||
+        domain.endsWith('.') ||
+        local.contains('..') ||
+        domain.contains('..') ||
+        !domain.contains('.')) {
+      return 'أدخل عنوان بريد إلكتروني صالح';
     }
+
+    final tld = domain.split('.').last;
+    if (tld.length < 2) return 'أدخل عنوان بريد إلكتروني صالح';
+
+    return null;
+  } else {
+    // Sign In spec: أرقام فقط، بدون رموز/مسافات
+    if (!RegExp(r'^\d+$').hasMatch(value)) return 'أدخل رقم هاتف صالح';
+    if (value.length != 10) return 'أدخل رقم هاتف صالح';
+
+    final okPrefix =
+        value.startsWith('077') || value.startsWith('078') || value.startsWith('079');
+    if (!okPrefix) return 'أدخل رقم هاتف صالح';
+
     return null;
   }
+}
 
-  String? _validatePassword(String? v) {
-    if (v == null || v.trim().isEmpty) return 'أدخل كلمة المرور';
+String? _validatePassword(String? v) {
+  if (v == null || v.trim().isEmpty) return 'أدخل كلمة المرور';
 
-    final trimmed = v.trim();
-    if (trimmed.length < 8) return 'يجب أن تكون كلمة المرور 8 أحرف على الأقل';
-    if (v.contains(' ')) return 'كلمة المرور لا يمكن أن تحتوي على مسافات';
-    if (!RegExp(r'[0-9]').hasMatch(trimmed)) {
-      return 'يجب أن تحتوي كلمة المرور على رقم واحد على الأقل';
-    }
-    return null;
-  }
+  // doc للـSign In: مطلوب 8 أحرف على الأقل
+  if (v.trim().length < 8) return 'يجب أن تكون كلمة المرور 8 أحرف على الأقل';
+  return null;
+}
+
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,3 @@
-// lib/features/user/home/presentation/views/browse/viewmodels/browse_state.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/models/service_summary.dart';
 
@@ -9,10 +7,14 @@ class BrowseArgs {
   final int? initialCityId;
   final int? initialAreaId;
 
+  // ✅ جديد
+  final String? initialCategoryKey;
+
   const BrowseArgs({
     this.initialSearch,
     this.initialCityId,
     this.initialAreaId,
+    this.initialCategoryKey,
   });
 
   @override
@@ -22,14 +24,23 @@ class BrowseArgs {
           runtimeType == other.runtimeType &&
           initialSearch == other.initialSearch &&
           initialCityId == other.initialCityId &&
-          initialAreaId == other.initialAreaId;
+          initialAreaId == other.initialAreaId &&
+          initialCategoryKey == other.initialCategoryKey;
 
   @override
-  int get hashCode => Object.hash(initialSearch, initialCityId, initialAreaId);
+  int get hashCode =>
+      Object.hash(initialSearch, initialCityId, initialAreaId, initialCategoryKey);
+}
+
+/// ✅ sentinel لازم يكون const عشان ينفع default parameter
+class _Unset {
+  const _Unset();
 }
 
 @immutable
 class BrowseState {
+  static const _Unset _unset = _Unset();
+
   final bool initialized;
 
   final bool isLoading;
@@ -44,7 +55,7 @@ class BrowseState {
   final double? minPrice;
   final double? maxPrice;
 
-  /// kept local (backend might not support it now)
+  /// backend-supported now
   final double minRating;
 
   /// location context (fixed from args)
@@ -78,6 +89,7 @@ class BrowseState {
 
   factory BrowseState.initial(BrowseArgs args) {
     final initialSearch = (args.initialSearch ?? '').trim();
+    final initialCategoryKey = (args.initialCategoryKey ?? '').trim();
 
     return BrowseState(
       initialized: false,
@@ -86,7 +98,10 @@ class BrowseState {
       hasMore: true,
       errorMessage: null,
       searchTerm: initialSearch,
-      categoryKey: null,
+
+      // ✅ مهم
+      categoryKey: initialCategoryKey.isEmpty ? null : initialCategoryKey,
+
       minPrice: null,
       maxPrice: null,
       minRating: 0.0,
@@ -105,13 +120,19 @@ class BrowseState {
     bool? hasMore,
     String? errorMessage,
     bool clearError = false,
+
     String? searchTerm,
-    String? categoryKey,
-    double? minPrice,
-    double? maxPrice,
+
+    /// ✅ Object? حتى نقدر نمرر null (الكل)
+    Object? categoryKey = _unset,
+    Object? minPrice = _unset,
+    Object? maxPrice = _unset,
+
     double? minRating,
-    int? userCityId,
-    int? userAreaId,
+
+    Object? userCityId = _unset,
+    Object? userAreaId = _unset,
+
     String? sortBy,
     List<ServiceSummary>? services,
     List<ServiceSummary>? visible,
@@ -122,13 +143,23 @@ class BrowseState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       hasMore: hasMore ?? this.hasMore,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+
       searchTerm: searchTerm ?? this.searchTerm,
-      categoryKey: categoryKey ?? this.categoryKey,
-      minPrice: minPrice ?? this.minPrice,
-      maxPrice: maxPrice ?? this.maxPrice,
+
+      categoryKey: identical(categoryKey, _unset)
+          ? this.categoryKey
+          : categoryKey as String?,
+
+      minPrice: identical(minPrice, _unset) ? this.minPrice : minPrice as double?,
+      maxPrice: identical(maxPrice, _unset) ? this.maxPrice : maxPrice as double?,
+
       minRating: minRating ?? this.minRating,
-      userCityId: userCityId ?? this.userCityId,
-      userAreaId: userAreaId ?? this.userAreaId,
+
+      userCityId:
+          identical(userCityId, _unset) ? this.userCityId : userCityId as int?,
+      userAreaId:
+          identical(userAreaId, _unset) ? this.userAreaId : userAreaId as int?,
+
       sortBy: sortBy ?? this.sortBy,
       services: services ?? this.services,
       visible: visible ?? this.visible,

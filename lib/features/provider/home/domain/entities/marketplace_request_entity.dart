@@ -4,8 +4,10 @@ class MarketplaceRequestEntity {
   final int? cityId;
   final int? areaId;
 
+  final int? categoryId; // ✅ NEW
+
   final String customerName;
-  final String? phone; // موجود بالباك، بس بالـ UI قبل القبول بنخفيه
+  final String? phone;
   final String? cityName;
   final String? areaName;
 
@@ -25,6 +27,7 @@ class MarketplaceRequestEntity {
     required this.id,
     required this.cityId,
     required this.areaId,
+    required this.categoryId, // ✅ NEW
     required this.customerName,
     required this.phone,
     required this.cityName,

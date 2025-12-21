@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/color_x.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/features/provider/home/data/models/provider_booking_model.dart';
 
-class ProviderTodayTaskDetailsSheet extends StatelessWidget {
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/constants/fixed_locations.dart';
+import 'package:beitak_app/core/providers/areas_name_map_provider.dart';
+
+class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
   const ProviderTodayTaskDetailsSheet({
     super.key,
     required this.booking,
@@ -15,9 +20,36 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
   final ProviderBookingModel booking;
   final VoidCallback onClose;
 
-  String _fmt(String? s) {
+  // ---------------- Helpers ----------------
+
+  bool _isPlaceholder(String s) {
+    final x = s.trim().toLowerCase();
+    return x.isEmpty ||
+        x == 'n/a' ||
+        x == 'na' ||
+        x == 'none' ||
+        x == 'null' ||
+        x == '-' ||
+        x == '—';
+  }
+
+  String _clean(String? s) {
     final v = (s ?? '').trim();
-    return v.isEmpty ? '—' : v;
+    if (v.isEmpty) return '';
+    if (_isPlaceholder(v)) return '';
+    return v;
+  }
+
+  String _serviceTitleAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+
+    final key = FixedServiceCategories.keyFromAnyString(s);
+    if (key != null) return FixedServiceCategories.labelArFromKey(key);
+
+    // لو عربي أصلاً خلّيه
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+    return hasArabic ? s : s;
   }
 
   String _dateNice(String d) => d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
@@ -39,7 +71,7 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     SizeConfig.init(context);
     final mq = MediaQuery.of(context);
 
@@ -47,17 +79,32 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
 
     final b = booking;
 
-    final date = _dateNice(_fmt(b.bookingDate));
-    final time = _formatTime(_fmt(b.bookingTime));
+    final date = _dateNice(_clean(b.bookingDate));
+    final time = _formatTime(_clean(b.bookingTime));
     final duration = _formatDurationHours(b.durationHours);
 
-    final address = _fmt(b.serviceAddress);
-    final desc = _fmt(b.serviceDescription);
-    final notes = _fmt(b.customerNotes);
+    final address = _clean(b.serviceAddress);
+    final desc = _clean(b.serviceDescription);
+    final notes = _clean(b.customerNotes);
 
-    final packageName = _fmt(b.packageSelected);
+    final packageName = _clean(b.packageSelected);
     final addons = b.addOnsSelected;
     final hasAddons = addons.isNotEmpty;
+
+    final hasAddress = address.isNotEmpty;
+    final hasDesc = desc.isNotEmpty;
+    final hasNotes = notes.isNotEmpty;
+    final hasPackage = packageName.isNotEmpty;
+
+    // ✅ ماب المناطق من السيرفر
+    final areasMapAsync = ref.watch(areasNameMapProvider);
+
+    final locationRaw = _clean(b.locationText);
+    final locationAr = areasMapAsync.when(
+      data: (m) => FixedLocations.labelArFromAny(locationRaw, map: m),
+      loading: () => FixedLocations.labelArFromAny(locationRaw),
+      error: (_, __) => FixedLocations.labelArFromAny(locationRaw),
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -119,8 +166,9 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
                     SizedBox(height: SizeConfig.h(10)),
 
                     _InfoCard(
-                      title: _fmt(b.serviceName),
-                      subtitle: 'العميل: ${_fmt(b.customerName)}',
+                      // ✅ الفئة عربي بدل cleaning
+                      title: _serviceTitleAr(_clean(b.serviceName)),
+                      subtitle: 'العميل: ${_clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)}',
                       trailing: Text(
                         '${b.totalPrice.toStringAsFixed(0)} د.أ',
                         style: TextStyle(
@@ -133,7 +181,6 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
 
                     SizedBox(height: SizeConfig.h(10)),
 
-                    // ✅ أهم نقطة: المحتوى Scrollable عشان ما يصير overflow
                     Expanded(
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
@@ -145,24 +192,29 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
                             _KeyValue('📅', 'التاريخ', date),
                             _KeyValue('🕘', 'الوقت', time),
                             _KeyValue('⏱️', 'المدة', duration),
-                            _KeyValue('📍', 'المنطقة', _fmt(b.locationText)),
-                            if (address != '—') _KeyValue('🏠', 'العنوان', address, maxLines: 2),
+                            _KeyValue('📍', 'المنطقة', locationAr),
+
+                            // ✅ العنوان لا يظهر إذا N/A / فاضي
+                            if (hasAddress) _KeyValue('🏠', 'العنوان', address, maxLines: 2),
 
                             SizedBox(height: SizeConfig.h(12)),
 
                             const _SectionTitle('معلومات العميل'),
                             SizedBox(height: SizeConfig.h(6)),
-                            _KeyValue('👤', 'الاسم', _fmt(b.customerName)),
-                            if (b.customerPhone != null) _KeyValue('📞', 'الهاتف', _fmt(b.customerPhone)),
-                            if (b.customerEmail != null) _KeyValue('✉️', 'الإيميل', _fmt(b.customerEmail)),
+                            _KeyValue('👤', 'الاسم', _clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)),
+                            if (b.customerPhone != null && _clean(b.customerPhone).isNotEmpty)
+                              _KeyValue('📞', 'الهاتف', _clean(b.customerPhone)),
+                            if (b.customerEmail != null && _clean(b.customerEmail).isNotEmpty)
+                              _KeyValue('✉️', 'الإيميل', _clean(b.customerEmail)),
 
-                            if (desc != '—' || notes != '—' || packageName != '—' || hasAddons) ...[
+                            if (hasDesc || hasNotes || hasPackage || hasAddons) ...[
                               SizedBox(height: SizeConfig.h(12)),
                               const _SectionTitle('تفاصيل إضافية'),
                               SizedBox(height: SizeConfig.h(6)),
 
-                              if (desc != '—') _MultiLineCard(title: 'وصف الخدمة', text: desc),
-                              if (packageName != '—')
+                              if (hasDesc) _MultiLineCard(title: 'وصف الخدمة', text: desc),
+
+                              if (hasPackage)
                                 _CompactCard(child: _KeyValue('📦', 'الباقة', packageName)),
 
                               if (hasAddons)
@@ -174,7 +226,7 @@ class ProviderTodayTaskDetailsSheet extends StatelessWidget {
                                   ),
                                 ),
 
-                              if (notes != '—') _MultiLineCard(title: 'ملاحظات العميل', text: notes),
+                              if (hasNotes) _MultiLineCard(title: 'ملاحظات العميل', text: notes),
                             ],
 
                             SizedBox(height: SizeConfig.h(12)),

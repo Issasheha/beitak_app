@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
@@ -6,7 +7,11 @@ import 'package:beitak_app/core/constants/color_x.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/provider/home/data/models/provider_booking_model.dart';
 
-class ProviderBookingDetailsSheet extends StatelessWidget {
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/constants/fixed_locations.dart';
+import 'package:beitak_app/core/providers/areas_name_map_provider.dart';
+
+class ProviderBookingDetailsSheet extends ConsumerWidget {
   final ProviderBookingModel booking;
   final VoidCallback onClose;
 
@@ -15,6 +20,32 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     required this.booking,
     required this.onClose,
   });
+
+  // ---------------- Helpers ----------------
+
+  bool _isPlaceholder(String s) {
+    final x = s.trim().toLowerCase();
+    return x.isEmpty || x == 'n/a' || x == 'na' || x == 'none' || x == 'null' || x == '-' || x == '—';
+  }
+
+  String _clean(String? s) {
+    final v = (s ?? '').trim();
+    if (v.isEmpty) return '';
+    if (_isPlaceholder(v)) return '';
+    return v;
+  }
+
+  String _serviceTitleAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+
+    final key = FixedServiceCategories.keyFromAnyString(s);
+    if (key != null) return FixedServiceCategories.labelArFromKey(key);
+
+    // لو عربي أصلاً
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+    return hasArabic ? s : s;
+  }
 
   String _formatTime(String hhmmss) {
     final s = hhmmss.trim();
@@ -32,16 +63,14 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     return '$v ساعات';
   }
 
-  String _dateNice(String d) =>
-      d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
+  String _dateNice(String d) => d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     SizeConfig.init(context);
 
     final mq = MediaQuery.of(context);
     final screenH = mq.size.height;
-
     final heightFactor = (screenH < 720 ? 0.94 : 0.86).clamp(0.82, 0.96);
 
     final b = booking;
@@ -50,11 +79,17 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     final time = _formatTime(b.bookingTime);
     final duration = _formatDurationHours(b.durationHours);
 
-    final hasAddress = (b.serviceAddress ?? '').trim().isNotEmpty;
-    final hasDesc = (b.serviceDescription ?? '').trim().isNotEmpty;
-    final hasNotes = (b.customerNotes ?? '').trim().isNotEmpty;
+    // ✅ تنظيف القيم
+    final addressClean = _clean(b.serviceAddress);
+    final descClean = _clean(b.serviceDescription);
+    final notesClean = _clean(b.customerNotes);
+    final packageClean = _clean(b.packageSelected);
 
-    final hasPackage = (b.packageSelected ?? '').trim().isNotEmpty;
+    final hasAddress = addressClean.isNotEmpty;
+    final hasDesc = descClean.isNotEmpty;
+    final hasNotes = notesClean.isNotEmpty;
+    final hasPackage = packageClean.isNotEmpty;
+
     final addons = b.addOnsSelected;
     final addonsPreview = addons.length <= 4 ? addons : addons.take(4).toList();
     final remainingAddons = addons.length - addonsPreview.length;
@@ -62,6 +97,16 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     // ✅ قبل القبول: اخفاء بيانات التواصل
     final isPending = b.status == 'pending_provider_accept';
     final showContactInfo = !isPending;
+
+    // ✅ ماب المناطق من السيرفر
+    final areasMapAsync = ref.watch(areasNameMapProvider);
+
+    final locationRaw = _clean(b.locationText);
+    final locationAr = areasMapAsync.when(
+      data: (m) => FixedLocations.labelArFromAny(locationRaw, map: m),
+      loading: () => FixedLocations.labelArFromAny(locationRaw), // fallback مؤقت
+      error: (_, __) => FixedLocations.labelArFromAny(locationRaw),
+    );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -75,9 +120,7 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(SizeConfig.radius(22)),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.o(0.12),
@@ -121,9 +164,9 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                     ),
 
                     _InfoCard(
-                      title: b.serviceName,
-                      subtitle:
-                          'رقم الحجز: ${b.bookingNumber.isEmpty ? '—' : b.bookingNumber}',
+                      // ✅ الفئة عربي بدل cleaning
+                      title: _serviceTitleAr(b.serviceName),
+                      subtitle: 'رقم الحجز: ${_clean(b.bookingNumber).isEmpty ? '—' : _clean(b.bookingNumber)}',
                       trailing: Text(
                         '${b.totalPrice.toStringAsFixed(0)} د.أ',
                         style: AppTextStyles.body14.copyWith(
@@ -136,7 +179,6 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
 
                     SizedBox(height: SizeConfig.h(10)),
 
-                    // ✅ FIX: اجعل باقي المحتوى Scrollable لتفادي overflow
                     Expanded(
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
@@ -148,35 +190,30 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                             _KeyValue('📅', 'التاريخ', date),
                             _KeyValue('🕘', 'الوقت', time),
                             _KeyValue('⏱️', 'المدة', duration),
-                            _KeyValue('📍', 'المنطقة', b.locationText),
-                            if (hasAddress)
-                              _KeyValue('🏠', 'العنوان', b.serviceAddress!,
-                                  maxLines: 2),
+                            _KeyValue('📍', 'المنطقة', locationAr),
+
+                            // ✅ العنوان لا يظهر إذا N/A / فاضي
+                            if (hasAddress) _KeyValue('🏠', 'العنوان', addressClean, maxLines: 2),
 
                             SizedBox(height: SizeConfig.h(10)),
 
                             const _SectionTitle('العميل'),
                             SizedBox(height: SizeConfig.h(6)),
-                            _KeyValue('👤', 'الاسم', b.customerName),
+                            _KeyValue('👤', 'الاسم', _clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)),
 
-                            // ✅ بعد القبول فقط: الهاتف/الإيميل
                             if (showContactInfo) ...[
-                              if (b.customerPhone != null)
-                                _KeyValue('📞', 'الهاتف', b.customerPhone!),
-                              if (b.customerEmail != null)
-                                _KeyValue('✉️', 'الإيميل', b.customerEmail!),
+                              if (b.customerPhone != null && _clean(b.customerPhone).isNotEmpty)
+                                _KeyValue('📞', 'الهاتف', _clean(b.customerPhone)),
+                              if (b.customerEmail != null && _clean(b.customerEmail).isNotEmpty)
+                                _KeyValue('✉️', 'الإيميل', _clean(b.customerEmail)),
                             ] else ...[
                               SizedBox(height: SizeConfig.h(10)),
                               const _PrivacyNoticeCard(
-                                text:
-                                    '🔒 بيانات التواصل مخفية حالياً.\nستظهر رقم الهاتف والإيميل بعد قبول الطلب.',
+                                text: '🔒 بيانات التواصل مخفية حالياً.\nستظهر رقم الهاتف والإيميل بعد قبول الطلب.',
                               ),
                             ],
 
-                            if (hasDesc ||
-                                hasPackage ||
-                                addons.isNotEmpty ||
-                                hasNotes) ...[
+                            if (hasDesc || hasPackage || addons.isNotEmpty || hasNotes) ...[
                               SizedBox(height: SizeConfig.h(10)),
                               const _SectionTitle('تفاصيل إضافية'),
                               SizedBox(height: SizeConfig.h(6)),
@@ -184,30 +221,24 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                               if (hasDesc)
                                 _MultiLineCard(
                                   title: 'وصف الخدمة',
-                                  text: b.serviceDescription!,
+                                  text: descClean,
                                   maxLines: 3,
                                 ),
 
                               if (hasPackage || addons.isNotEmpty)
                                 _CompactCard(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      if (hasPackage)
-                                        _KeyValue('📦', 'الباقة',
-                                            b.packageSelected!),
+                                      if (hasPackage) _KeyValue('📦', 'الباقة', packageClean),
                                       if (addonsPreview.isNotEmpty) ...[
                                         SizedBox(height: SizeConfig.h(8)),
                                         Wrap(
                                           spacing: SizeConfig.w(8),
                                           runSpacing: SizeConfig.h(8),
                                           children: [
-                                            ...addonsPreview
-                                                .map((t) => _ChipPill(label: t)),
-                                            if (remainingAddons > 0)
-                                              _ChipPill(
-                                                  label: '+$remainingAddons'),
+                                            ...addonsPreview.map((t) => _ChipPill(label: t)),
+                                            if (remainingAddons > 0) _ChipPill(label: '+$remainingAddons'),
                                           ],
                                         ),
                                       ],
@@ -218,12 +249,11 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
                               if (hasNotes)
                                 _MultiLineCard(
                                   title: 'ملاحظات العميل',
-                                  text: b.customerNotes!,
+                                  text: notesClean,
                                   maxLines: 3,
                                 ),
                             ],
 
-                            // ✅ مسافة نهائية لطيفة داخل السكرول
                             SizedBox(height: SizeConfig.h(14)),
                           ],
                         ),
@@ -239,6 +269,8 @@ class ProviderBookingDetailsSheet extends StatelessWidget {
     );
   }
 }
+
+// -------- UI Widgets (كما هي عندك) --------
 
 class _SheetHandle extends StatelessWidget {
   const _SheetHandle();
@@ -356,12 +388,7 @@ class _KeyValue extends StatelessWidget {
         textDirection: TextDirection.rtl,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            icon,
-            style: AppTextStyles.body14.copyWith(
-              fontSize: SizeConfig.ts(14),
-            ),
-          ),
+          Text(icon, style: AppTextStyles.body14.copyWith(fontSize: SizeConfig.ts(14))),
           SizedBox(width: SizeConfig.w(8)),
           Text(
             '$keyText: ',
@@ -418,10 +445,7 @@ class _PrivacyNoticeCard extends StatelessWidget {
               border: Border.all(color: AppColors.lightGreen.o(0.25)),
             ),
             alignment: Alignment.center,
-            child: Text(
-              '🔒',
-              style: TextStyle(fontSize: SizeConfig.ts(16), height: 1.0),
-            ),
+            child: Text('🔒', style: TextStyle(fontSize: SizeConfig.ts(16), height: 1.0)),
           ),
           SizedBox(width: SizeConfig.w(10)),
           Expanded(
