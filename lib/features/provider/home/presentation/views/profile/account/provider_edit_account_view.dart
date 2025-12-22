@@ -7,6 +7,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+// ✅ NEW: لتحديث الكاش
+import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
+
+// ✅ NEW: لتحديث اسم الداشبورد فوراً
+import 'package:beitak_app/features/provider/home/presentation/providers/provider_home_providers.dart';
+
 class ProviderAccountEditView extends ConsumerStatefulWidget {
   const ProviderAccountEditView({super.key});
 
@@ -184,8 +190,7 @@ class _ProviderAccountEditViewState
               hint: '+962 79 123 4567',
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.phone,
-              enabled: false, // ✅
-              // لا داعي للـ validator لأنه غير قابل للتعديل
+              enabled: false,
             ),
             SizeConfig.v(6),
             Text(
@@ -372,13 +377,34 @@ class _ProviderAccountEditViewState
 
     final notifier = ref.read(accountEditControllerProvider.notifier);
 
+    final fullName = _fullNameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+
     final error = await notifier.saveProfile(
-      fullName: _fullNameCtrl.text.trim(),
-      email: _emailCtrl.text.trim(),
-      phone: _phoneCtrl.text.trim(), // موجود بس السيرفر ما بيسمح، والكونترولر ما راح يرسله
+      fullName: fullName,
+      email: email,
+      phone: phone, // موجود بس السيرفر ما بيسمح، والكونترولر ما راح يرسله
     );
 
     if (!mounted) return;
+
+    if (error == null) {
+      // ✅ 1) حدّث كاش الـAuth عشان الاسم يتخزن ويضل صحيح
+      final parts = fullName.split(RegExp(r'\s+')).where((s) => s.trim().isNotEmpty).toList();
+      final first = parts.isNotEmpty ? parts.first : fullName;
+      final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+      await AuthLocalDataSourceImpl().updateCachedUser(
+        firstName: first,
+        lastName: last,
+        email: email,
+        phone: phone,
+      );
+
+      // ✅ 2) حدّث الداشبورد فوراً
+      ref.read(providerHomeViewModelProvider).setProviderName('$first $last');
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

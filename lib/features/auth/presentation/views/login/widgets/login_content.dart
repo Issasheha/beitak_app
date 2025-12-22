@@ -1,3 +1,7 @@
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
@@ -5,7 +9,6 @@ import 'package:beitak_app/features/auth/presentation/views/login/widgets/contin
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/email_password_section.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/login_header.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/send_code_button.dart';
-import 'package:flutter/material.dart';
 
 class LoginContent extends StatefulWidget {
   final bool isLoading;
@@ -15,7 +18,7 @@ class LoginContent extends StatefulWidget {
   final VoidCallback onMainActionPressed;
   final VoidCallback onContinueAsGuest;
 
-  /// ✅ خطأ عام يظهر داخل الفورم بدل SnackBar
+  /// ✅ خطأ عام داخل الفورم
   final String? formErrorText;
 
   /// ✅ أخطاء تحت الحقول
@@ -49,14 +52,11 @@ class _LoginContentState extends State<LoginContent> {
   final FocusNode _identifierFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
-  static const double _padding = 20.0;
-  static const double _gap = 16.0;
-  static const double _sectionGap = 24.0;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       FocusScope.of(context).requestFocus(_identifierFocus);
     });
   }
@@ -70,81 +70,108 @@ class _LoginContentState extends State<LoginContent> {
 
   @override
   Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final isSmall = mediaQuery.size.width < 360;
-    final scale = isSmall ? 0.95 : 1.0;
+    final mq = MediaQuery.of(context);
+    final isLandscape = mq.orientation == Orientation.landscape;
+
+    // ✅ تظبيط الـscale والمسافات حسب الوضع
+    final double scale = isLandscape ? 0.88 : (mq.size.width < 360 ? 0.95 : 1.0);
+
+    final double horizontalPadding = isLandscape ? 16.0 : 20.0;
+    final double gap = isLandscape ? 10.0 : 16.0;
+    final double sectionGap = isLandscape ? 14.0 : 24.0;
+
+    // ✅ max width عشان ما يتمدد المحتوى كثير بالـLandscape
+    final double maxContentWidth = isLandscape ? 560 : 520;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusScope.of(context).unfocus(),
       child: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
+        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           SliverSafeArea(
             sliver: SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: _padding).copyWith(
-                top: _sectionGap,
-                bottom: mediaQuery.viewInsets.bottom + _gap,
+              padding: EdgeInsets.symmetric(horizontal: horizontalPadding).copyWith(
+                top: sectionGap,
+                bottom: mq.viewInsets.bottom + gap,
               ),
-              sliver: SliverList.list(children: [
-                LoginHeader(fontScale: scale),
-                const SizedBox(height: _gap),
+              sliver: SliverToBoxAdapter(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: maxContentWidth,
+                      // ✅ مهم: ما نخلي الارتفاع يضرب layout
+                      minHeight: math.max(0, mq.size.height - mq.padding.top - mq.padding.bottom),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 1) Header
+                        LoginHeader(fontScale: scale),
+                        SizedBox(height: gap),
 
-                _DescriptionText(scale: scale),
-                const SizedBox(height: _sectionGap),
+                        // 2) Description
+                        _DescriptionText(scale: scale),
+                        SizedBox(height: sectionGap),
 
-                EmailPasswordSection(
-                  key: const ValueKey('email'),
-                  emailController: widget.emailController,
-                  passwordController: widget.passwordController,
-                  formKey: widget.formKey,
-                  isLoading: widget.isLoading,
-                  identifierFocus: _identifierFocus,
-                  passwordFocus: _passwordFocus,
-                  onPasswordSubmitted: widget.onMainActionPressed,
+                        // 3) Inputs
+                        EmailPasswordSection(
+                          key: const ValueKey('email'),
+                          emailController: widget.emailController,
+                          passwordController: widget.passwordController,
+                          formKey: widget.formKey,
+                          isLoading: widget.isLoading,
+                          identifierFocus: _identifierFocus,
+                          passwordFocus: _passwordFocus,
+                          onPasswordSubmitted: widget.onMainActionPressed,
 
-                  identifierErrorText: widget.identifierErrorText,
-                  passwordErrorText: widget.passwordErrorText,
-                  onIdentifierChanged: widget.onClearIdentifierError,
-                  onPasswordChanged: widget.onClearPasswordError,
-                ),
+                          identifierErrorText: widget.identifierErrorText,
+                          passwordErrorText: widget.passwordErrorText,
+                          onIdentifierChanged: widget.onClearIdentifierError,
+                          onPasswordChanged: widget.onClearPasswordError,
+                        ),
 
-                // ✅ خطأ عام (مثل الشبكة)
-                if (widget.formErrorText != null &&
-                    widget.formErrorText!.trim().isNotEmpty) ...[
-                  SizedBox(height: SizeConfig.h(12)),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      widget.formErrorText!,
-                      textAlign: TextAlign.right,
-                      style: AppTextStyles.caption11.copyWith(
-                        color: Colors.red,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
+                        // ✅ خطأ عام (شبكة/غيره) داخل الشاشة وما يتكسر بالـLandscape
+                        if (widget.formErrorText != null &&
+                            widget.formErrorText!.trim().isNotEmpty) ...[
+                          SizedBox(height: SizeConfig.h(isLandscape ? 10 : 12)),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              widget.formErrorText!,
+                              textAlign: TextAlign.right,
+                              style: AppTextStyles.caption11.copyWith(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                                height: 1.3,
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        SizedBox(height: sectionGap),
+
+                        // 4) Main Button
+                        SendCodeButton(
+                          onPressed: widget.isLoading ? null : widget.onMainActionPressed,
+                          text: 'تسجيل الدخول',
+                          isLoading: widget.isLoading,
+                        ),
+                        SizedBox(height: gap),
+
+                        // 5) Continue as Guest
+                        ContinueAsGuestButton(
+                          onPressed: widget.isLoading ? null : widget.onContinueAsGuest,
+                        ),
+
+                        SizedBox(height: sectionGap),
+                      ],
                     ),
                   ),
-                ],
-
-                const SizedBox(height: _sectionGap),
-
-                SendCodeButton(
-                  onPressed:
-                      widget.isLoading ? null : widget.onMainActionPressed,
-                  text: 'تسجيل الدخول',
-                  isLoading: widget.isLoading,
                 ),
-                const SizedBox(height: _gap),
-
-                ContinueAsGuestButton(
-                  onPressed: widget.isLoading ? null : widget.onContinueAsGuest,
-                ),
-                const SizedBox(height: _sectionGap),
-              ]),
+              ),
             ),
           ),
         ],

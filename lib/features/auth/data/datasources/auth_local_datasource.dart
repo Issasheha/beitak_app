@@ -1,5 +1,3 @@
-// lib/features/auth/data/datasources/auth_local_datasource.dart
-
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +14,15 @@ abstract class AuthLocalDataSource {
 
   /// حذف الجلسة كاملة (تسجيل خروج).
   Future<void> clearSession();
+
+  /// ✅ NEW: تحديث بيانات المستخدم داخل الجلسة المخزنة (بدون ما نخرب التوكن)
+  Future<void> updateCachedUser({
+    String? firstName,
+    String? lastName,
+    String? email,
+    String? phone,
+    String? role,
+  });
 }
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
@@ -30,42 +37,44 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   static const _userRoleKey = 'user_role';
 
   @override
-Future<void> cacheAuthSession(AuthSessionModel session) async {
-  final prefs = await SharedPreferences.getInstance();
+  Future<void> cacheAuthSession(AuthSessionModel session) async {
+    final prefs = await SharedPreferences.getInstance();
 
-  // ✅ تنظيف التوكن + تحديد guest بناءً على وجود token
-  final raw = (session.token ?? '').trim();
-  final clean = raw.toLowerCase().startsWith('bearer ') ? raw.substring(7).trim() : raw;
-  final hasToken = clean.isNotEmpty;
+    // ✅ تنظيف التوكن + تحديد guest بناءً على وجود token
+    final raw = (session.token ?? '').trim();
+    final clean = raw.toLowerCase().startsWith('bearer ')
+        ? raw.substring(7).trim()
+        : raw;
+    final hasToken = clean.isNotEmpty;
 
-  final fixedSession = AuthSessionModel(
-    token: hasToken ? clean : null,
-    user: session.user,
-    isGuest: !hasToken,
-    isNewUser: session.isNewUser,
-    expiresAt: session.expiresAt,
-  );
+    final fixedSession = AuthSessionModel(
+      token: hasToken ? clean : null,
+      user: session.user,
+      isGuest: !hasToken,
+      isNewUser: session.isNewUser,
+      expiresAt: session.expiresAt,
+    );
 
-  final jsonString = jsonEncode(fixedSession.toJson());
+    final jsonString = jsonEncode(fixedSession.toJson());
 
-  final success = await prefs.setString(_sessionKey, jsonString);
-  if (!success) {
-    throw const CacheException('Failed to cache auth session');
+    final success = await prefs.setString(_sessionKey, jsonString);
+    if (!success) {
+      throw const CacheException('Failed to cache auth session');
+    }
+
+    // ✅ أي جلسة (ضيف أو مستخدم حقيقي) نعتبره "داخل التطبيق"
+    await prefs.setBool(_isLoggedInKey, true);
+    await prefs.setBool(_seenOnboardingKey, true);
+    await prefs.setBool(_isGuestKey, fixedSession.isGuest);
+
+    // 🔹 نخزّن الـ role لو موجود
+    final role = fixedSession.user?.role;
+    if (role != null && role.isNotEmpty) {
+      await prefs.setString(_userRoleKey, role);
+    } else {
+      await prefs.remove(_userRoleKey);
+    }
   }
-
-  // ✅ أي جلسة (ضيف أو مستخدم حقيقي) نعتبره "داخل التطبيق"
-  await prefs.setBool(_isLoggedInKey, true);
-  await prefs.setBool(_seenOnboardingKey, true);
-  await prefs.setBool(_isGuestKey, fixedSession.isGuest);
-
-  // 🔹 نخزّن الـ role لو موجود
-  final role = fixedSession.user?.role;
-  if (role != null && role.isNotEmpty) {
-    await prefs.setString(_userRoleKey, role);
-  } else {
-    await prefs.remove(_userRoleKey);
-  }
-}
 
   @override
   Future<AuthSessionModel?> getCachedAuthSession() async {
@@ -80,6 +89,35 @@ Future<void> cacheAuthSession(AuthSessionModel session) async {
     } catch (_) {
       throw const CacheException('Failed to parse cached auth session');
     }
+  }
+
+  @override
+  Future<void> updateCachedUser({
+    String? firstName,
+    String? lastName,
+    String? email,
+    String? phone,
+    String? role,
+  }) async {
+    final session = await getCachedAuthSession();
+    if (session == null) return;
+
+    // لو ضيف أو ما في user، ما في إشي نحدّثه
+    final currentUser = session.user;
+    if (session.isGuest || currentUser == null) return;
+
+    final updatedUser = currentUser.copyWith(
+      firstName: firstName ?? currentUser.firstName,
+      lastName: lastName ?? currentUser.lastName,
+      email: email ?? currentUser.email,
+      phone: phone ?? currentUser.phone,
+      role: role ?? currentUser.role,
+    );
+
+    final updatedSession = session.copyWith(user: updatedUser);
+
+    // ✅ استخدم نفس cacheAuthSession عشان ما نخرب مفاتيح is_guest/is_logged_in والـrole
+    await cacheAuthSession(updatedSession);
   }
 
   @override

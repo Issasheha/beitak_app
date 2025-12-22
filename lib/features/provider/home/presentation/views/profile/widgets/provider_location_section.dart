@@ -59,21 +59,6 @@ class ProviderLocationSection extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(
-            onPressed: () {
-              // حالياً UI فقط زي ما اتفقنا
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('قريبًا')),
-              );
-            },
-            child: Text(
-              'تعديل',
-              style: AppTextStyles.body14.copyWith(
-                color: AppColors.lightGreen,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
     );

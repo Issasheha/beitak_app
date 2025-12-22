@@ -61,7 +61,7 @@ class AuthController extends StateNotifier<AuthState> {
         m.contains('unauthorized') ||
         statusCode == 401 ||
         statusCode == 404) {
-      return 'بيانات الدخول غير صحيحة. تأكد من البريد/رقم الهاتف وكلمة المرور.';
+      return 'بيانات الدخول غير صحيحة. تأكد منها';
     }
 
     // generic network english coming from somewhere

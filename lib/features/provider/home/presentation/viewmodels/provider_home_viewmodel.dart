@@ -53,6 +53,53 @@ class ProviderHomeViewModel extends ChangeNotifier {
 
   bool _refreshing = false;
 
+  // =========================
+  // ✅ NEW: name helpers
+  // =========================
+
+  /// ✅ تحديث الاسم فوراً (ليظهر في الهيدر مباشرة)
+  void setProviderName(String name) {
+    final cleaned = name.trim();
+    final finalName = cleaned.isEmpty ? 'مزود الخدمة' : cleaned;
+
+    if (providerName == finalName) return;
+    providerName = finalName;
+    notifyListeners();
+  }
+
+  /// ✅ سحب الاسم من الكاش (SharedPrefs) وتحديثه
+  /// notify=false مفيد أثناء refresh لتجنب نداءات كثيرة
+  Future<void> syncProviderNameFromCache({bool notify = true}) async {
+    try {
+      final session = await _local.getCachedAuthSession();
+      if (session == null) return;
+
+      final dynamic user = (session as dynamic).user ?? session;
+
+      final String fn = ((user as dynamic).firstName ??
+              (user as dynamic).first_name ??
+              (user as dynamic).first ??
+              '')
+          .toString()
+          .trim();
+
+      final String ln = (((user as dynamic).lastName ??
+              (user as dynamic).last_name ??
+              (user as dynamic).last ??
+              '') as dynamic)
+          .toString()
+          .trim();
+
+      final full = ('$fn $ln').trim();
+      if (full.isEmpty) return;
+
+      if (providerName != full) {
+        providerName = full;
+        if (notify) notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   void _log(String msg) {
     debugPrint('[ProviderHomeVM] $msg');
   }
@@ -102,7 +149,8 @@ class ProviderHomeViewModel extends ChangeNotifier {
     bool bookingsOk = false;
 
     try {
-      await _resolveProviderNameIfPossible();
+      // ✅ بدل _resolveProviderNameIfPossible
+      await syncProviderNameFromCache(notify: false);
 
       // --- Stats ---
       try {
@@ -147,12 +195,9 @@ class ProviderHomeViewModel extends ChangeNotifier {
         }
       } else {
         // ✅ Silent: لا تزعج المستخدم بأخطاء أثناء polling
-        // لكن إذا نجحنا نجدد البيانات → امسح أي error قديم
         final anyOk = statsOk || bookingsOk;
         if (anyOk) errorMessage = null;
 
-        // إذا ما كان في أي بيانات سابقاً وفشلنا، خليه يضل طبيعي (ما نعمل شي)
-        // (يعني ما نطلّع error جديد في silent)
         if (!hadDataBefore && !anyOk) {
           // keep as is
         }
@@ -283,6 +328,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
+  // (قديم) صار مش مستخدم — تقدر تحذفه لاحقاً
   Future<void> _resolveProviderNameIfPossible() async {
     try {
       final session = await _local.getCachedAuthSession();
@@ -310,7 +356,8 @@ class ProviderHomeViewModel extends ChangeNotifier {
   }
 
   void _computeDashboardFromBookings(List<ProviderBookingModel> bookings) {
-    newRequests = bookings.where((b) => b.status == _pendingProviderAccept).toList();
+    newRequests =
+        bookings.where((b) => b.status == _pendingProviderAccept).toList();
     newRequests.sort(_byDateThenTime);
 
     totalRequestsCount = newRequests.length;

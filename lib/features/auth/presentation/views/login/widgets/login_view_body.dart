@@ -131,7 +131,7 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
         m.contains('invalid credentials') ||
         m.contains('unauthorized')) {
       final text =
-          'بيانات الدخول غير صحيحة. تأكد من البريد/رقم الهاتف وكلمة المرور.';
+          'بيانات الدخول غير صحيحة. تأكد منها';
       _identifierServerError = text;
       _passwordServerError = text;
       _formError = null;

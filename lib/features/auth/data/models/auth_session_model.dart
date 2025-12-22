@@ -16,6 +16,22 @@ class AuthSessionModel {
     this.expiresAt,
   });
 
+  AuthSessionModel copyWith({
+    String? token,
+    UserModel? user,
+    bool? isGuest,
+    bool? isNewUser,
+    DateTime? expiresAt,
+  }) {
+    return AuthSessionModel(
+      token: token ?? this.token,
+      user: user ?? this.user,
+      isGuest: isGuest ?? this.isGuest,
+      isNewUser: isNewUser ?? this.isNewUser,
+      expiresAt: expiresAt ?? this.expiresAt,
+    );
+  }
+
   factory AuthSessionModel.guest() {
     return const AuthSessionModel(
       token: null,

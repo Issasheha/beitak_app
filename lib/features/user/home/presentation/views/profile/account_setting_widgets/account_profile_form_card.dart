@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 
+import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
+import 'package:beitak_app/features/user/home/presentation/viewmodels/home_header_providers.dart';
+
 import 'package:beitak_app/features/user/home/domain/entities/user_profile_entity.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/viewmodels/profile_providers.dart';
 
@@ -12,7 +15,8 @@ class AccountProfileFormCard extends ConsumerStatefulWidget {
   final UserProfileEntity? profile;
 
   @override
-  ConsumerState<AccountProfileFormCard> createState() => _AccountProfileFormCardState();
+  ConsumerState<AccountProfileFormCard> createState() =>
+      _AccountProfileFormCardState();
 }
 
 class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard> {
@@ -102,7 +106,8 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
   String? _validateFullName(String? v) {
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'الاسم الكامل مطلوب';
-    final parts = s.split(RegExp(r'\s+')).where((x) => x.trim().isNotEmpty).toList();
+    final parts =
+        s.split(RegExp(r'\s+')).where((x) => x.trim().isNotEmpty).toList();
     if (parts.length < 2) return 'رجاءً أدخل الاسم الأول واسم العائلة';
     return null;
   }
@@ -135,11 +140,12 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
     if (!valid) return;
 
     final rawFull = fullNameC.text.trim();
-    final parts = rawFull.split(RegExp(r'\s+')).where((x) => x.trim().isNotEmpty).toList();
+    final parts =
+        rawFull.split(RegExp(r'\s+')).where((x) => x.trim().isNotEmpty).toList();
     final first = parts.isNotEmpty ? parts.first : '';
     final last = (parts.length > 1) ? parts.sublist(1).join(' ') : '';
 
-    // ✅ ابعث محلي 07x... للسيرفر (عشان ما يرد 400)
+    // ✅ ابعث محلي 07x... للسيرفر
     final phoneToSend = _toLocalJordanPhone(phoneC.text);
 
     final controller = ref.read(profileControllerProvider.notifier);
@@ -148,17 +154,35 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
       lastName: last,
       email: emailC.text.trim(),
       phone: phoneToSend,
-      address: null,
+
+      // ✅ لا تبعث address:null (خليه غير موجود)
+      // address: null,
+      //
+      // ✅ city_id + area_id رح تنبعث تلقائياً من ProfileController (تحايل مؤقت)
     );
 
     if (!mounted) return;
 
     if (ok) {
+      // ✅ 1) حدّث كاش الـAuth (عشان الهيدر يضل صح حتى بعد reload/app restart)
+      await AuthLocalDataSourceImpl().updateCachedUser(
+        firstName: first,
+        lastName: last,
+        email: emailC.text.trim(),
+        phone: phoneToSend,
+      );
+
+      // ✅ 2) حدّث الهيدر فوراً (ينعكس بالخلفية مباشرة)
+      ref
+          .read(homeHeaderControllerProvider.notifier)
+          .setDisplayName('$first $last');
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('تم تحديث البيانات')),
       );
     } else {
-      final msg = ref.read(profileControllerProvider).errorMessage ?? 'حدث خطأ، حاول مرة أخرى';
+      final msg = ref.read(profileControllerProvider).errorMessage ??
+          'حدث خطأ، حاول مرة أخرى';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
       );
@@ -229,7 +253,10 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : Text(
                         'حفظ التغييرات',
@@ -253,7 +280,11 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle_outline, size: SizeConfig.w(16), color: AppColors.lightGreen),
+          Icon(
+            Icons.check_circle_outline,
+            size: SizeConfig.w(16),
+            color: AppColors.lightGreen,
+          ),
           SizedBox(width: SizeConfig.w(6)),
           Text(
             text,
