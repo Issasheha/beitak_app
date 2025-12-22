@@ -4,16 +4,12 @@ import '../../../../core/error/exceptions.dart';
 import '../../../../core/network/api_constants.dart';
 import '../models/auth_session_model.dart';
 
-/// العقد (interface) بين الريبو وبين الـ API.
-/// هنا نشتغل على مستوى Models (مش Entities).
 abstract class AuthRemoteDataSource {
-  /// تسجيل الدخول باستخدام (إيميل أو جوال) + كلمة سر.
   Future<AuthSessionModel> loginWithIdentifier({
     required String identifier,
     required String password,
   });
 
-  /// إنشاء حساب جديد (تسجيل مستخدم جديد).
   Future<AuthSessionModel> signup({
     required String firstName,
     required String lastName,
@@ -25,18 +21,15 @@ abstract class AuthRemoteDataSource {
     required String role,
   });
 
-  /// إرسال كود لإعادة تعيين كلمة المرور (OTP) على رقم الجوال.
   Future<void> sendResetCode({
     required String phone,
   });
 
-  /// التحقق من كود إعادة التعيين (OTP).
   Future<void> verifyResetCode({
     required String phone,
     required String code,
   });
 
-  /// تعيين كلمة سر جديدة بعد التحقق.
   Future<void> resetPassword({
     required String phone,
     required String code,
@@ -44,15 +37,42 @@ abstract class AuthRemoteDataSource {
   });
 }
 
-/// الـ implementation الفعلي باستخدام Dio.
-///
-/// مهم:
-/// - الـ Dio اللي ييجي هنا يفضّل يكون من `ApiClient.dio`
-///   اللي baseUrl تبعه = `ApiConstants.apiBase`
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio _dio;
 
   AuthRemoteDataSourceImpl(this._dio);
+
+  // ✅ دعم الأرقام العربية/الفارسية (احتياط + مفيد)
+  String _normalizeArabicDigits(String input) {
+    const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    for (int i = 0; i < ar.length; i++) {
+      input = input.replaceAll(ar[i], en[i]);
+    }
+    const fa = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    for (int i = 0; i < fa.length; i++) {
+      input = input.replaceAll(fa[i], en[i]);
+    }
+    return input;
+  }
+
+  String _mapAuthMessage(String msg, {int? statusCode}) {
+    final m = msg.toLowerCase().trim();
+
+    if (m.contains('provider_suspended')) {
+      return 'حساب مزود الخدمة موقوف. يرجى التواصل مع الدعم.';
+    }
+
+    if (m.contains('invalid credentials') ||
+        m.contains('invalid credential') ||
+        m.contains('unauthorized') ||
+        statusCode == 401 ||
+        statusCode == 404) {
+      return 'بيانات الدخول غير صحيحة. تأكد من البريد/رقم الهاتف وكلمة المرور.';
+    }
+
+    return msg;
+  }
 
   // ================== LOGIN ==================
 
@@ -62,10 +82,11 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     required String password,
   }) async {
     try {
-      final bool isEmail = identifier.contains('@');
+      final normalizedId = _normalizeArabicDigits(identifier).trim();
+      final bool isEmail = normalizedId.contains('@');
 
       final body = <String, dynamic>{
-        if (isEmail) 'email': identifier.trim() else 'phone': identifier.trim(),
+        if (isEmail) 'email': normalizedId else 'phone': normalizedId,
         'password': password,
       };
 
@@ -74,15 +95,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: body,
       );
 
-      // ✅ نحافظ على نفس منطق success/errors الحالي
       _extractDataOrThrow(response);
 
-      // ✅ التعديل المهم: مرّر الـ BODY كامل للموديل
-      // لأن بعض الباك يرجّع token/access_token داخل body أو داخل data أو nested
       final raw = response.data;
       if (raw is! Map<String, dynamic>) {
         throw ServerException(
-          message: 'Invalid response format',
+          message: 'تنسيق الاستجابة غير صحيح',
           statusCode: response.statusCode ?? 0,
         );
       }
@@ -111,12 +129,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         'first_name': firstName.trim(),
         'last_name': lastName.trim(),
         'email': email.trim().isEmpty ? null : email.trim(),
-        'phone': phone.trim().isEmpty ? null : phone.trim(),
+        'phone': _normalizeArabicDigits(phone).trim().isEmpty
+            ? null
+            : _normalizeArabicDigits(phone).trim(),
         'password': password,
         'city_id': cityId,
         'area_id': areaId,
-
-        // ✅ مهم جداً: نعلّم الباك إند أن هذا الحساب هو "مستخدم عادي"
         'role': 'customer',
       };
 
@@ -125,14 +143,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: body,
       );
 
-      // ✅ نحافظ على نفس منطق success/errors الحالي
       _extractDataOrThrow(response);
 
-      // ✅ التعديل المهم: مرّر الـ BODY كامل للموديل
       final raw = response.data;
       if (raw is! Map<String, dynamic>) {
         throw ServerException(
-          message: 'Invalid response format',
+          message: 'تنسيق الاستجابة غير صحيح',
           statusCode: response.statusCode ?? 0,
         );
       }
@@ -151,7 +167,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final response = await _dio.post(
         ApiConstants.sendOtp,
         data: {
-          'phone': phone.trim(),
+          'phone': _normalizeArabicDigits(phone).trim(),
           'purpose': 'reset_password',
         },
       );
@@ -171,7 +187,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       final response = await _dio.post(
         ApiConstants.verifyOtp,
         data: {
-          'phone': phone.trim(),
+          'phone': _normalizeArabicDigits(phone).trim(),
           'otp': code.trim(),
           'purpose': 'reset_password',
         },
@@ -203,7 +219,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
     if (body is! Map<String, dynamic>) {
       throw ServerException(
-        message: 'Invalid response format',
+        message: 'تنسيق الاستجابة غير صحيح',
         statusCode: statusCode,
       );
     }
@@ -212,30 +228,31 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         body['success'] as bool? ?? (statusCode >= 200 && statusCode < 300);
 
     if (!success) {
-      final message = body['message']?.toString() ?? 'Request failed';
+      final message = body['message']?.toString() ?? 'فشل الطلب';
       final errors = body['errors'] is Map<String, dynamic>
           ? body['errors'] as Map<String, dynamic>
           : null;
 
       throw ServerException(
-        message: message,
+        message: _mapAuthMessage(message, statusCode: statusCode),
         statusCode: statusCode,
         errors: errors,
       );
     }
 
-    // الباك إند عادة يرجّع الداتا تحت key 'data'
     return body['data'];
   }
 
   ServerException _mapDioErrorToServerException(DioException e) {
+    // ✅ في حال فيه Response
     if (e.response != null) {
       final statusCode = e.response!.statusCode;
       final data = e.response!.data;
 
       if (data is Map<String, dynamic>) {
+        final msg = data['message']?.toString() ?? 'حدث خطأ في الخادم';
         return ServerException(
-          message: data['message']?.toString() ?? 'Server error',
+          message: _mapAuthMessage(msg, statusCode: statusCode),
           statusCode: statusCode,
           errors: data['errors'] is Map<String, dynamic>
               ? data['errors'] as Map<String, dynamic>
@@ -244,13 +261,23 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       }
 
       return ServerException(
-        message: 'Server error',
+        message: _mapAuthMessage('حدث خطأ في الخادم', statusCode: statusCode),
         statusCode: statusCode,
       );
     }
 
+    // ✅ بدون response => غالباً Network / Timeout
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return const ServerException(
+        message: 'تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.',
+      );
+    }
+
     return const ServerException(
-      message: 'Network error, please check your connection',
+      message: 'تعذر الاتصال، حاول مرة أخرى.',
     );
   }
 }

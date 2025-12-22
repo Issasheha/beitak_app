@@ -14,8 +14,8 @@ import 'package:path/path.dart' as p;
 
 import 'provider_application_state.dart';
 
-final providerApplicationControllerProvider = StateNotifierProvider<
-    ProviderApplicationController, ProviderApplicationState>(
+final providerApplicationControllerProvider =
+    StateNotifierProvider<ProviderApplicationController, ProviderApplicationState>(
   (ref) {
     final dio = ApiClient.dio;
     final local = AuthLocalDataSourceImpl();
@@ -29,8 +29,7 @@ final providerApplicationControllerProvider = StateNotifierProvider<
   },
 );
 
-class ProviderApplicationController
-    extends StateNotifier<ProviderApplicationState> {
+class ProviderApplicationController extends StateNotifier<ProviderApplicationState> {
   final Dio _dio;
   final AuthLocalDataSource _local;
   final Future<void> Function() _authControllerReload;
@@ -48,7 +47,8 @@ class ProviderApplicationController
   // Public API (Used by UI)
   // =========================
 
-  /// Step 0: Register early (so you catch duplicate phone/email early)
+  /// Step 0: Register early (catch duplicate phone/email early)
+  /// ✅ Important: لا نعمل auth reload هون عشان ما يصير redirect للـ Home
   Future<bool> registerProviderEarly({
     required String firstName,
     required String lastName,
@@ -72,9 +72,12 @@ class ProviderApplicationController
       );
       if (!ok) return false;
 
-      // ✅ important for UI to lock Step 0
+      // ✅ lock Step 0 in UI
       state = state.copyWith(isRegistered: true);
-      await _authControllerReload();
+
+      // ❌ مهم جداً: ما نعمل reload هون
+      // await _authControllerReload();
+
       return true;
     } finally {
       state = state.copyWith(isSubmitting: false);
@@ -119,6 +122,7 @@ class ProviderApplicationController
       );
 
       if (ok) {
+        // ✅ الآن فقط نعمل reload حتى يصير logged-in provider رسميًا
         await _authControllerReload();
       }
 
@@ -128,7 +132,7 @@ class ProviderApplicationController
     }
   }
 
-  /// Optional (if you ever want one-shot submit)
+  /// Optional one-shot submit
   Future<bool> submitFullApplication({
     required String firstName,
     required String lastName,
@@ -211,7 +215,7 @@ class ProviderApplicationController
         'first_name': firstName.trim(),
         'last_name': lastName.trim(),
         'password': password,
-        'city_id': cityId, // ✅ important
+        'city_id': cityId,
       };
 
       if (areaId != null) {
@@ -226,7 +230,8 @@ class ProviderApplicationController
         body['email'] = email.trim();
       }
 
-      final response = await _dio.post(ApiConstants.providerRegister, data: body);
+      final response =
+          await _dio.post(ApiConstants.providerRegister, data: body);
 
       final data = response.data;
       if (data is! Map<String, dynamic>) {
@@ -249,7 +254,6 @@ class ProviderApplicationController
         throw const ServerException(message: 'Invalid response payload');
       }
 
-      // Sometimes backend returns provider status as warning
       final statusText = _extractProviderStatus(data);
       final statusMsg = _mapProviderStatusMessage(statusText);
       if (statusMsg != null) {
@@ -257,13 +261,19 @@ class ProviderApplicationController
         return false;
       }
 
-      // Cache session
       final sessionModel = AuthSessionModel.fromJson({
         ...payload,
         'is_guest': false,
       });
 
       await _local.cacheAuthSession(sessionModel);
+
+      // ✅ تعزيز: عيّن Authorization مباشرة (مش ضروري غالبًا بس مفيد)
+      final token = _tryReadTokenFromPayload(payload);
+      if (token != null && token.isNotEmpty) {
+      _dio.options.headers['Authorization'] = 'Bearer $token';
+      }
+
       return true;
     } on DioException catch (e) {
       final msg = _mapDioErrorToMessage(e);
@@ -273,10 +283,16 @@ class ProviderApplicationController
       state = state.copyWith(errorMessage: e.message);
       return false;
     } catch (_) {
-      state =
-          state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إنشاء الحساب');
+      state = state.copyWith(errorMessage: 'حدث خطأ غير متوقع أثناء إنشاء الحساب');
       return false;
     }
+  }
+
+  String? _tryReadTokenFromPayload(Map<String, dynamic> payload) {
+    // جرّب أكثر من key لأن المشاريع بتختلف
+    final v = payload['token'] ?? payload['access_token'] ?? payload['accessToken'];
+    final s = (v ?? '').toString().trim();
+    return s.isEmpty ? null : s;
   }
 
   // =========================
@@ -331,10 +347,8 @@ class ProviderApplicationController
         formData.fields.add(MapEntry('bio', b));
       }
 
-      // ✅ most important: send category_id here
       formData.fields.add(MapEntry('category_id', categoryId.toString()));
 
-      // ⚠️ we still send it here (harmless) but backend currently ignores it in this endpoint
       if (cp.isNotEmpty) {
         formData.fields.add(MapEntry('cancellation_policy', cp));
       }
@@ -414,7 +428,7 @@ class ProviderApplicationController
         throw ServerException(message: finalMsg);
       }
 
-      // ✅ THE PATCH (Confirmed): Save cancellation_policy via PUT /providers/profile
+      // Patch cancellation policy via /providers/profile if needed
       if (cp.isNotEmpty) {
         await _patchCancellationPolicy(cp);
       }
@@ -436,18 +450,17 @@ class ProviderApplicationController
   Future<void> _patchCancellationPolicy(String policy) async {
     try {
       await _dio.put(
-        ApiConstants.providerProfile, // ✅ /providers/profile
+        ApiConstants.providerProfile,
         data: {'cancellation_policy': policy},
         options: Options(contentType: Headers.jsonContentType),
       );
     } on DioException {
-      // ✅ لا نفشل عملية التسجيل كاملة بسبب ترقيع
-      // إذا بدك نخليها تفشل: احكيلي وبخليها throw
+      // لا نفشل العملية كلها بسبب ترقيع
     }
   }
 
   // =========================
-  // Helpers (Strict, Form-level)
+  // Helpers
   // =========================
 
   String _mapDioErrorToMessage(DioException e) {
@@ -490,7 +503,7 @@ class ProviderApplicationController
     if (errors is! Map) return null;
 
     final buffer = <String>[];
-    errors.forEach((k, v) {
+    errors.forEach((_, v) {
       if (v is List && v.isNotEmpty) {
         buffer.add(v.first.toString());
       }

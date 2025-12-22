@@ -57,7 +57,6 @@ class BookingDetailsCard extends StatelessWidget {
           onTap: loading ? null : onPickDate,
         ),
         const SizedBox(height: 12),
-
         _FieldShell(
           label: 'وقت الحجز',
           icon: Icons.access_time_rounded,
@@ -68,20 +67,16 @@ class BookingDetailsCard extends StatelessWidget {
           onTap: loading ? null : onPickTime,
         ),
         const SizedBox(height: 12),
-
-        // المحافظة (عرض فقط حسب حالتك الحالية)
         _FieldShell(
           label: 'المحافظة',
           icon: Icons.location_on_rounded,
           value: cityNameAr == '—' ? '' : cityNameAr,
           placeholder: 'اختر المحافظة',
-          isDropdown: !isCityLocked, // فقط شكل
-          enabled: false, // لأن المنطق الحالي عندك ما فيه اختيار محافظة هون
+          isDropdown: !isCityLocked,
+          enabled: false,
           onTap: null,
         ),
         const SizedBox(height: 12),
-
-        // المنطقة (Dropdown)
         _AreaDropdown(
           label: 'المنطقة',
           icon: Icons.place_rounded,
@@ -91,8 +86,6 @@ class BookingDetailsCard extends StatelessWidget {
           onChanged: onAreaChanged,
         ),
         const SizedBox(height: 12),
-
-        // الوصف (TextArea)
         _NotesField(controller: notesCtrl),
       ],
     );
@@ -157,7 +150,9 @@ class _FieldShell extends StatelessWidget {
                     style: AppTextStyles.body.copyWith(
                       fontSize: SizeConfig.ts(13.5),
                       fontWeight: FontWeight.w700,
-                      color: showValue ? AppColors.textPrimary : AppColors.textSecondary,
+                      color: showValue
+                          ? AppColors.textPrimary
+                          : AppColors.textSecondary,
                     ),
                   ),
                 ),
@@ -237,7 +232,8 @@ class _AreaDropdown extends StatelessWidget {
                           (a) => DropdownMenuItem<AreaOption>(
                             value: a,
                             child: Text(
-                              (a.nameAr.trim().isEmpty ? a.nameEn : a.nameAr).trim(),
+                              (a.nameAr.trim().isEmpty ? a.nameEn : a.nameAr)
+                                  .trim(),
                               style: AppTextStyles.body.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w700,

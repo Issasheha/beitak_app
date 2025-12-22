@@ -1,4 +1,5 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/continue_as_guest_button.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/email_password_section.dart';
@@ -6,7 +7,6 @@ import 'package:beitak_app/features/auth/presentation/views/login/widgets/login_
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/send_code_button.dart';
 import 'package:flutter/material.dart';
 
-// في ملف login_content.dart
 class LoginContent extends StatefulWidget {
   final bool isLoading;
   final TextEditingController emailController;
@@ -14,6 +14,18 @@ class LoginContent extends StatefulWidget {
   final GlobalKey<FormState> formKey;
   final VoidCallback onMainActionPressed;
   final VoidCallback onContinueAsGuest;
+
+  /// ✅ خطأ عام يظهر داخل الفورم بدل SnackBar
+  final String? formErrorText;
+
+  /// ✅ أخطاء تحت الحقول
+  final String? identifierErrorText;
+  final String? passwordErrorText;
+
+  /// ✅ لمسح الأخطاء عند الكتابة
+  final VoidCallback? onClearIdentifierError;
+  final VoidCallback? onClearPasswordError;
+
   const LoginContent({
     super.key,
     required this.isLoading,
@@ -22,6 +34,11 @@ class LoginContent extends StatefulWidget {
     required this.formKey,
     required this.onMainActionPressed,
     required this.onContinueAsGuest,
+    this.formErrorText,
+    this.identifierErrorText,
+    this.passwordErrorText,
+    this.onClearIdentifierError,
+    this.onClearPasswordError,
   });
 
   @override
@@ -29,19 +46,16 @@ class LoginContent extends StatefulWidget {
 }
 
 class _LoginContentState extends State<LoginContent> {
-  // تعريف FocusNodes للتركيز التلقائي والتحكم في الإرسال عبر Enter
   final FocusNode _identifierFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
-  // تعريف المتغيرات المفقودة
-  static const double _padding = 20.0; // جانبي
-  static const double _gap = 16.0; // بين العناصر
-  static const double _sectionGap = 24.0; // بين الأقسام الكبيرة
+  static const double _padding = 20.0;
+  static const double _gap = 16.0;
+  static const double _sectionGap = 24.0;
 
   @override
   void initState() {
     super.initState();
-    // Auto-focus على حقل الإيميل/الهاتف عند تحميل الصفحة
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_identifierFocus);
     });
@@ -59,8 +73,10 @@ class _LoginContentState extends State<LoginContent> {
     final mediaQuery = MediaQuery.of(context);
     final isSmall = mediaQuery.size.width < 360;
     final scale = isSmall ? 0.95 : 1.0;
-    return TapRegion(
-      onTapOutside: (_) => FocusScope.of(context).unfocus(),
+
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusScope.of(context).unfocus(),
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
@@ -74,36 +90,56 @@ class _LoginContentState extends State<LoginContent> {
                 bottom: mediaQuery.viewInsets.bottom + _gap,
               ),
               sliver: SliverList.list(children: [
-                // 1. Header
                 LoginHeader(fontScale: scale),
                 const SizedBox(height: _gap),
 
-                // 3. Description
                 _DescriptionText(scale: scale),
                 const SizedBox(height: _sectionGap),
 
-                // 4. Input Section (Animated)
                 EmailPasswordSection(
                   key: const ValueKey('email'),
                   emailController: widget.emailController,
                   passwordController: widget.passwordController,
                   formKey: widget.formKey,
                   isLoading: widget.isLoading,
-                  identifierFocus: _identifierFocus, // مرر FocusNode لحقل الإيميل/الهاتف
-                  passwordFocus: _passwordFocus, // مرر FocusNode لحقل كلمة المرور
-                  onPasswordSubmitted: widget.onMainActionPressed, // إرسال النموذج عند Enter في كلمة المرور
+                  identifierFocus: _identifierFocus,
+                  passwordFocus: _passwordFocus,
+                  onPasswordSubmitted: widget.onMainActionPressed,
+
+                  identifierErrorText: widget.identifierErrorText,
+                  passwordErrorText: widget.passwordErrorText,
+                  onIdentifierChanged: widget.onClearIdentifierError,
+                  onPasswordChanged: widget.onClearPasswordError,
                 ),
+
+                // ✅ خطأ عام (مثل الشبكة)
+                if (widget.formErrorText != null &&
+                    widget.formErrorText!.trim().isNotEmpty) ...[
+                  SizedBox(height: SizeConfig.h(12)),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      widget.formErrorText!,
+                      textAlign: TextAlign.right,
+                      style: AppTextStyles.caption11.copyWith(
+                        color: Colors.red,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: _sectionGap),
 
-                // 5. Main Action Button
                 SendCodeButton(
-                  onPressed: widget.isLoading ? null : widget.onMainActionPressed,
+                  onPressed:
+                      widget.isLoading ? null : widget.onMainActionPressed,
                   text: 'تسجيل الدخول',
                   isLoading: widget.isLoading,
                 ),
                 const SizedBox(height: _gap),
 
-                // 6. Continue as Guest
                 ContinueAsGuestButton(
                   onPressed: widget.isLoading ? null : widget.onContinueAsGuest,
                 ),
@@ -128,10 +164,10 @@ class _DescriptionText extends StatelessWidget {
       textAlign: TextAlign.center,
       style: AppTextStyles.body14.copyWith(
         color: AppColors.textSecondary,
-        fontSize: 15 * scale, // نفس الحجم اللي كان موجود
+        fontSize: 15 * scale,
         height: 1.5,
         letterSpacing: 0.2,
-        fontWeight: FontWeight.w700, // كان Bold، نخليه Bold حقيقي
+        fontWeight: FontWeight.w700,
       ),
     );
   }

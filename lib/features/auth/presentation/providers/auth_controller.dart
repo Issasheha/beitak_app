@@ -1,6 +1,6 @@
-// lib/features/auth/presentation/providers/auth_controller.dart
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:beitak_app/core/error/exceptions.dart';
@@ -47,6 +47,31 @@ class AuthController extends StateNotifier<AuthState> {
     await bootstrap();
   }
 
+  String _mapLoginError(String msg, {int? statusCode}) {
+    final m = msg.toLowerCase().trim();
+
+    // provider_suspended
+    if (m.contains('provider_suspended')) {
+      return 'حساب مزود الخدمة موقوف. يرجى التواصل مع الدعم.';
+    }
+
+    // invalid credentials / wrong login
+    if (m.contains('invalid credentials') ||
+        m.contains('invalid credential') ||
+        m.contains('unauthorized') ||
+        statusCode == 401 ||
+        statusCode == 404) {
+      return 'بيانات الدخول غير صحيحة. تأكد من البريد/رقم الهاتف وكلمة المرور.';
+    }
+
+    // generic network english coming from somewhere
+    if (m.contains('network error')) {
+      return 'تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.';
+    }
+
+    return msg;
+  }
+
   Future<void> loginWithIdentifier({
     required String identifier,
     required String password,
@@ -64,11 +89,19 @@ class AuthController extends StateNotifier<AuthState> {
       }
 
       state = AuthState.authenticated(session);
+    } on DioException catch (e) {
+      // ✅ تعريب أخطاء الشبكة
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
+      }
+      throw Exception('حدث خطأ في الاتصال، حاول مرة أخرى.');
     } on SocketException {
-      // ✅ عربي بدل إنجليزي
       throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } on ServerException catch (e) {
-      throw Exception(e.message);
+      throw Exception(_mapLoginError(e.message, statusCode: e.statusCode));
     } on CacheException catch (e) {
       throw Exception(e.message);
     } catch (_) {
@@ -76,7 +109,6 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  /// ✅ تسجيل مستخدم عادي (Customer) وربط النتيجة مع AuthState
   Future<void> signupCustomer({
     required String firstName,
     required String lastName,
@@ -104,10 +136,16 @@ class AuthController extends StateNotifier<AuthState> {
         );
       }
 
-      // ✅ صار عندنا session محفوظة + state محدثة
       state = AuthState.authenticated(session);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
+      }
+      throw Exception('حدث خطأ في الاتصال، حاول مرة أخرى.');
     } on SocketException {
-      // ✅ عربي بدل إنجليزي
       throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } on ServerException catch (e) {
       throw Exception(e.message);
@@ -124,6 +162,14 @@ class AuthController extends StateNotifier<AuthState> {
       state = AuthState.guest(session);
     } on CacheException catch (e) {
       throw Exception(e.message);
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
+      }
+      throw Exception('حدث خطأ في الاتصال، حاول مرة أخرى.');
     } on SocketException {
       throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } catch (_) {
@@ -135,6 +181,14 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       await _repo.logout();
       state = const AuthState.unauthenticated();
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout) {
+        throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
+      }
+      throw Exception('حدث خطأ في الاتصال، حاول مرة أخرى.');
     } on SocketException {
       throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
     } catch (_) {

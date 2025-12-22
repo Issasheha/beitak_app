@@ -47,12 +47,24 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
     return hasArabic ? s : s;
   }
 
-  String _formatTime(String hhmmss) {
+    String _formatTime(String hhmmss) {
     final s = hhmmss.trim();
     if (s.isEmpty) return '—';
+
     final parts = s.split(':');
     if (parts.length < 2) return s;
-    return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+
+    final h = int.tryParse(parts[0]) ?? 0;
+    final m = int.tryParse(parts[1]) ?? 0;
+
+    final isPm = h >= 12;
+    final suffix = isPm ? 'م' : 'ص';
+
+    int hour12 = h % 12;
+    if (hour12 == 0) hour12 = 12;
+
+    final mm = m.toString().padLeft(2, '0');
+    return '$hour12:$mm $suffix';
   }
 
   String _formatDurationHours(double h) {

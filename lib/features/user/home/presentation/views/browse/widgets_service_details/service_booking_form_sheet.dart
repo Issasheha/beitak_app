@@ -14,7 +14,10 @@ import 'guest_booking_sheet.dart';
 import 'package_selector_tile.dart';
 import 'package_selector_sheet.dart';
 
-enum _InlineMsgType { info, error, success }
+import 'service_booking_form_helpers.dart';
+import 'service_booking_form_ui.dart';
+import 'service_booking_date_picker_sheet.dart';
+import 'service_booking_time_picker_sheet.dart';
 
 class ServiceBookingFormSheet extends ConsumerStatefulWidget {
   const ServiceBookingFormSheet({
@@ -47,15 +50,14 @@ class ServiceBookingFormSheet extends ConsumerStatefulWidget {
       _ServiceBookingFormSheetState();
 }
 
-class _ServiceBookingFormSheetState
-    extends ConsumerState<ServiceBookingFormSheet> {
+class _ServiceBookingFormSheetState extends ConsumerState<ServiceBookingFormSheet> {
   final TextEditingController _notesCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
-  String? _selectedTime; // HH:mm
+  String? _selectedTime; // HH:mm (قيمة API)
 
   String? _inlineMsg;
-  _InlineMsgType _inlineMsgType = _InlineMsgType.info;
+  InlineMsgType _inlineMsgType = InlineMsgType.info;
 
   @override
   void dispose() {
@@ -66,7 +68,7 @@ class _ServiceBookingFormSheetState
 
   void _showInline(
     String msg, {
-    _InlineMsgType type = _InlineMsgType.error,
+    InlineMsgType type = InlineMsgType.error,
   }) {
     if (!mounted) return;
 
@@ -75,7 +77,6 @@ class _ServiceBookingFormSheetState
       _inlineMsgType = type;
     });
 
-    // خليه يشوف الرسالة فوراً
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollCtrl.hasClients) return;
       _scrollCtrl.animateTo(
@@ -96,8 +97,7 @@ class _ServiceBookingFormSheetState
     SizeConfig.init(context);
 
     final st = ref.watch(serviceDetailsControllerProvider(widget.args));
-    final ctrl =
-        ref.read(serviceDetailsControllerProvider(widget.args).notifier);
+    final ctrl = ref.read(serviceDetailsControllerProvider(widget.args).notifier);
 
     final s = st.service;
     if (st.loading) {
@@ -106,18 +106,17 @@ class _ServiceBookingFormSheetState
       );
     }
     if (st.error != null || s == null) {
-      return _SheetError(
+      return SheetError(
         message: st.error ?? 'حدث خطأ غير متوقع',
         onRetry: () => ctrl.loadAll(),
       );
     }
 
-    // لو controller حاطط bookingError، خليه يبين فوق الفورم
     if (st.bookingError != null &&
         st.bookingError!.trim().isNotEmpty &&
         _inlineMsg != st.bookingError) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showInline(st.bookingError!, type: _InlineMsgType.error);
+        _showInline(st.bookingError!, type: InlineMsgType.error);
       });
     }
 
@@ -127,16 +126,14 @@ class _ServiceBookingFormSheetState
             ? st.selectedCity!.nameAr
             : '—');
 
-    final selectedDateLabel =
-        st.selectedDate == null ? '' : _fmtDate(st.selectedDate!);
-    final selectedTimeLabel = _selectedTime ?? '';
+    final selectedDateLabel = st.selectedDate == null ? '' : fmtDate(st.selectedDate!);
+    final selectedTimeLabel = (_selectedTime ?? '').trim();
 
     final selectedPackageLabel =
         st.selectedPackageName == null ? 'بدون باقة' : st.selectedPackageName!;
 
     final durationHours = s.durationHours <= 0 ? 1.0 : s.durationHours;
 
-    // (اختياري) إذا عندك availabilityLoading بالحالة
     bool availabilityLoading = false;
     try {
       final dyn = st as dynamic;
@@ -182,14 +179,12 @@ class _ServiceBookingFormSheetState
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon:
-                          const Icon(Icons.close, color: AppColors.textPrimary),
+                      icon: const Icon(Icons.close, color: AppColors.textPrimary),
                     ),
                   ],
                 ),
               ),
 
-              // المحتوى
               Flexible(
                 child: SingleChildScrollView(
                   controller: _scrollCtrl,
@@ -202,26 +197,25 @@ class _ServiceBookingFormSheetState
                     children: [
                       AnimatedSwitcher(
                         duration: const Duration(milliseconds: 180),
-                        child:
-                            (_inlineMsg == null || _inlineMsg!.trim().isEmpty)
-                                ? const SizedBox.shrink()
-                                : _InlineBanner(
-                                    key: const ValueKey('inline_banner'),
-                                    message: _inlineMsg!,
-                                    type: _inlineMsgType,
-                                    onClose: _clearInline,
-                                  ),
+                        child: (_inlineMsg == null || _inlineMsg!.trim().isEmpty)
+                            ? const SizedBox.shrink()
+                            : InlineBanner(
+                                key: const ValueKey('inline_banner'),
+                                message: _inlineMsg!,
+                                type: _inlineMsgType,
+                                onClose: _clearInline,
+                              ),
                       ),
                       if (availabilityLoading) ...[
                         const SizedBox(height: 10),
-                        const _InlineBanner(
+                        const InlineBanner(
                           message: 'جارٍ تحميل الأيام المتاحة…',
-                          type: _InlineMsgType.info,
+                          type: InlineMsgType.info,
                           onClose: null,
                         ),
                       ],
-                      if (_inlineMsg != null || availabilityLoading)
-                        const SizedBox(height: 10),
+                      if (_inlineMsg != null || availabilityLoading) const SizedBox(height: 10),
+
                       BookingDetailsCard(
                         loading: st.locLoading,
                         selectedDateLabel: selectedDateLabel,
@@ -243,6 +237,7 @@ class _ServiceBookingFormSheetState
                             provider: s.provider,
                             selectedDate: st.selectedDate,
                             durationHours: durationHours,
+                            minAdvanceBookingHours: kMinAdvanceBookingHours, // ✅ 12 ساعة ثابت
                           );
                         },
                         cityNameAr: cityDisplay,
@@ -256,6 +251,7 @@ class _ServiceBookingFormSheetState
                         areaEnabled: st.areas.isNotEmpty && !st.locLoading,
                         notesCtrl: _notesCtrl,
                       ),
+
                       const SizedBox(height: 12),
                       PackageSelectorTile(
                         hasPackages: s.packages.isNotEmpty,
@@ -273,7 +269,6 @@ class _ServiceBookingFormSheetState
                 ),
               ),
 
-              // زر تأكيد الحجز
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 decoration: const BoxDecoration(
@@ -286,9 +281,7 @@ class _ServiceBookingFormSheetState
                   width: double.infinity,
                   height: SizeConfig.h(44),
                   child: ElevatedButton(
-                    onPressed: st.bookingLoading
-                        ? null
-                        : () => _bookNow(context, ctrl, st),
+                    onPressed: st.bookingLoading ? null : () => _bookNow(context, ctrl, st),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.lightGreen,
                       shape: RoundedRectangleBorder(
@@ -313,8 +306,6 @@ class _ServiceBookingFormSheetState
     );
   }
 
-  // ---------------- اختيار التاريخ ----------------
-
   Future<void> _pickDate(
     BuildContext context, {
     required dynamic ctrl,
@@ -324,43 +315,66 @@ class _ServiceBookingFormSheetState
   }) async {
     final now = DateTime.now();
 
-    // أقل وقت مسموح للحجز حسب إعداد الخدمة
-    final earliest = now.add(Duration(hours: service.minAdvanceBookingHours));
-    DateTime first = DateTime(earliest.year, earliest.month, earliest.day);
+    const minAdvance = kMinAdvanceBookingHours;
+    final earliestAllowed = now.add(const Duration(hours: minAdvance));
 
-    // لا نسمح بتاريخ قبل اليوم
-    final today = _todayDateOnly();
+    DateTime first = DateTime(earliestAllowed.year, earliestAllowed.month, earliestAllowed.day);
+
+    final today = todayDateOnly();
     if (first.isBefore(today)) first = today;
 
-    // آخر تاريخ مسموح للحجز
-    final maxDays =
-        service.maxAdvanceBookingDays <= 0 ? 60 : service.maxAdvanceBookingDays;
+    final maxDays = service.maxAdvanceBookingDays <= 0 ? 60 : service.maxAdvanceBookingDays;
     final last = first.add(Duration(days: maxDays));
 
-    // التواريخ القادمة من السيرفر (إن وُجدت)
-    final availableSet = _safeAvailableDateSet(state);
+    final availableSet = safeAvailableDateSet(state);
 
     bool selectable(DateTime d) {
       final dateOnly = DateTime(d.year, d.month, d.day);
 
-      if (dateOnly.isBefore(first) || dateOnly.isAfter(last)) {
-        return false;
-      }
+      if (dateOnly.isBefore(first) || dateOnly.isAfter(last)) return false;
 
-      final dateStr = _fmtDate(dateOnly); // YYYY-MM-DD
+      final dateStr = fmtDate(dateOnly);
+      if (availableSet.isNotEmpty && !availableSet.contains(dateStr)) return false;
 
-      // لو السيرفر رجع لنا تواريخ جاهزة → نعتمدها
-      if (availableSet.isNotEmpty) {
-        return availableSet.contains(dateStr);
-      }
-
-      // لو ما في أي داتا عن التوفر → نسمح بكل الأيام داخل النطاق
-      return true;
+      return hasAnySlotForDay(
+        service: service,
+        dateOnly: dateOnly,
+        minAdvanceHours: minAdvance,
+      );
     }
 
-    // اختَر initialDate مناسب
-    DateTime initial =
-        (current != null && selectable(current)) ? current : first;
+    String? disabledReason(DateTime d) {
+      final dateOnly = DateTime(d.year, d.month, d.day);
+
+      if (dateOnly.isBefore(first)) {
+        if (minAdvance > 0 && isSameDay(dateOnly, today)) {
+          return 'اليوم غير متاح لأن الحجز يجب أن يكون قبل $minAdvance ساعة على الأقل.';
+        }
+        return 'هذا اليوم غير متاح حسب سياسة الحجز المسبق ($minAdvance ساعة).';
+      }
+
+      if (dateOnly.isAfter(last)) return 'هذا اليوم خارج المدة المتاحة للحجز.';
+
+      final dateStr = fmtDate(dateOnly);
+      if (availableSet.isNotEmpty && !availableSet.contains(dateStr)) {
+        return 'هذا اليوم غير متاح حسب توفر مزود الخدمة.';
+      }
+
+      if (!hasAnySlotForDay(
+        service: service,
+        dateOnly: dateOnly,
+        minAdvanceHours: minAdvance,
+      )) {
+        if (minAdvance > 0 && isSameDay(dateOnly, today)) {
+          return 'لا يمكن الحجز اليوم لأن الحجز يجب أن يكون قبل $minAdvance ساعة على الأقل.';
+        }
+        return 'لا توجد أوقات متاحة في هذا اليوم ضمن ساعات العمل.';
+      }
+
+      return null;
+    }
+
+    DateTime initial = (current != null && selectable(current)) ? current : first;
 
     if (!selectable(initial)) {
       DateTime? found;
@@ -372,73 +386,45 @@ class _ServiceBookingFormSheetState
         }
         cur = cur.add(const Duration(days: 1));
       }
-
       if (found == null) {
-        _showInline(
-          'لا توجد أيام متاحة للحجز ضمن الفترة المحددة.',
-          type: _InlineMsgType.error,
-        );
+        _showInline('لا توجد أيام متاحة للحجز ضمن الفترة المحددة.', type: InlineMsgType.error);
         return;
       }
-
       initial = found;
     }
 
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: first,
-      lastDate: last,
-      initialDate: initial,
-      selectableDayPredicate: selectable,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppColors.lightGreen,
-              primary: AppColors.lightGreen,
-            ),
-          ),
-          child: Directionality(
-            textDirection: TextDirection.rtl,
-            child: child!,
-          ),
-        );
-      },
+    final picked = await DatePickerSheet.show(
+      context,
+      initial: initial,
+      first: first,
+      last: last,
+      isSelectable: selectable,
+      disabledReason: disabledReason,
     );
 
     if (picked == null) return;
 
     ctrl.setSelectedDate(DateTime(picked.year, picked.month, picked.day));
-    if (mounted) {
-      // تغيير التاريخ → صفّر الوقت
-      setState(() => _selectedTime = null);
-    }
+    if (mounted) setState(() => _selectedTime = null);
   }
-
-  // ---------------- اختيار الوقت ----------------
 
   Future<void> _pickTime(
     BuildContext context, {
     required ProviderDetails provider,
     required DateTime? selectedDate,
     required double durationHours,
+    required int minAdvanceBookingHours,
   }) async {
     if (selectedDate == null) {
-      _showInline(
-        'اختَر تاريخ الحجز أولاً ثم اختر الوقت.',
-        type: _InlineMsgType.info,
-      );
+      _showInline('اختَر تاريخ الحجز أولاً ثم اختر الوقت.', type: InlineMsgType.info);
       return;
     }
 
-    final dayKey = _weekdayKey(selectedDate);
+    final dayKey = weekdayKey(selectedDate);
     final day = provider.dayHours(dayKey);
 
     if (day != null && day.active == false) {
-      _showInline(
-        'هذا اليوم غير متاح للحجز عند مزود الخدمة.',
-        type: _InlineMsgType.error,
-      );
+      _showInline('هذا اليوم غير متاح للحجز عند مزود الخدمة.', type: InlineMsgType.error);
       return;
     }
 
@@ -446,179 +432,55 @@ class _ServiceBookingFormSheetState
     final end = (day?.end ?? provider.workingHours.end);
 
     final durationMinutes = (durationHours * 60).round();
-    final slots = _buildTimeSlots(
-      start,
-      end,
-      durationMinutes: durationMinutes,
-      stepMinutes: 30,
-    );
+    const stepMinutes = 30;
 
-    if (slots.isEmpty) {
+    final now = DateTime.now();
+    final earliestAllowed = now.add(Duration(hours: minAdvanceBookingHours));
+
+    final earliestDateOnly = DateTime(earliestAllowed.year, earliestAllowed.month, earliestAllowed.day);
+    final selectedDateOnly = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+
+    if (selectedDateOnly.isBefore(earliestDateOnly)) {
       _showInline(
-        'لا توجد أوقات متاحة لهذا اليوم ضمن ساعات العمل.',
-        type: _InlineMsgType.error,
+        'هذا التاريخ قريب جداً ولا يسمح بالحجز لأن الحجز يجب أن يكون قبل $minAdvanceBookingHours ساعة على الأقل.',
+        type: InlineMsgType.error,
       );
       return;
     }
 
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: SafeArea(
-            top: false,
-            child: Container(
-              margin: EdgeInsets.only(top: SizeConfig.h(120)),
-              decoration: const BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(height: SizeConfig.h(10)),
-                  Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppColors.borderLight,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  SizedBox(height: SizeConfig.h(12)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'وقت الحجز',
-                            style: AppTextStyles.screenTitle.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w900,
-                              fontSize: SizeConfig.ts(15.5),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close,
-                              color: AppColors.textPrimary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-                      itemCount: slots.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) {
-                        final t = slots[i];
-                        final selected = (_selectedTime == t);
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(14),
-                          onTap: () => Navigator.pop(context, t),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: selected
-                                  ? AppColors.lightGreen.withValues(alpha: 0.10)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: selected
-                                    ? AppColors.lightGreen
-                                        .withValues(alpha: 0.35)
-                                    : AppColors.borderLight,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.access_time_rounded,
-                                  color: AppColors.lightGreen,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    t,
-                                    style: AppTextStyles.semiBold.copyWith(
-                                      color: AppColors.textPrimary,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: SizeConfig.ts(13.5),
-                                    ),
-                                  ),
-                                ),
-                                if (selected)
-                                  const Icon(
-                                    Icons.check_circle_rounded,
-                                    color: AppColors.lightGreen,
-                                    size: 20,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    int? minStartMinutes;
+    if (isSameDay(selectedDateOnly, earliestDateOnly)) {
+      minStartMinutes = roundUpToStep(minutesOfDay(earliestAllowed), stepMinutes);
+    }
+
+    final slots = buildTimeSlots(
+      start,
+      end,
+      durationMinutes: durationMinutes,
+      stepMinutes: stepMinutes,
+      minStartMinutes: minStartMinutes,
+    );
+
+    if (slots.isEmpty) {
+      if (isSameDay(selectedDateOnly, todayDateOnly()) && minAdvanceBookingHours > 0) {
+        _showInline(
+          'لا يمكن الحجز اليوم لأن الحجز يجب أن يكون قبل $minAdvanceBookingHours ساعة على الأقل.',
+          type: InlineMsgType.info,
         );
-      },
+      } else {
+        _showInline('لا توجد أوقات متاحة لهذا اليوم ضمن ساعات العمل.', type: InlineMsgType.error);
+      }
+      return;
+    }
+
+    final picked = await BookingTimePickerSheet.show(
+      context,
+      slots: slots,
+      selectedTime: _selectedTime,
     );
 
     if (picked == null) return;
     setState(() => _selectedTime = picked);
-  }
-
-  List<String> _buildTimeSlots(
-    String start,
-    String end, {
-    required int durationMinutes,
-    int stepMinutes = 30,
-  }) {
-    int? parseToMin(String v) {
-      final s = v.trim();
-      final parts = s.split(':');
-      if (parts.length < 2) return null;
-      final h = int.tryParse(parts[0]);
-      final m = int.tryParse(parts[1]);
-      if (h == null || m == null) return null;
-      if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-      return h * 60 + m;
-    }
-
-    String fmt(int minutes) {
-      final h = (minutes ~/ 60).toString().padLeft(2, '0');
-      final m = (minutes % 60).toString().padLeft(2, '0');
-      return '$h:$m';
-    }
-
-    final a = parseToMin(start);
-    final b = parseToMin(end);
-    if (a == null || b == null) return const [];
-    if (b <= a) return const [];
-
-    final lastStart = b - durationMinutes;
-    if (lastStart < a) return const [];
-
-    final out = <String>[];
-    for (int t = a; t <= lastStart; t += stepMinutes) {
-      out.add(fmt(t));
-    }
-    return out;
   }
 
   Future<void> _openPackagePicker(
@@ -648,35 +510,26 @@ class _ServiceBookingFormSheetState
     if (s == null) return;
 
     if (st.selectedDate == null) {
-      _showInline(
-        'رجاءً اختر تاريخ الحجز.',
-        type: _InlineMsgType.info,
-      );
+      _showInline('رجاءً اختر تاريخ الحجز.', type: InlineMsgType.info);
       return;
     }
 
     if ((_selectedTime ?? '').trim().isEmpty) {
-      _showInline(
-        'رجاءً اختر وقت الحجز.',
-        type: _InlineMsgType.info,
-      );
+      _showInline('رجاءً اختر وقت الحجز.', type: InlineMsgType.info);
       return;
     }
 
     final CityOption? city = st.selectedCity;
     final AreaOption? area = st.selectedArea;
 
-    final citySlug =
-        (city?.slug ?? '').trim().isEmpty ? 'amman' : city!.slug.toLowerCase();
-    final areaSlug =
-        (area?.slug ?? '').trim().isEmpty ? 'abdoun' : area!.slug.toLowerCase();
+    final citySlug = (city?.slug ?? '').trim().isEmpty ? 'amman' : city!.slug.toLowerCase();
+    final areaSlug = (area?.slug ?? '').trim().isEmpty ? 'abdoun' : area!.slug.toLowerCase();
 
-    final bookingDate = _fmtDate(st.selectedDate!);
-    final bookingTime = _toTimeWithSeconds(_selectedTime!.trim()); // HH:mm:ss
+    final bookingDate = fmtDate(st.selectedDate!);
+    final bookingTime = toTimeWithSeconds(_selectedTime!.trim());
 
     final durationHours = s.durationHours <= 0 ? 1.0 : s.durationHours;
-    final notes =
-        _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
+    final notes = _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim();
 
     try {
       await ctrl.createBookingAsUser(
@@ -688,10 +541,7 @@ class _ServiceBookingFormSheetState
         notes: notes,
       );
 
-      _showInline(
-        'تم إنشاء الحجز بنجاح ✅',
-        type: _InlineMsgType.success,
-      );
+      _showInline('تم إنشاء الحجز بنجاح ✅', type: InlineMsgType.success);
       await Future.delayed(const Duration(milliseconds: 750));
       if (!context.mounted) return;
       Navigator.of(context).pop(true);
@@ -704,293 +554,47 @@ class _ServiceBookingFormSheetState
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
           builder: (sheetCtx) => GuestBookingSheet(
-              onSendOtp: (phone) => ctrl.sendBookingOtp(customerPhone: phone),
-              onConfirm: ({
-                required String name,
-                required String phone,
-                required String otp,
-              }) async {
-                final sheetNav = Navigator.of(sheetCtx); // ✅ قبل await
-                final parentNav = Navigator.of(parentContext); // ✅ قبل await
+            onSendOtp: (phone) => ctrl.sendBookingOtp(customerPhone: phone),
+            onConfirm: ({
+              required String name,
+              required String phone,
+              required String otp,
+            }) async {
+              final sheetNav = Navigator.of(sheetCtx);
+              final parentNav = Navigator.of(parentContext);
 
-                try {
-                  await ctrl.createBookingAsGuest(
-                    bookingDate: bookingDate,
-                    bookingTime: bookingTime,
-                    durationHours: durationHours,
-                    serviceCity: citySlug,
-                    serviceArea: areaSlug,
-                    customerName: name,
-                    customerPhone: phone,
-                    otp: otp,
-                    notes: notes,
-                  );
+              try {
+                await ctrl.createBookingAsGuest(
+                  bookingDate: bookingDate,
+                  bookingTime: bookingTime,
+                  durationHours: durationHours,
+                  serviceCity: citySlug,
+                  serviceArea: areaSlug,
+                  customerName: name,
+                  customerPhone: phone,
+                  otp: otp,
+                  notes: notes,
+                );
 
-                  if (sheetNav.canPop()) {
-                    sheetNav.pop();
-                  }
+                if (sheetNav.canPop()) sheetNav.pop();
 
-                  if (!mounted) return;
+                if (!mounted) return;
+                _showInline('تم إنشاء الحجز كضيف ✅', type: InlineMsgType.success);
 
-                  _showInline(
-                    'تم إنشاء الحجز كضيف ✅',
-                    type: _InlineMsgType.success,
-                  );
-
-                  await Future.delayed(const Duration(milliseconds: 750));
-
-                  if (!parentContext.mounted) return;
-                  parentNav.pop(true);
-                } catch (e2) {
-                  if (!mounted) return;
-                  _showInline(
-                    'فشل تأكيد الحجز: ${e2.toString()}',
-                    type: _InlineMsgType.error,
-                  );
-                }
-              }),
+                await Future.delayed(const Duration(milliseconds: 750));
+                if (!parentContext.mounted) return;
+                parentNav.pop(true);
+              } catch (e2) {
+                if (!mounted) return;
+                _showInline('فشل تأكيد الحجز: ${e2.toString()}', type: InlineMsgType.error);
+              }
+            },
+          ),
         );
-
         return;
       }
 
-      _showInline(
-        'تعذر إنشاء الحجز: ${e.toString()}',
-        type: _InlineMsgType.error,
-      );
+      _showInline('تعذر إنشاء الحجز: ${e.toString()}', type: InlineMsgType.error);
     }
-  }
-
-  String _toTimeWithSeconds(String hm) {
-    final s = hm.trim();
-    final parts = s.split(':');
-    if (parts.length == 2) {
-      return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}:00';
-    }
-    if (parts.length >= 3) {
-      return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}:${parts[2].padLeft(2, '0')}';
-    }
-    return '09:00:00';
-  }
-
-  // ---------------- التواريخ القادمة من السيرفر ----------------
-
-  Set<String> _safeAvailableDateSet(dynamic state) {
-    // نطلع تاريخ واحد من أي شكل سترنج
-    String? extractDate(String s) {
-      s = s.trim();
-      if (s.isEmpty) return null;
-
-      final match = RegExp(r'\d{4}-\d{2}-\d{2}').firstMatch(s);
-      if (match != null) {
-        return match.group(0);
-      }
-      return null;
-    }
-
-    // نضيف عنصر واحد (string أو map) للمجموعة
-    void addOne(dynamic v, Set<String> out) {
-      if (v == null) return;
-
-      if (v is Map) {
-        final raw =
-            v['date'] ?? v['day_date'] ?? v['booking_date'] ?? v['dayDate'];
-        if (raw != null) {
-          final s = raw.toString();
-          final d = extractDate(s);
-          if (d != null && d.isNotEmpty) out.add(d);
-        }
-        return;
-      }
-
-      final d = extractDate(v.toString());
-      if (d != null && d.isNotEmpty) out.add(d);
-    }
-
-    Set<String> normalize(dynamic raw) {
-      final out = <String>{};
-      if (raw is Iterable) {
-        for (final v in raw) {
-          addOne(v, out);
-        }
-      } else {
-        addOne(raw, out);
-      }
-      return out;
-    }
-
-    try {
-      final raw = (state as dynamic).availableDates;
-      final normalized = normalize(raw);
-      if (normalized.isNotEmpty) return normalized;
-    } catch (_) {}
-
-    try {
-      final raw = (state as dynamic).availableDays;
-      final normalized = normalize(raw);
-      if (normalized.isNotEmpty) return normalized;
-    } catch (_) {}
-
-    return <String>{};
-  }
-
-  DateTime _todayDateOnly() {
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day);
-  }
-
-  String _fmtDate(DateTime d) {
-    final mm = d.month.toString().padLeft(2, '0');
-    final dd = d.day.toString().padLeft(2, '0');
-    return '${d.year}-$mm-$dd';
-  }
-
-  String _weekdayKey(DateTime d) {
-    switch (d.weekday) {
-      case DateTime.monday:
-        return 'monday';
-      case DateTime.tuesday:
-        return 'tuesday';
-      case DateTime.wednesday:
-        return 'wednesday';
-      case DateTime.thursday:
-        return 'thursday';
-      case DateTime.friday:
-        return 'friday';
-      case DateTime.saturday:
-        return 'saturday';
-      case DateTime.sunday:
-        return 'sunday';
-    }
-    return 'monday';
-  }
-}
-
-// =================== Widgets مساعدة ===================
-
-class _InlineBanner extends StatelessWidget {
-  const _InlineBanner({
-    super.key,
-    required this.message,
-    required this.type,
-    required this.onClose,
-  });
-
-  final String message;
-  final _InlineMsgType type;
-  final VoidCallback? onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg;
-    Color border;
-    IconData icon;
-
-    switch (type) {
-      case _InlineMsgType.success:
-        bg = AppColors.lightGreen.withValues(alpha: 0.10);
-        border = AppColors.lightGreen.withValues(alpha: 0.35);
-        icon = Icons.check_circle_rounded;
-        break;
-
-      case _InlineMsgType.info:
-        bg = AppColors.cardBackground;
-        border = AppColors.borderLight;
-        icon = Icons.info_outline_rounded;
-        break;
-
-      case _InlineMsgType.error:
-        bg = Colors.redAccent.withValues(alpha: 0.08);
-        border = Colors.redAccent.withValues(alpha: 0.35);
-        icon = Icons.error_outline_rounded;
-        break;
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            size: 18,
-            color: type == _InlineMsgType.error
-                ? Colors.redAccent
-                : AppColors.lightGreen,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: AppTextStyles.body.copyWith(
-                color: AppColors.textPrimary,
-                fontSize: SizeConfig.ts(12.8),
-                height: 1.35,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (onClose != null) ...[
-            const SizedBox(width: 6),
-            InkWell(
-              onTap: onClose,
-              child: const Icon(
-                Icons.close,
-                size: 18,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SheetError extends StatelessWidget {
-  const _SheetError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.only(top: 120),
-          padding: const EdgeInsets.all(16),
-          decoration: const BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                message,
-                style:
-                    AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: onRetry,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.lightGreen,
-                ),
-                child: const Text('إعادة المحاولة'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

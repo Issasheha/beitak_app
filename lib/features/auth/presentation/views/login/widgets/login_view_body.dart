@@ -19,6 +19,33 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
 
   bool _isLoading = false;
 
+  String? _identifierServerError;
+  String? _passwordServerError;
+  String? _formError;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _identifierCtrl.addListener(() {
+      if (_identifierServerError != null || _formError != null) {
+        setState(() {
+          _identifierServerError = null;
+          _formError = null;
+        });
+      }
+    });
+
+    _passCtrl.addListener(() {
+      if (_passwordServerError != null || _formError != null) {
+        setState(() {
+          _passwordServerError = null;
+          _formError = null;
+        });
+      }
+    });
+  }
+
   @override
   void dispose() {
     _identifierCtrl.dispose();
@@ -42,6 +69,27 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
               formKey: _formKey,
               onMainActionPressed: _handleLogin,
               onContinueAsGuest: _handleGuest,
+
+              identifierErrorText: _identifierServerError,
+              passwordErrorText: _passwordServerError,
+              formErrorText: _formError,
+
+              onClearIdentifierError: () {
+                if (_identifierServerError != null || _formError != null) {
+                  setState(() {
+                    _identifierServerError = null;
+                    _formError = null;
+                  });
+                }
+              },
+              onClearPasswordError: () {
+                if (_passwordServerError != null || _formError != null) {
+                  setState(() {
+                    _passwordServerError = null;
+                    _formError = null;
+                  });
+                }
+              },
             ),
           ),
         ],
@@ -49,72 +97,113 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
     );
   }
 
+  String _normalizeArabicDigits(String input) {
+    const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    for (int i = 0; i < ar.length; i++) {
+      input = input.replaceAll(ar[i], en[i]);
+    }
+    const fa = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    for (int i = 0; i < fa.length; i++) {
+      input = input.replaceAll(fa[i], en[i]);
+    }
+    return input;
+  }
+
+  String _digitsOnly(String input) {
+    final normalized = _normalizeArabicDigits(input);
+    return normalized.replaceAll(RegExp(r'\D'), '');
+  }
+
+  void _applyServerError(String msg) {
+    final m = msg.toLowerCase();
+
+    // provider_suspended
+    if (m.contains('provider_suspended') || m.contains('حساب مزود الخدمة موقوف')) {
+      _identifierServerError = 'حساب مزود الخدمة موقوف';
+      _passwordServerError = null;
+      _formError = null;
+      return;
+    }
+
+    // ✅ invalid credentials تحت الحقلين معًا
+    if (m.contains('بيانات الدخول غير صحيحة') ||
+        m.contains('invalid credentials') ||
+        m.contains('unauthorized')) {
+      final text =
+          'بيانات الدخول غير صحيحة. تأكد من البريد/رقم الهاتف وكلمة المرور.';
+      _identifierServerError = text;
+      _passwordServerError = text;
+      _formError = null;
+      return;
+    }
+
+    // network
+    if (m.contains('تعذر الاتصال بالإنترنت') ||
+        m.contains('network') ||
+        m.contains('connection')) {
+      _formError = 'تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.';
+      _identifierServerError = null;
+      _passwordServerError = null;
+      return;
+    }
+
+    _formError = msg;
+    _identifierServerError = null;
+    _passwordServerError = null;
+  }
+
   Future<void> _handleLogin() async {
+    setState(() {
+      _identifierServerError = null;
+      _passwordServerError = null;
+      _formError = null;
+    });
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // Validation بسيط قبل الإرسال (مثل ما كنت عامل سابقًا)
-      var identifier = _identifierCtrl.text.trim();
+      var identifierRaw = _identifierCtrl.text.trim();
       final password = _passCtrl.text;
 
-      final isEmail = identifier.contains('@');
-      if (!isEmail) {
-        final normalized = identifier.replaceAll(RegExp(r'\D'), '');
-        if (normalized.length != 10 ||
-            !normalized.startsWith('07') ||
-            !['5', '7', '8', '9'].contains(normalized[2])) {
-          throw Exception('رقم الهاتف غير صالح');
-        }
-        identifier = normalized;
-      } else {
-        final emailRegex =
-            RegExp(r'^[^.][\w\-.]+@([\w-]+\.)+[\w-]{2,4}[^.]$');
-        if (!emailRegex.hasMatch(identifier) ||
-            identifier.contains('..') ||
-            identifier.contains('@@') ||
-            identifier.contains(' ') ||
-            !identifier.contains('.') ||
-            identifier.startsWith('.') ||
-            identifier.endsWith('.')) {
-          throw Exception('البريد الإلكتروني غير صالح');
-        }
-      }
+      final normalized = _normalizeArabicDigits(identifierRaw);
+      final isEmail = normalized.contains('@');
 
-      final trimmedPassword = password.trim();
-      if (trimmedPassword.length < 6 || trimmedPassword.isEmpty || password.contains(' ')) {
-        throw Exception('كلمة المرور غير صالحة');
-      }
+      // ✅ لو هاتف: شيل أي رموز/شرطات/مسافات وخليه digits only
+      final identifier = isEmail ? normalized.trim() : _digitsOnly(normalized);
 
       await ref.read(authControllerProvider.notifier).loginWithIdentifier(
             identifier: identifier,
             password: password,
           );
-
-      // ✅ لا تعمل Navigation هنا
-      // الراوتر سيعمل redirect تلقائيًا حسب AuthState (+ from لو موجود)
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      setState(() => _applyServerError(msg));
+
+      // ✅ عشان تظهر أخطاء السيرفر تحت الحقول فورًا
+      _formKey.currentState?.validate();
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _handleGuest() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _identifierServerError = null;
+      _passwordServerError = null;
+      _formError = null;
+      _isLoading = true;
+    });
 
     try {
       await ref.read(authControllerProvider.notifier).continueAsGuest();
-      // ✅ بدون Navigation
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      setState(() => _applyServerError(msg));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

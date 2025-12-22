@@ -29,7 +29,9 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
     final p = widget.profile;
     fullNameC = TextEditingController(text: (p?.name ?? '').trim());
     emailC = TextEditingController(text: (p?.email ?? '').trim());
-    phoneC = TextEditingController(text: (p?.phone ?? '').trim());
+
+    // ✅ اعرض الرقم محلي (07x...) حتى لو جاي من الباك +962...
+    phoneC = TextEditingController(text: _toLocalJordanPhone(p?.phone ?? ''));
   }
 
   @override
@@ -41,7 +43,9 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
       final p = widget.profile!;
       fullNameC.text = (p.name).trim();
       emailC.text = (p.email).trim();
-      phoneC.text = (p.phone ?? '').trim();
+
+      // ✅ اعرض الرقم محلي
+      phoneC.text = _toLocalJordanPhone(p.phone ?? '');
     }
   }
 
@@ -52,6 +56,48 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
     phoneC.dispose();
     super.dispose();
   }
+
+  // -------------------------
+  // Helpers: Phone normalize
+  // -------------------------
+
+  String _toEnglishDigits(String input) {
+    const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const fa = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+
+    var s = input;
+    for (var i = 0; i < 10; i++) {
+      s = s.replaceAll(ar[i], '$i');
+      s = s.replaceAll(fa[i], '$i');
+    }
+    return s;
+  }
+
+  String _cleanPhone(String input) {
+    final s = _toEnglishDigits(input).trim();
+    // شيل المسافات والشرطات والأقواس
+    return s.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+  }
+
+  /// يرجّع رقم أردني محلي: 07xxxxxxxx
+  /// يقبل: 07xxxxxxxx / +9627xxxxxxxx / 9627xxxxxxxx / 7xxxxxxxx
+  String _toLocalJordanPhone(String input) {
+    var s = _cleanPhone(input);
+
+    if (s.startsWith('+962')) {
+      s = '0' + s.substring(4); // +9627xxxxxxxx -> 07xxxxxxxx
+    } else if (s.startsWith('962')) {
+      s = '0' + s.substring(3); // 9627xxxxxxxx -> 07xxxxxxxx
+    } else if (s.startsWith('7') && s.length == 9) {
+      s = '0$s'; // 7xxxxxxxx -> 07xxxxxxxx
+    }
+
+    return s;
+  }
+
+  // -------------------------
+  // Validators
+  // -------------------------
 
   String? _validateFullName(String? v) {
     final s = (v ?? '').trim();
@@ -70,15 +116,18 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
   }
 
   String? _validatePhone(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return 'رقم الهاتف مطلوب';
+    final local = _toLocalJordanPhone(v ?? '');
+    if (local.isEmpty) return 'رقم الهاتف مطلوب';
 
-    final localOk = RegExp(r'^(079|078|077)\d{7}$').hasMatch(s);
-    final intlOk = RegExp(r'^\+9627\d{8}$').hasMatch(s);
-
-    if (!localOk && !intlOk) return 'رقم الهاتف غير صحيح';
+    // ✅ نفس منطق السيرفر: 077/078/079 + 7 أرقام = 10 أرقام
+    final ok = RegExp(r'^(077|078|079)\d{7}$').hasMatch(local);
+    if (!ok) return 'رقم الهاتف لازم يبدأ بـ 077 أو 078 أو 079 ويتكون من 10 أرقام';
     return null;
   }
+
+  // -------------------------
+  // Submit
+  // -------------------------
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
@@ -90,8 +139,8 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
     final first = parts.isNotEmpty ? parts.first : '';
     final last = (parts.length > 1) ? parts.sublist(1).join(' ') : '';
 
-    final rawPhone = phoneC.text.trim();
-    final phoneToSend = rawPhone.startsWith('0') ? '+962${rawPhone.substring(1)}' : rawPhone;
+    // ✅ ابعث محلي 07x... للسيرفر (عشان ما يرد 400)
+    final phoneToSend = _toLocalJordanPhone(phoneC.text);
 
     final controller = ref.read(profileControllerProvider.notifier);
     final ok = await controller.saveProfile(
@@ -139,6 +188,7 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
               textDirection: TextDirection.rtl,
               textAlign: TextAlign.right,
               validator: _validateFullName,
+              keyboardType: TextInputType.name,
             ),
             SizedBox(height: SizeConfig.h(10)),
 
@@ -149,6 +199,7 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
               textAlign: TextAlign.left,
               validator: _validateEmail,
               suffix: _hintSuffix('البريد معي'),
+              keyboardType: TextInputType.emailAddress,
             ),
             SizedBox(height: SizeConfig.h(10)),
 
@@ -159,6 +210,7 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
               textAlign: TextAlign.left,
               validator: _validatePhone,
               suffix: _hintSuffix('الرقم معي'),
+              keyboardType: TextInputType.phone,
             ),
 
             SizedBox(height: SizeConfig.h(12)),
@@ -224,6 +276,7 @@ class _Field extends StatelessWidget {
   final TextDirection textDirection;
   final TextAlign textAlign;
   final Widget? suffix;
+  final TextInputType? keyboardType;
 
   const _Field({
     required this.label,
@@ -232,6 +285,7 @@ class _Field extends StatelessWidget {
     required this.textAlign,
     this.validator,
     this.suffix,
+    this.keyboardType,
   });
 
   @override
@@ -242,6 +296,7 @@ class _Field extends StatelessWidget {
         controller: controller,
         validator: validator,
         textAlign: textAlign,
+        keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: label,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
