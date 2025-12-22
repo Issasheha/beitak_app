@@ -8,6 +8,21 @@ class HomeHeaderController extends StateNotifier<HomeHeaderState> {
 
   final AuthLocalDataSourceImpl _authLocal = AuthLocalDataSourceImpl();
 
+  /// ✅ تحديث فوري للاسم (بدون انتظار load/kash)
+  void setDisplayName(String name) {
+    final cleaned = name.trim();
+    state = state.copyWith(
+      isLoading: false,
+      errorMessage: null,
+      displayName: cleaned.isEmpty ? 'ضيف' : cleaned,
+    );
+  }
+
+  /// ✅ إذا حبيت بعد تعديل الكاش تعمل reload سريع
+  Future<void> reloadFromCache() async {
+    await load();
+  }
+
   Future<void> load() async {
     // نفس فكرة الكود القديم: الاسم الافتراضي "ضيف"
     String name = 'ضيف';
@@ -19,8 +34,8 @@ class HomeHeaderController extends StateNotifier<HomeHeaderState> {
 
     try {
       final session = await _authLocal.getCachedAuthSession();
-      final first = session?.user?.firstName?.trim();
-      final last = session?.user?.lastName?.trim();
+      final first = session?.user?.firstName.trim();
+      final last = session?.user?.lastName.trim();
 
       final full = [first, last]
           .whereType<String>()

@@ -71,42 +71,54 @@ class ProfileController extends StateNotifier<ProfileState> {
     );
   }
 
-  Future<bool> saveProfile({
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String phone,
-    String? address,
-  }) async {
-    state = state.copyWith(
-      isLoading: true,
-      clearError: true,
+ Future<bool> saveProfile({
+  required String firstName,
+  required String lastName,
+  required String email,
+  required String phone,
+  String? address,
+
+  /// (اختياري) لو بدك تمرّرهم من UI
+  int? cityId,
+  int? areaId,
+}) async {
+  state = state.copyWith(
+    isLoading: true,
+    clearError: true,
+  );
+
+  try {
+    // ✅ تحايل مؤقت: خذهم من البروفايل الحالي
+    // وإذا مش موجودين لأي سبب: fallback = 1
+    final effectiveCityId = cityId ?? state.profile?.cityId ?? 1;
+    final effectiveAreaId = areaId ?? state.profile?.areaId ?? 1;
+
+    final updated = await _updateProfileUseCase(
+      pr.UpdateProfileParams(
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        phone: phone,
+        cityId: effectiveCityId,
+        areaId: effectiveAreaId,
+        address: address,
+      ),
     );
 
-    try {
-      final updated = await _updateProfileUseCase(
-        pr.UpdateProfileParams(
-          firstName: firstName,
-          lastName: lastName,
-          email: email,
-          phone: phone,
-          address: address,
-        ),
-      );
-
-      // نحدّث البروفايل محلياً + نعمل refresh للـ activity من الباك
-      state = state.copyWith(profile: updated);
-      await refresh();
-      return true;
-    } catch (e) {
-      final msg = _mapError(e);
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: msg,
-      );
-      return false;
-    }
+    // نحدّث البروفايل محلياً + نعمل refresh للـ activity من الباك
+    state = state.copyWith(profile: updated);
+    await refresh();
+    return true;
+  } catch (e) {
+    final msg = _mapError(e);
+    state = state.copyWith(
+      isLoading: false,
+      errorMessage: msg,
+    );
+    return false;
   }
+}
+
 
   Future<bool> uploadImage(String filePath) async {
     state = state.copyWith(

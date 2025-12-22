@@ -19,29 +19,32 @@ class ProviderHeaderStatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     if (stats.isEmpty) return const SizedBox.shrink();
 
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
     return LayoutBuilder(
       builder: (context, c) {
         final count = stats.length;
         final maxW = c.maxWidth;
 
         final spacing = (maxW * 0.03).clamp(6.0, 12.0);
-        final totalSpacing = spacing * (count - 1);
 
-        var cardW = (maxW - totalSpacing) / count;
-        cardW = cardW.clamp(SizeConfig.w(76), SizeConfig.w(150));
-
-        final cardH = compact ? SizeConfig.h(78) : SizeConfig.h(90);
+        // ✅ خفف الارتفاع شوي بالـLandscape عشان ما يصير ضغط/overflow في الهيدر
+        final cardH = isLandscape
+            ? (compact ? SizeConfig.h(70) : SizeConfig.h(80))
+            : (compact ? SizeConfig.h(78) : SizeConfig.h(90));
 
         return Row(
           textDirection: TextDirection.rtl,
           children: List.generate(count, (i) {
             final isLast = i == count - 1;
-            return Padding(
-              padding: EdgeInsets.only(left: isLast ? 0 : spacing),
-              child: SizedBox(
-                width: cardW,
-                height: cardH,
-                child: ProviderHeaderStatCard(stat: stats[i]),
+
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(left: isLast ? 0 : spacing),
+                child: SizedBox(
+                  height: cardH,
+                  child: ProviderHeaderStatCard(stat: stats[i]),
+                ),
               ),
             );
           }),
@@ -58,6 +61,17 @@ class ProviderHeaderStatCard extends StatelessWidget {
   });
 
   final ProviderHeaderStat stat;
+
+  bool _statWantsChevron() {
+    // ✅ لو عندك بالموديل لاحقاً: showChevron = false
+    // بنخليه يشتغل بدون ما نكسر compile لو الخاصية مش موجودة.
+    try {
+      final dyn = stat as dynamic;
+      final v = dyn.showChevron;
+      if (v is bool) return v;
+    } catch (_) {}
+    return true; // الافتراضي: نعم
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +98,9 @@ class ProviderHeaderStatCard extends StatelessWidget {
             ? AppColors.lightGreen.o(0.40)
             : AppColors.borderLight;
 
+        // ✅ لا نعرض السهم إلا إذا في مساحة كافية (حتى ما يسبب تزاحم بالـLandscape)
+        final showChevron = clickable && _statWantsChevron() && w >= 96 && h >= 72;
+
         Widget skeletonBar({required double widthFactor, required double height}) {
           return Align(
             alignment: Alignment.center,
@@ -95,6 +112,66 @@ class ProviderHeaderStatCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
             ),
+          );
+        }
+
+        Widget content() {
+          if (stat.skeleton) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                skeletonBar(widthFactor: 0.30, height: emojiSize * 0.75),
+                SizedBox(height: gap1),
+                skeletonBar(widthFactor: 0.45, height: valueSize * 0.75),
+                SizedBox(height: gap2),
+                skeletonBar(widthFactor: 0.55, height: titleSize * 0.70),
+              ],
+            );
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                stat.emoji,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.title18.copyWith(
+                  fontSize: emojiSize,
+                  height: 1.0,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: gap1),
+              Text(
+                stat.value,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.title18.copyWith(
+                  fontSize: valueSize,
+                  height: 1.0,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              SizedBox(height: gap2),
+              Text(
+                stat.title,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.body16.copyWith(
+                  fontSize: titleSize,
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
           );
         }
 
@@ -122,65 +199,20 @@ class ProviderHeaderStatCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
               child: Stack(
                 children: [
+                  // ✅ أهم سطر ضد التكسير:
+                  // FittedBox(scaleDown) يخلي المحتوى "يصغر" إذا المساحة ضاقت (Landscape)
                   Center(
-                    child: stat.skeleton
-                        ? Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              skeletonBar(widthFactor: 0.30, height: emojiSize * 0.75),
-                              SizedBox(height: gap1),
-                              skeletonBar(widthFactor: 0.45, height: valueSize * 0.75),
-                              SizedBox(height: gap2),
-                              skeletonBar(widthFactor: 0.55, height: titleSize * 0.70),
-                            ],
-                          )
-                        : Column(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                stat.emoji,
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.title18.copyWith(
-                                  fontSize: emojiSize,
-                                  height: 1.0,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              SizedBox(height: gap1),
-                              Text(
-                                stat.value,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.title18.copyWith(
-                                  fontSize: valueSize,
-                                  height: 1.0,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              SizedBox(height: gap2),
-                              Text(
-                                stat.title,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.body16.copyWith(
-                                  fontSize: titleSize,
-                                  height: 1.0,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 80),
+                        child: content(),
+                      ),
+                    ),
                   ),
 
-                  if (clickable)
+                  if (showChevron)
                     Positioned(
                       left: 8,
                       top: 8,

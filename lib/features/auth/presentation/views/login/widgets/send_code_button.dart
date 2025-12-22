@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
@@ -17,8 +19,12 @@ class SendCodeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = SizeConfig.h(55.22);
+    // ✅ امن: لا تخلي الزر يصير أصغر من 48 حتى بالـLandscape
+    final height = math.max(SizeConfig.h(55.22), 48.0);
     final radius = SizeConfig.w(30);
+
+    // ✅ امن: loader كمان ما يصير صغير زيادة
+    final loaderSize = math.max(SizeConfig.h(24.36), 18.0);
 
     return SizedBox(
       width: double.infinity,
@@ -37,19 +43,24 @@ class SendCodeButton extends StatelessWidget {
         ),
         child: isLoading
             ? SizedBox(
-                height: SizeConfig.h(24.36),
-                width: SizeConfig.h(24.36),
+                height: loaderSize,
+                width: loaderSize,
                 child: const CircularProgressIndicator(
                   color: AppColors.lightGreen,
                   strokeWidth: 2,
                 ),
               )
-            : Text(
-                text,
-                style: AppTextStyles.body16.copyWith(
-                  color: AppColors.lightGreen,
-                  fontSize: SizeConfig.ts(15), // نفس السابق
-                  fontWeight: FontWeight.w700, // كان bold
+            : FittedBox(
+                fit: BoxFit.scaleDown, // ✅ يمنع تكسر النص بالعرض الضيق
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body16.copyWith(
+                    color: AppColors.lightGreen,
+                    fontSize: SizeConfig.ts(15),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
       ),

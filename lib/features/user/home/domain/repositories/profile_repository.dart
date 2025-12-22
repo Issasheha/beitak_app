@@ -7,6 +7,12 @@ class UpdateProfileParams {
   final String lastName;
   final String email;
   final String phone;
+
+  /// ✅ Required by backend currently
+  final int cityId;
+  final int areaId;
+
+  /// Optional
   final String? address;
 
   const UpdateProfileParams({
@@ -14,19 +20,32 @@ class UpdateProfileParams {
     required this.lastName,
     required this.email,
     required this.phone,
+    required this.cityId,
+    required this.areaId,
     this.address,
   });
 
   Map<String, dynamic> toJson() {
-    return {
-      'first_name': firstName,
-      'last_name': lastName,
-      'email': email,
-      'phone': phone,
-      'address': address,
+    final map = <String, dynamic>{
+      "first_name": firstName,
+      "last_name": lastName,
+      "email": email,
+      "phone": phone,
+
+      // ✅ backend fields
+      "city_id": cityId,
+      "area_id": areaId,
     };
+
+    // ✅ لا تبعث address إذا null (عشان ما تعمل overwrite)
+    if (address != null) {
+      map["address"] = address;
+    }
+
+    return map;
   }
 }
+
 
 
 abstract class ProfileRepository {
