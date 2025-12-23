@@ -103,10 +103,7 @@ class ProviderDocumentsView extends ConsumerWidget {
           textDirection: TextDirection.rtl,
           child: SafeArea(
             child: Padding(
-              padding: SizeConfig.padding(
-                horizontal: 16,
-                vertical: 12,
-              ),
+              padding: SizeConfig.padding(horizontal: 16, vertical: 12),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -127,11 +124,21 @@ class ProviderDocumentsView extends ConsumerWidget {
                       color: AppColors.textPrimary,
                     ),
                   ),
+                  SizeConfig.v(6),
+                  Text(
+                    'يمكنك رفع أكثر من صورة لنفس الوثيقة (مثال: وجه/ظهر)',
+                    style: AppTextStyles.caption11.copyWith(
+                      fontSize: SizeConfig.ts(11.5),
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                   SizeConfig.v(12),
+
+                  // ✅ Camera: التقط أكثر من صورة
                   ListTile(
                     leading: const Icon(Icons.photo_camera_outlined),
                     title: Text(
-                      'التقاط صورة بالكاميرا',
+                      'التقاط صور بالكاميرا',
                       style: AppTextStyles.body14.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -139,23 +146,20 @@ class ProviderDocumentsView extends ConsumerWidget {
                     ),
                     onTap: () async {
                       Navigator.of(ctx).pop();
-                      final xFile = await picker.pickImage(
-                        source: ImageSource.camera,
-                        imageQuality: 85,
-                      );
-                      if (xFile == null) return;
-                      await _uploadFile(
-                        context,
-                        ref,
-                        doc,
-                        File(xFile.path),
-                      );
+
+                      final files =
+                          await _captureMultipleFromCamera(context, picker);
+                      if (files.isEmpty) return;
+
+                      await _uploadFiles(context, ref, doc, files);
                     },
                   ),
+
+                  // ✅ Gallery: اختر عدة صور
                   ListTile(
                     leading: const Icon(Icons.photo_library_outlined),
                     title: Text(
-                      'اختيار من المعرض / الملفات',
+                      'اختيار عدة صور من المعرض / الملفات',
                       style: AppTextStyles.body14.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -163,19 +167,14 @@ class ProviderDocumentsView extends ConsumerWidget {
                     ),
                     onTap: () async {
                       Navigator.of(ctx).pop();
-                      final xFile = await picker.pickImage(
-                        source: ImageSource.gallery,
-                        imageQuality: 85,
-                      );
-                      if (xFile == null) return;
-                      await _uploadFile(
-                        context,
-                        ref,
-                        doc,
-                        File(xFile.path),
-                      );
+
+                      final files = await _pickMultipleFromGallery(picker);
+                      if (files.isEmpty) return;
+
+                      await _uploadFiles(context, ref, doc, files);
                     },
                   ),
+
                   SizeConfig.v(8),
                 ],
               ),
@@ -186,17 +185,104 @@ class ProviderDocumentsView extends ConsumerWidget {
     );
   }
 
-  Future<void> _uploadFile(
+  /// ✅ كاميرا: صورة ثم يسأل إذا بدك تضيف كمان (وجه/ظهر)
+  Future<List<File>> _captureMultipleFromCamera(
+    BuildContext context,
+    ImagePicker picker,
+  ) async {
+    final result = <File>[];
+
+    while (true) {
+      final xFile = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (xFile == null) break;
+
+      result.add(File(xFile.path));
+
+      final addMore = await showDialog<bool>(
+            context: context,
+            barrierDismissible: true,
+            builder: (_) => AlertDialog(
+              title: Text(
+                'تم التقاط الصورة',
+                style: AppTextStyles.body16.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              content: Text(
+                'هل تريد إضافة صورة أخرى؟',
+                style: AppTextStyles.body14.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(
+                    'تم',
+                    style: AppTextStyles.body14.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.lightGreen,
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(
+                    'إضافة صورة',
+                    style: AppTextStyles.body14.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+
+      if (!addMore) break;
+    }
+
+    return result;
+  }
+
+  /// ✅ معرض: pickMultiImage (ولو مش مدعوم fallback لصورة واحدة)
+  Future<List<File>> _pickMultipleFromGallery(ImagePicker picker) async {
+    try {
+      final list = await picker.pickMultiImage(imageQuality: 85);
+      if (list.isNotEmpty) {
+        return list.map((x) => File(x.path)).toList();
+      }
+    } catch (_) {
+      // ignore and fallback
+    }
+
+    final one = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (one == null) return <File>[];
+    return <File>[File(one.path)];
+  }
+
+  Future<void> _uploadFiles(
     BuildContext context,
     WidgetRef ref,
     ProviderDocument doc,
-    File file,
+    List<File> files,
   ) async {
     final controller = ref.read(providerDocumentsControllerProvider.notifier);
 
     final error = await controller.uploadDocument(
       kind: doc.kind,
-      file: file,
+      files: files,
     );
 
     if (!context.mounted) return;
@@ -232,17 +318,24 @@ class _DocumentCard extends StatelessWidget {
     final statusColor =
         document.isVerified ? AppColors.lightGreen : AppColors.textSecondary;
 
+    final hasFiles = document.fileNames.isNotEmpty;
+
     final statusText = document.isVerified
         ? 'موثّقة'
-        : (document.fileName == null
+        : (!hasFiles
             ? (document.isRequired ? 'مطلوبة' : 'اختيارية')
             : 'قيد المراجعة');
 
     final statusIcon =
         document.isVerified ? Icons.check_circle : Icons.lock_outline;
 
-    final buttonLabel =
-        document.fileName == null ? 'رفع الوثيقة' : 'تحديث الوثيقة';
+    final buttonLabel = !hasFiles ? 'رفع الوثائق' : 'تحديث الوثائق';
+
+    final fileLine = !hasFiles
+        ? 'لم يتم رفع أي ملف بعد'
+        : (document.fileNames.length == 1
+            ? document.fileNames.first
+            : 'تم رفع ${document.fileNames.length} صور');
 
     return Container(
       decoration: BoxDecoration(
@@ -254,7 +347,6 @@ class _DocumentCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // العنوان + الحالة
           Row(
             children: [
               Icon(
@@ -291,7 +383,6 @@ class _DocumentCard extends StatelessWidget {
           ),
           SizeConfig.v(10),
 
-          // اسم الملف
           Container(
             padding: SizeConfig.padding(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -302,12 +393,12 @@ class _DocumentCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    document.fileName ?? 'لم يتم رفع أي ملف بعد',
+                    fileLine,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body14.copyWith(
                       fontSize: SizeConfig.ts(12.5),
-                      color: document.fileName == null
+                      color: !hasFiles
                           ? AppColors.textSecondary.withValues(alpha: 0.7)
                           : AppColors.textPrimary,
                       fontWeight: FontWeight.w600,
@@ -396,7 +487,7 @@ class _DocumentsHintBox extends StatelessWidget {
           ),
           SizeConfig.v(6),
           _bullet('الصيغ المدعومة: PDF, JPG, PNG'),
-          _bullet('يجب أن تكون الوثائق واضحة وقابلة للقراءة'),
+          _bullet('يمكن رفع أكثر من صورة لنفس الوثيقة (وجه/ظهر)'),
           _bullet('جميع الوثائق تخضع للمراجعة والموافقة'),
         ],
       ),

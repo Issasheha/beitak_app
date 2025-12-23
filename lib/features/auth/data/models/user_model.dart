@@ -7,6 +7,10 @@ class UserModel {
   final String? email;
   final String? phone;
   final String? role;
+
+  /// ✅ NEW: provider profile id (user.provider_profile.id) — مهم لـ GET /api/providers/:id
+  final int? providerProfileId;
+
   final bool isVerified;
   final bool isActive;
   final DateTime? createdAt;
@@ -19,6 +23,7 @@ class UserModel {
     this.email,
     this.phone,
     this.role,
+    this.providerProfileId,
     this.isVerified = false,
     this.isActive = true,
     this.createdAt,
@@ -32,6 +37,7 @@ class UserModel {
     String? email,
     String? phone,
     String? role,
+    int? providerProfileId,
     bool? isVerified,
     bool? isActive,
     DateTime? createdAt,
@@ -44,6 +50,7 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       role: role ?? this.role,
+      providerProfileId: providerProfileId ?? this.providerProfileId,
       isVerified: isVerified ?? this.isVerified,
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
@@ -52,6 +59,22 @@ class UserModel {
   }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    int? parseProviderProfileId(dynamic v) {
+      if (v is num) return v.toInt();
+      return int.tryParse(v?.toString() ?? '');
+    }
+
+    int? providerId;
+
+    // ✅ 1) من login: user.provider_profile.id
+    final pp = json['provider_profile'];
+    if (pp is Map) {
+      providerId = parseProviderProfileId(pp['id']);
+    }
+
+    // ✅ 2) fallback لو الباك رجّع provider_profile_id مباشرة
+    providerId ??= parseProviderProfileId(json['provider_profile_id']);
+
     return UserModel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       firstName: (json['first_name'] ?? '') as String,
@@ -59,6 +82,7 @@ class UserModel {
       email: json['email'] as String?,
       phone: json['phone'] as String?,
       role: json['role'] as String?,
+      providerProfileId: providerId,
       isVerified: (json['is_verified'] as bool?) ?? false,
       isActive: (json['is_active'] as bool?) ?? true,
       createdAt: json['created_at'] != null
@@ -78,6 +102,7 @@ class UserModel {
       'email': email,
       'phone': phone,
       'role': role,
+      'provider_profile_id': providerProfileId, // ✅ نخزّنه محليًا
       'is_verified': isVerified,
       'is_active': isActive,
       'created_at': createdAt?.toIso8601String(),

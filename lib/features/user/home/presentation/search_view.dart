@@ -29,6 +29,10 @@ class _SearchViewState extends State<SearchView> {
 
   CityOption? _selectedCity;
 
+  // ✅ NEW: Freeze insets while popping to kill keyboard "flash"
+  bool _isPopping = false;
+  bool _popInProgress = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +53,27 @@ class _SearchViewState extends State<SearchView> {
         backgroundColor: AppColors.textPrimary,
       ),
     );
+  }
+
+  // ✅ Perfect 1-tap back: no unfocus, freeze insets, pop immediately
+  void _popPerfect() {
+    if (_popInProgress) return;
+    _popInProgress = true;
+
+    if (mounted) {
+      setState(() => _isPopping = true);
+    }
+
+    // pop on next microtask after rebuild applies MediaQuery freeze
+    Future.microtask(() {
+      if (!mounted) return;
+      context.pop();
+    });
+  }
+
+  Future<bool> _onWillPop() async {
+    _popPerfect();
+    return false;
   }
 
   Future<void> _prefillCityFromProfileIfLoggedIn() async {
@@ -111,107 +136,35 @@ class _SearchViewState extends State<SearchView> {
   }
 
   // ============================================================
-  // ✅ NEW: Detect category_key from Arabic query (strong improvement)
-  // ============================================================
-  String? _detectCategoryKeyFromArabic(String text) {
-    final t = text.trim();
-    if (t.isEmpty) return null;
-
-    // ✅ Normalize (hamza forms, ta marbuta, alif maqsura, tatweel, tashkeel)
-    final normalized = t
-        .replaceAll('ـ', '')
-        .replaceAll(RegExp(r'[\u064B-\u0652]'), '') // تشكيل
-        .replaceAll('أ', 'ا')
-        .replaceAll('إ', 'ا')
-        .replaceAll('آ', 'ا')
-        .replaceAll('ة', 'ه')
-        .replaceAll('ى', 'ي')
-        .trim();
-
-    // ✅ category_key values MUST match your internal keys (underscore)
-    // and should align with categoriesIdMapProvider output keys.
-    const map = <String, String>{
-      // Cleaning
-      'تنظيف': 'cleaning',
-      'نظافه': 'cleaning',
-      'تنظيف المنازل': 'cleaning',
-      'تنظيف البيت': 'cleaning',
-      'تنظيف منزل': 'cleaning',
-
-      // Plumbing
-      'سباكه': 'plumbing',
-      'سباك': 'plumbing',
-      'مواسرجي': 'plumbing',
-      'مواسير': 'plumbing',
-
-      // Electrical  (✅ align with categoriesIdMapProvider: out['electricity'])
-      'كهرباء': 'electricity',
-      'كهربائي': 'electricity',
-
-      // Painting (⚠️ ensure mapping exists in categoriesIdMapProvider)
-      'رسم': 'painting',
-      'دهان': 'painting',
-      'دهانات': 'painting',
-      'صبغ': 'painting',
-
-      // Appliance Repair (✅ align with categoriesIdMapProvider: out['appliance_maintenance'])
-      'اصلاح الاجهزه': 'appliance_maintenance',
-      'تصليح الاجهزه': 'appliance_maintenance',
-      'صيانه الاجهزه': 'appliance_maintenance',
-      'صيانة الاجهزه': 'appliance_maintenance',
-      'اصلاح الأجهزة': 'appliance_maintenance',
-      'تصليح الأجهزة': 'appliance_maintenance',
-      'صيانة الأجهزة': 'appliance_maintenance',
-      'صيانه الأجهزة': 'appliance_maintenance',
-
-      // General Maintenance (✅ align with categoriesIdMapProvider: out['home_maintenance'])
-      'صيانه عامه': 'home_maintenance',
-      'صيانة عامه': 'home_maintenance',
-      'صيانة عامة': 'home_maintenance',
-      'صيانه عامة': 'home_maintenance',
-    };
-
-    // ✅ IMPORTANT: removed broad words like "صيانة" and "أجهزة" to avoid false positives.
-
-    // 1) Exact match first
-    final exact = map[normalized];
-    if (exact != null) return exact;
-
-    // 2) Contains match (e.g. "تنظيف شقة", "سباك حمام")
-    for (final entry in map.entries) {
-      if (normalized.contains(entry.key)) return entry.value;
-    }
-
-    return null;
-  }
-
-  // ============================================================
   // ✅ UPDATED: If text matches known category, open via category_key
   // ============================================================
   void _goBrowseWithText(String displayText) {
-  final text = displayText.trim();
+    final text = displayText.trim();
 
-  if (_selectedCity == null) {
-    _toast('الرجاء اختيار المحافظة أولاً');
-    return;
+    if (_selectedCity == null) {
+      _toast('الرجاء اختيار المحافظة أولاً');
+      return;
+    }
+    if (text.isEmpty) {
+      _toast('الرجاء إدخال الخدمة المطلوبة');
+      return;
+    }
+
+    _recent.add(text);
+
+    final categoryKey = FixedServiceCategories.keyFromAnyString(text);
+
+    final qp = <String, String>{
+      'city_id': _selectedCity!.id.toString(),
+      if (categoryKey != null) 'category_key': categoryKey,
+      if (categoryKey == null) 'q': text,
+    };
+
+    context.push(
+      Uri(path: AppRoutes.browseServices, queryParameters: qp).toString(),
+    );
   }
-  if (text.isEmpty) {
-    _toast('الرجاء إدخال الخدمة المطلوبة');
-    return;
-  }
 
-  _recent.add(text);
-
-  final categoryKey = FixedServiceCategories.keyFromAnyString(text);
-
-  final qp = <String, String>{
-    'city_id': _selectedCity!.id.toString(),
-    if (categoryKey != null) 'category_key': categoryKey,
-    if (categoryKey == null) 'q': text,
-  };
-
-  context.push(Uri(path: AppRoutes.browseServices, queryParameters: qp).toString());
-}
   void _goBrowseWithCategoryKey({
     required String categoryKey,
     required String displayTextForRecent,
@@ -257,78 +210,96 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     SizeConfig.init(context);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          title: Text(
-            'بحث',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w900,
-              fontSize: SizeConfig.ts(18),
-            ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new),
-            onPressed: () => context.pop(),
-          ),
-        ),
-        body: SafeArea(
-          child: ListView(
-            padding: SizeConfig.padding(all: 16),
-            children: [
-              SearchQueryField(
-                controller: _controller,
-                onSubmitted: _goBrowseWithText,
-              ),
-              SizeConfig.v(12),
-              SearchLocationChip(
-                title: _selectedCity?.name ?? 'اختر المحافظة *',
-                onTap: _pickCity,
-                onClear: null,
-              ),
-              SizeConfig.v(18),
+    final mq = MediaQuery.of(context);
 
-              ValueListenableBuilder<List<String>>(
-                valueListenable: _recent.listenable,
-                builder: (_, list, __) {
-                  if (list.isEmpty) return const SizedBox.shrink();
-                  return SearchSection(
-                    title: 'عمليات البحث الأخيرة',
-                    child: SearchList(
-                      items: list,
-                      leading: Icons.history_rounded,
-                      onTap: (t) {
-                        _controller.text = t;
-                        _controller.selection = TextSelection.fromPosition(
-                          TextPosition(offset: t.length),
-                        );
-                        _goBrowseWithText(t);
-                      },
-                      onRemove: (t) => _recent.remove(t),
-                    ),
-                  );
-                },
-              ),
+    // ✅ Freeze keyboard insets during pop to eliminate flash completely
+    final frozenMq = _isPopping
+        ? mq.copyWith(
+            viewInsets: EdgeInsets.zero,
+            // Optional extra safety (rare cases):
+            // viewPadding: mq.viewPadding,
+          )
+        : mq;
 
-              SizeConfig.v(16),
-
-              SearchSection(
-                title: 'خدمات شائعة',
-                child: PopularServicesList(
-                  onPick: (item) {
-                    _goBrowseWithCategoryKey(
-                      categoryKey: item.categoryKey,
-                      displayTextForRecent: item.label,
-                    );
-                  },
+    return MediaQuery(
+      data: frozenMq,
+      child: WillPopScope(
+        onWillPop: _onWillPop,
+        child: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            // ✅ Keep it stable; we handle inset ourselves
+            resizeToAvoidBottomInset: false,
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text(
+                'بحث',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w900,
+                  fontSize: SizeConfig.ts(18),
                 ),
               ),
-            ],
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                onPressed: _popPerfect,
+              ),
+            ),
+            body: SafeArea(
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: SizeConfig.padding(all: 16),
+                children: [
+                  SearchQueryField(
+                    controller: _controller,
+                    onSubmitted: _goBrowseWithText,
+                  ),
+                  SizeConfig.v(12),
+                  SearchLocationChip(
+                    title: _selectedCity?.name ?? 'اختر المحافظة *',
+                    onTap: _pickCity,
+                    onClear: null,
+                  ),
+                  SizeConfig.v(18),
+                  ValueListenableBuilder<List<String>>(
+                    valueListenable: _recent.listenable,
+                    builder: (_, list, __) {
+                      if (list.isEmpty) return const SizedBox.shrink();
+                      return SearchSection(
+                        title: 'عمليات البحث الأخيرة',
+                        child: SearchList(
+                          items: list,
+                          leading: Icons.history_rounded,
+                          onTap: (t) {
+                            _controller.text = t;
+                            _controller.selection = TextSelection.fromPosition(
+                              TextPosition(offset: t.length),
+                            );
+                            _goBrowseWithText(t);
+                          },
+                          onRemove: (t) => _recent.remove(t),
+                        ),
+                      );
+                    },
+                  ),
+                  SizeConfig.v(16),
+                  SearchSection(
+                    title: 'خدمات شائعة',
+                    child: PopularServicesList(
+                      onPick: (item) {
+                        _goBrowseWithCategoryKey(
+                          categoryKey: item.categoryKey,
+                          displayTextForRecent: item.label,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

@@ -9,6 +9,9 @@ import 'package:beitak_app/core/utils/app_text_styles.dart';
 
 import 'package:beitak_app/features/user/home/presentation/views/profile/viewmodels/profile_providers.dart';
 
+// ✅ NEW: Auth logout الحقيقي (مش clearSessionOnly)
+import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+
 import 'account_setting_widgets/account_profile_form_card.dart';
 import 'account_setting_widgets/account_change_password_card.dart';
 import 'account_setting_widgets/account_terms_section.dart';
@@ -26,7 +29,6 @@ class _AccountSettingsViewState extends ConsumerState<AccountSettingsView> {
   @override
   void initState() {
     super.initState();
-    // ✅ نفس سلوك ProfileView القديم: أول ما تفتح الصفحة نعمل refresh
     Future.microtask(() => ref.read(profileControllerProvider.notifier).refresh());
   }
 
@@ -41,10 +43,24 @@ class _AccountSettingsViewState extends ConsumerState<AccountSettingsView> {
   Future<bool> _deleteAccountFlow() async {
     try {
       final repo = ref.read(profileRepositoryProvider);
+
+      // 1) حذف الحساب من السيرفر
       await repo.deleteAccount(); // DELETE /api/users/profile
-      await ref.read(profileControllerProvider.notifier).logout();
+
+      // 2) Logout الحقيقي: امسح التوكن + حدّث auth state (عشان ما يرجعك للهوم)
+      await ref.read(authControllerProvider.notifier).logout();
+
+      // 3) صفّر/نظّف أي state متعلق بالمستخدم
+      ref.invalidate(profileControllerProvider);
+
       return true;
     } catch (_) {
+      // حتى لو صار خطأ، إذا السيرفر حذف الحساب والتوكن صار invalid
+      // الأفضل برضه نعمل logout محلي (عشان ما يظل بالهوم ويفشل بعدين)
+      try {
+        await ref.read(authControllerProvider.notifier).logout();
+        ref.invalidate(profileControllerProvider);
+      } catch (_) {}
       return false;
     }
   }
@@ -106,33 +122,23 @@ class _AccountSettingsViewState extends ConsumerState<AccountSettingsView> {
                 SizedBox(height: SizeConfig.h(12)),
               ],
 
-              // ✅ بيانات الحساب (الاسم الكامل / البريد / الهاتف)
               AccountProfileFormCard(profile: state.profile),
-
               SizedBox(height: SizeConfig.h(12)),
 
-              // ✅ تغيير كلمة المرور (inline مثل الصورة)
               const AccountChangePasswordCard(),
-
               SizedBox(height: SizeConfig.h(12)),
 
-              // ✅ الإشعارات
               const AccountNotificationSection(),
-
               SizedBox(height: SizeConfig.h(12)),
 
-              // ✅ الشروط والمساعدة (Placeholders حالياً)
               const AccountTermsSection(),
-
               SizedBox(height: SizeConfig.h(14)),
 
-              // ✅ منطقة الخطر (حذف الحساب)
               AccountDangerZone(
                 onDeleteAccount: _deleteAccountFlow,
               ),
 
               SizedBox(height: SizeConfig.h(10)),
-
               Center(
                 child: Text(
                   'نسخة التطبيق 1.0.0',

@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-// ✅ NEW: لتحديث الكاش
-import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
-
-// ✅ NEW: لتحديث اسم الداشبورد فوراً
+// ✅ لتحديث اسم الداشبورد فوراً
 import 'package:beitak_app/features/provider/home/presentation/providers/provider_home_providers.dart';
+
+// ✅ لاستخدام local provider بدل إنشاء Impl جديد
+import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
 
 class ProviderAccountEditView extends ConsumerStatefulWidget {
   const ProviderAccountEditView({super.key});
@@ -182,19 +182,35 @@ class _ProviderAccountEditViewState
             ),
             SizeConfig.v(12),
 
-            // ✅ رقم الهاتف (غير قابل للتعديل)
-            const _FieldLabel(text: 'رقم الهاتف', requiredStar: false),
+            // ✅ رقم الهاتف: صار تغييره عبر OTP
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const _FieldLabel(text: 'رقم الهاتف', requiredStar: false),
+                TextButton.icon(
+                  onPressed: () => _openChangePhoneSheet(state.phone),
+                  icon: const Icon(Icons.edit, size: 18, color: AppColors.lightGreen),
+                  label: Text(
+                    'تغيير الرقم',
+                    style: AppTextStyles.body14.copyWith(
+                      color: AppColors.lightGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             SizeConfig.v(6),
             _TextInput(
               controller: _phoneCtrl,
               hint: '+962 79 123 4567',
               textInputAction: TextInputAction.done,
               keyboardType: TextInputType.phone,
-              enabled: false,
+              enabled: false, // ✅ دائماً disabled (التغيير عبر OTP)
             ),
             SizeConfig.v(6),
             Text(
-              'لا يمكن تعديل رقم الهاتف حالياً',
+              'تغيير الرقم يتم عبر رمز تحقق (OTP)',
               textAlign: TextAlign.right,
               style: AppTextStyles.caption11.copyWith(
                 fontSize: SizeConfig.ts(11.5),
@@ -384,25 +400,28 @@ class _ProviderAccountEditViewState
     final error = await notifier.saveProfile(
       fullName: fullName,
       email: email,
-      phone: phone, // موجود بس السيرفر ما بيسمح، والكونترولر ما راح يرسله
+      phone: phone, // ✅ لن يتم إرساله للباك (OTP مسؤول عنه)
     );
 
     if (!mounted) return;
 
     if (error == null) {
-      // ✅ 1) حدّث كاش الـAuth عشان الاسم يتخزن ويضل صحيح
-      final parts = fullName.split(RegExp(r'\s+')).where((s) => s.trim().isNotEmpty).toList();
+      // ✅ تحديث الكاش + الداشبورد فوراً
+      final parts = fullName
+          .split(RegExp(r'\s+'))
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
       final first = parts.isNotEmpty ? parts.first : fullName;
       final last = parts.length > 1 ? parts.sublist(1).join(' ') : '';
 
-      await AuthLocalDataSourceImpl().updateCachedUser(
+      final local = ref.read(authLocalDataSourceProvider);
+      await local.updateCachedUser(
         firstName: first,
         lastName: last,
         email: email,
         phone: phone,
       );
 
-      // ✅ 2) حدّث الداشبورد فوراً
       ref.read(providerHomeViewModelProvider).setProviderName('$first $last');
     }
 
@@ -436,6 +455,318 @@ class _ProviderAccountEditViewState
       SnackBar(
         content: Text(error ?? 'تم تغيير كلمة المرور بنجاح'),
       ),
+    );
+  }
+
+  // ===================== Phone OTP Flow =====================
+
+  Future<void> _runWithLoading(Future<void> Function() action) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await action();
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  void _openChangePhoneSheet(String currentPhone) {
+    final phoneC = TextEditingController(text: currentPhone);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(22)),
+        ),
+      ),
+      builder: (ctx) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 120),
+            padding: EdgeInsets.only(
+              left: SizeConfig.w(16),
+              right: SizeConfig.w(16),
+              top: SizeConfig.h(14),
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + SizeConfig.h(14),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: SizeConfig.w(48),
+                    height: SizeConfig.h(5),
+                    decoration: BoxDecoration(
+                      color: AppColors.borderLight,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                  SizeConfig.v(14),
+                  Text(
+                    'تغيير رقم الهاتف',
+                    style: AppTextStyles.body16.copyWith(
+                      fontSize: SizeConfig.ts(16),
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizeConfig.v(10),
+                  TextField(
+                    controller: phoneC,
+                    autofocus: true,
+                    keyboardType: TextInputType.phone,
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      hintText: 'مثال: 962771234567',
+                      hintStyle: AppTextStyles.body14.copyWith(
+                        fontSize: SizeConfig.ts(13),
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding:
+                          SizeConfig.padding(horizontal: 14, vertical: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(12)),
+                        borderSide: BorderSide(
+                          color: AppColors.borderLight.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(12)),
+                        borderSide: const BorderSide(
+                          color: AppColors.lightGreen,
+                          width: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizeConfig.v(10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: SizeConfig.h(46),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.lightGreen,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(SizeConfig.radius(12)),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final newPhone = phoneC.text.trim();
+                        Navigator.pop(ctx);
+
+                        final notifier =
+                            ref.read(accountEditControllerProvider.notifier);
+
+                        try {
+                          await _runWithLoading(() async {
+                            final err =
+                                await notifier.requestPhoneOtp(newPhone);
+                            if (err != null) throw Exception(err);
+                          });
+
+                          if (!mounted) return;
+                          _openOtpSheet(phone: newPhone);
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                e.toString().replaceFirst('Exception: ', ''),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: Text(
+                        'إرسال رمز التحقق',
+                        style: AppTextStyles.body14.copyWith(
+                          fontSize: SizeConfig.ts(14),
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizeConfig.v(8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openOtpSheet({required String phone}) {
+    final otpC = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(22)),
+        ),
+      ),
+      builder: (ctx) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 120),
+            padding: EdgeInsets.only(
+              left: SizeConfig.w(16),
+              right: SizeConfig.w(16),
+              top: SizeConfig.h(14),
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + SizeConfig.h(14),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: SizeConfig.w(48),
+                    height: SizeConfig.h(5),
+                    decoration: BoxDecoration(
+                      color: AppColors.borderLight,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                  SizeConfig.v(14),
+                  Text(
+                    'أدخل رمز التحقق',
+                    style: AppTextStyles.body16.copyWith(
+                      fontSize: SizeConfig.ts(16),
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizeConfig.v(6),
+                  Text(
+                    'تم إرسال رمز إلى: $phone',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.caption11.copyWith(
+                      fontSize: SizeConfig.ts(12),
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizeConfig.v(12),
+                  TextField(
+                    controller: otpC,
+                    autofocus: true,
+                    maxLength: 6,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      hintText: '123456',
+                      hintStyle: AppTextStyles.body14.copyWith(
+                        fontSize: SizeConfig.ts(14),
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding:
+                          SizeConfig.padding(horizontal: 14, vertical: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(12)),
+                        borderSide: BorderSide(
+                          color: AppColors.borderLight.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(12)),
+                        borderSide: const BorderSide(
+                          color: AppColors.lightGreen,
+                          width: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizeConfig.v(10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: SizeConfig.h(46),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.lightGreen,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(SizeConfig.radius(12)),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final code = otpC.text.trim();
+                        Navigator.pop(ctx);
+
+                        final notifier =
+                            ref.read(accountEditControllerProvider.notifier);
+
+                        try {
+                          await _runWithLoading(() async {
+                            final err = await notifier.verifyPhoneOtp(
+                              phone: phone,
+                              otp: code,
+                            );
+                            if (err != null) throw Exception(err);
+                          });
+
+                          if (!mounted) return;
+
+                          // ✅ حدّث النص فوراً (حتى لو ما رجع phone بالرد)
+                          _phoneCtrl.text = phone;
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('تم تحديث رقم الهاتف بنجاح'),
+                            ),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                e.toString().replaceFirst('Exception: ', ''),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      child: Text(
+                        'تأكيد',
+                        style: AppTextStyles.body14.copyWith(
+                          fontSize: SizeConfig.ts(14),
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizeConfig.v(8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

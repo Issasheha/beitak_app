@@ -21,63 +21,75 @@ class HomeView extends ConsumerWidget {
     final headerState = ref.watch(homeHeaderControllerProvider);
     final displayName = headerState.displayName;
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: Scaffold(
-        extendBody: true,
-        backgroundColor: AppColors.background,
-        body: Stack(
-          children: [
-            const HomeBackgroundDecoration(),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final h = constraints.maxHeight;
-                final headerH = (h * 0.43).clamp(290.0, 380.0);
+    // ✅ منع أي تأثير للكيبورد على الصفحة (حتى أثناء pop)
+    final mq = MediaQuery.of(context);
+    final frozenMq = mq.copyWith(viewInsets: EdgeInsets.zero);
 
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    HomeGreenHeader(
-                      height: headerH,
-                      displayName: displayName,
-                      onProfileTap: () => context.push(AppRoutes.profile),
-                      onNotificationsTap: () =>
-                          context.push(AppRoutes.notifications),
-                      onSearchTap: () => context.push(AppRoutes.search),
-                    ),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: EdgeInsets.only(
-                          top: SizeConfig.h(18),
-                          bottom: SizeConfig.h(110),
-                        ),
-                        child: Padding(
-                          padding: SizeConfig.padding(horizontal: 18, vertical: 0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'تصفح حسب الفئة',
-                                style: AppTextStyles.sectionTitle.copyWith(
-                                  fontSize: SizeConfig.ts(12.8),
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w800,
+    return MediaQuery(
+      data: frozenMq,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          extendBody: true,
+          backgroundColor: AppColors.background,
+
+          // ✅ مهم: لا تعيد تحجيم الصفحة بسبب الكيبورد
+          resizeToAvoidBottomInset: false,
+
+          body: Stack(
+            children: [
+              const HomeBackgroundDecoration(),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final h = constraints.maxHeight;
+                  final headerH = (h * 0.43).clamp(290.0, 380.0);
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      HomeGreenHeader(
+                        height: headerH,
+                        displayName: displayName,
+                        onProfileTap: () => context.push(AppRoutes.profile),
+                        onNotificationsTap: () =>
+                            context.push(AppRoutes.notifications),
+                        onSearchTap: () => context.push(AppRoutes.search),
+                      ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: EdgeInsets.only(
+                            top: SizeConfig.h(18),
+                            bottom: SizeConfig.h(110),
+                          ),
+                          child: Padding(
+                            padding:
+                                SizeConfig.padding(horizontal: 18, vertical: 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'تصفح حسب الفئة',
+                                  style: AppTextStyles.sectionTitle.copyWith(
+                                    fontSize: SizeConfig.ts(12.8),
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
-                              ),
-                              SizedBox(height: SizeConfig.h(14)),
-                              const OrbitCategoryWidget(),
-                            ],
+                                SizedBox(height: SizeConfig.h(14)),
+                                const OrbitCategoryWidget(),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          bottomNavigationBar: const CrystalBottomNavigationBar(),
         ),
-        bottomNavigationBar: const CrystalBottomNavigationBar(),
       ),
     );
   }

@@ -83,6 +83,8 @@ class HomeGreenHeader extends StatelessWidget {
                         fit: BoxFit.contain,
                       ),
                       const Spacer(),
+
+                      // ✅ فقط أيقونة البروفايل تفتح صفحة الملف الشخصي
                       _HeaderIconBtn(
                         icon: Icons.person_outline_rounded,
                         onTap: onProfileTap,
@@ -97,57 +99,54 @@ class HomeGreenHeader extends StatelessWidget {
 
                   SizedBox(height: SizeConfig.h(14)),
 
-                  // ✅ Name row (مثل الصورة: الاسم يمين + دائرة الحرف)
+                  // ✅ Name row: الاسم غير clickable (عرض فقط)
                   Align(
                     alignment: Alignment.centerRight,
-                    child: InkWell(
-                      onTap: onProfileTap,
-                      borderRadius: BorderRadius.circular(SizeConfig.radius(999)),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: SizeConfig.w(4),
-                          vertical: SizeConfig.h(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          textDirection: TextDirection.rtl,
-                          children: [
-                            Container(
-                              width: SizeConfig.w(46),
-                              height: SizeConfig.w(46),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF4B58FF),
-                                border: Border.all(color: Colors.white.o(0.25)),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                _initials(displayName),
-                                style: TextStyle(
-                                  fontSize: SizeConfig.ts(13),
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  height: 1.0,
-                                ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: SizeConfig.w(4),
+                        vertical: SizeConfig.h(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        textDirection: TextDirection.rtl,
+                        children: [
+                          Container(
+                            width: SizeConfig.w(46),
+                            height: SizeConfig.w(46),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF4B58FF),
+                              border: Border.all(color: Colors.white.o(0.25)),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              _initials(displayName),
+                              style: TextStyle(
+                                fontSize: SizeConfig.ts(13),
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                height: 1.0,
                               ),
                             ),
-                            SizedBox(width: SizeConfig.w(10)),
-                            ConstrainedBox(
-                              constraints: BoxConstraints(maxWidth: SizeConfig.w(220)),
-                              child: Text(
-                                displayName.trim().isEmpty ? 'ضيف' : displayName.trim(),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: SizeConfig.ts(16),
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                ),
+                          ),
+                          SizedBox(width: SizeConfig.w(10)),
+                          ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: SizeConfig.w(220)),
+                            child: Text(
+                              // ✅ بدون “ضيف عزيز” — خليها محايدة لحد ما الاسم يوصل
+                              displayName.trim().isEmpty ? '...' : displayName.trim(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                fontSize: SizeConfig.ts(16),
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -156,7 +155,6 @@ class HomeGreenHeader extends StatelessWidget {
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, c) {
-                        // رفع البحث للأعلى بشكل مرن حسب المساحة
                         final lift = (c.maxHeight * 0.22).clamp(40.0, 78.0);
 
                         return Column(
@@ -184,9 +182,7 @@ class HomeGreenHeader extends StatelessWidget {
                                 height: 1.2,
                               ),
                             ),
-
                             const Spacer(),
-
                             Padding(
                               padding: EdgeInsets.only(bottom: lift),
                               child: _HeaderSearchBar(onTap: onSearchTap),
@@ -207,9 +203,9 @@ class HomeGreenHeader extends StatelessWidget {
 
   static String _initials(String s) {
     final parts = s.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return 'ض';
+    if (parts.isEmpty) return '؟';
     final first = parts.first;
-    if (first.characters.isEmpty) return 'ض';
+    if (first.characters.isEmpty) return '؟';
     return first.characters.first;
   }
 }

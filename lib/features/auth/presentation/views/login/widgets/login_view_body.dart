@@ -20,7 +20,7 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
   bool _isLoading = false;
 
   String? _identifierServerError;
-  String? _passwordServerError;
+  String? _passwordServerError; // رح يضل موجود بس ما نستعمله ل invalid creds
   String? _formError;
 
   @override
@@ -97,6 +97,24 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
     );
   }
 
+  // ✅ SnackBar عربي واضح (لـ invalid credentials فقط)
+  void _showInvalidCredSnackBar() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+          content: Text(
+            'بيانات الدخول غير صحيحة، تأكد منها.',
+            textAlign: TextAlign.right,
+          ),
+        ),
+      );
+  }
+
+  // ✅ تحويل أرقام عربية/فارسية -> إنجليزية
   String _normalizeArabicDigits(String input) {
     const ar = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
     const en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
@@ -115,40 +133,59 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
     return normalized.replaceAll(RegExp(r'\D'), '');
   }
 
-  void _applyServerError(String msg) {
+  bool _isInvalidCredentials(String msg) {
     final m = msg.toLowerCase();
+    return m.contains('invalid credentials') ||
+        m.contains('unauthorized') ||
+        m.contains('بيانات الدخول غير صحيحة') ||
+        m.contains('incorrect') ||
+        m.contains('wrong password');
+  }
 
-    // provider_suspended
-    if (m.contains('provider_suspended') || m.contains('حساب مزود الخدمة موقوف')) {
-      _identifierServerError = 'حساب مزود الخدمة موقوف';
+  bool _isProviderSuspended(String msg) {
+    final m = msg.toLowerCase();
+    return m.contains('provider_suspended') || m.contains('موقوف');
+  }
+
+  bool _isNetworkError(String msg) {
+    final m = msg.toLowerCase();
+    return m.contains('تعذر الاتصال بالإنترنت') ||
+        m.contains('network') ||
+        m.contains('connection') ||
+        m.contains('socket');
+  }
+
+  bool _isValidationError(String msg) {
+    final m = msg.toLowerCase();
+    return m.contains('validation error') || m.contains('unprocessable') || m.contains('422');
+  }
+
+  void _applyNonCredentialErrors(String msg) {
+    // ⚠️ لا تستخدمها لـ invalid credentials (لأننا بدنا SnackBar فقط)
+    if (_isProviderSuspended(msg)) {
+      _identifierServerError = 'حساب مزود الخدمة موقوف. يرجى التواصل مع الدعم.';
       _passwordServerError = null;
       _formError = null;
       return;
     }
 
-    // ✅ invalid credentials تحت الحقلين معًا
-    if (m.contains('بيانات الدخول غير صحيحة') ||
-        m.contains('invalid credentials') ||
-        m.contains('unauthorized')) {
-      final text =
-          'بيانات الدخول غير صحيحة. تأكد منها';
-      _identifierServerError = text;
-      _passwordServerError = text;
-      _formError = null;
+    // ✅ “Validation error” ما لازم تظهر… نخليها عربية وتحت حقل البريد/الهاتف
+    if (_isValidationError(msg)) {
+      _identifierServerError = 'المدخلات غير صحيحة، تأكد من البريد الإلكتروني أو رقم الهاتف.';
+      _passwordServerError = null;
+      _formError = null; // ✅ مهم: ما تظهر تحت "هل نسيت كلمة السر؟"
       return;
     }
 
-    // network
-    if (m.contains('تعذر الاتصال بالإنترنت') ||
-        m.contains('network') ||
-        m.contains('connection')) {
+    if (_isNetworkError(msg)) {
       _formError = 'تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.';
       _identifierServerError = null;
       _passwordServerError = null;
       return;
     }
 
-    _formError = msg;
+    // fallback عربي عام (بدون إنجليزي)
+    _formError = 'حدث خطأ غير متوقع، حاول مرة أخرى.';
     _identifierServerError = null;
     _passwordServerError = null;
   }
@@ -160,30 +197,39 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
       _formError = null;
     });
 
+    // ✅ validators (أخطاء تحت الحقول) قبل ما نوصل السيرفر
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      var identifierRaw = _identifierCtrl.text.trim();
-      final password = _passCtrl.text;
-
-      final normalized = _normalizeArabicDigits(identifierRaw);
+      final raw = _identifierCtrl.text.trim();
+      final normalized = _normalizeArabicDigits(raw);
       final isEmail = normalized.contains('@');
 
-      // ✅ لو هاتف: شيل أي رموز/شرطات/مسافات وخليه digits only
+      // ✅ لو هاتف: digits only (يدعم ٠٧٨-٦٠٤٦٠١١)
       final identifier = isEmail ? normalized.trim() : _digitsOnly(normalized);
 
       await ref.read(authControllerProvider.notifier).loginWithIdentifier(
             identifier: identifier,
-            password: password,
+            password: _passCtrl.text,
           );
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
-      setState(() => _applyServerError(msg));
 
-      // ✅ عشان تظهر أخطاء السيرفر تحت الحقول فورًا
+      // ✅ أهم شرط: invalid credentials = SnackBar فقط
+      if (_isInvalidCredentials(msg)) {
+        setState(() {
+          _identifierServerError = null;
+          _passwordServerError = null;
+          _formError = null;
+        });
+        _showInvalidCredSnackBar();
+        return;
+      }
+
+      setState(() => _applyNonCredentialErrors(msg));
       _formKey.currentState?.validate();
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -203,7 +249,9 @@ class _LoginViewBodyState extends ConsumerState<LoginViewBody> {
     } catch (e) {
       if (!mounted) return;
       final msg = e.toString().replaceFirst('Exception: ', '').trim();
-      setState(() => _applyServerError(msg));
+
+      // guest ما بدنا invalid creds هنا، بس نخليها عربية عامة لو صارت
+      setState(() => _applyNonCredentialErrors(msg));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

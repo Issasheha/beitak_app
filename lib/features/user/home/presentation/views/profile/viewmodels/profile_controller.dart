@@ -147,6 +147,13 @@ class ProfileController extends StateNotifier<ProfileState> {
     await LocalLogout.clearSessionOnly();
   }
 
+  void clearError() {
+    if (state.errorMessage != null) {
+      state = state.copyWith(clearError: true);
+    }
+  }
+
+
   String _mapError(Object e) {
     if (e is DioException) {
       final status = e.response?.statusCode;
@@ -188,4 +195,6 @@ class ProfileController extends StateNotifier<ProfileState> {
 
     return 'حدث خطأ، حاول مرة أخرى';
   }
+
+  
 }

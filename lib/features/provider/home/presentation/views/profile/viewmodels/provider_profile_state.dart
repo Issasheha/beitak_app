@@ -1,3 +1,5 @@
+// lib/features/provider/home/presentation/views/profile/viewmodels/provider_profile_state.dart
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -18,11 +20,11 @@ extension DocStatusX on DocStatus {
   Color get chipBg {
     switch (this) {
       case DocStatus.verified:
-        return const Color(0xFFE8F5E9); // أخضر فاتح
+        return const Color(0xFFE8F5E9);
       case DocStatus.inReview:
-        return const Color(0xFFFFF8E1); // أصفر فاتح
+        return const Color(0xFFFFF8E1);
       case DocStatus.required:
-        return const Color(0xFFFFEBEE); // أحمر فاتح
+        return const Color(0xFFFFEBEE);
     }
   }
 
@@ -61,13 +63,16 @@ class ProviderDocumentItem {
 
 @immutable
 class ProviderProfileState {
-  final Map<String, dynamic> provider; // raw provider from API (fallback-safe)
+  final Map<String, dynamic> provider;
 
   // header stats
   final int totalBookings;
   final double rating;
   final int ratingCount;
   final int completedBookings;
+
+  // ✅ NEW
+  final int experienceYears;
 
   // header identity
   final String displayName;
@@ -87,6 +92,7 @@ class ProviderProfileState {
     required this.rating,
     required this.ratingCount,
     required this.completedBookings,
+    required this.experienceYears,
     required this.displayName,
     required this.categoryLabel,
     required this.memberSinceLabel,
@@ -103,6 +109,7 @@ class ProviderProfileState {
       rating: 0.0,
       ratingCount: 0,
       completedBookings: 0,
+      experienceYears: 0,
       displayName: 'مزود خدمة',
       categoryLabel: 'خدمات',
       memberSinceLabel: 'Member since —',
@@ -119,6 +126,7 @@ class ProviderProfileState {
     double? rating,
     int? ratingCount,
     int? completedBookings,
+    int? experienceYears,
     String? displayName,
     String? categoryLabel,
     String? memberSinceLabel,
@@ -133,6 +141,7 @@ class ProviderProfileState {
       rating: rating ?? this.rating,
       ratingCount: ratingCount ?? this.ratingCount,
       completedBookings: completedBookings ?? this.completedBookings,
+      experienceYears: experienceYears ?? this.experienceYears,
       displayName: displayName ?? this.displayName,
       categoryLabel: categoryLabel ?? this.categoryLabel,
       memberSinceLabel: memberSinceLabel ?? this.memberSinceLabel,
@@ -152,6 +161,7 @@ class ProviderProfileState {
             other.rating == rating &&
             other.ratingCount == ratingCount &&
             other.completedBookings == completedBookings &&
+            other.experienceYears == experienceYears &&
             other.displayName == displayName &&
             other.categoryLabel == categoryLabel &&
             other.memberSinceLabel == memberSinceLabel &&
@@ -168,6 +178,7 @@ class ProviderProfileState {
         rating,
         ratingCount,
         completedBookings,
+        experienceYears,
         displayName,
         categoryLabel,
         memberSinceLabel,
@@ -178,7 +189,6 @@ class ProviderProfileState {
       );
 
   static int _mapHash(Map<String, dynamic> m) {
-    // hashing بسيط وآمن
     return Object.hashAll(m.entries.map((e) => Object.hash(e.key, e.value)));
   }
 }

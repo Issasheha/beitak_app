@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'https://enabled-worcester-solved-words.trycloudflare.com';
+      'https://rounds-dom-edt-stream.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
   static const String login = '/auth/login';
   static const String signup = '/auth/signup';
@@ -19,6 +19,7 @@ class ApiConstants {
   static String bookingProviderAction(int id) =>
       '/bookings/$id/provider-action';
   static const String bookingsSendOtp = '/bookings/send-otp';
+  static String providerById(int id) => '/providers/$id';
   static const String bookingsCreate = '/bookings';
   static const String serviceRequestsGuest = '/service-requests/guest';
   static const String services = '/services';
@@ -44,4 +45,10 @@ class ApiConstants {
   static const String categories = '/categories';
   static const String areas = '/locations/areas';
   static const String search = '/search';
+    static const String providerProfilePatch = '/providers/profile';
+   static const String providerRequestPhoneOtp =
+      '/providers/profile/phone/request-otp';
+
+  static const String providerVerifyPhoneOtp =
+      '/providers/profile/phone/verify-otp';
 }

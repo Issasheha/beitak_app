@@ -57,13 +57,11 @@ class AuthSessionModel {
         final key = k.toString();
         final value = node[k];
 
-        // direct hit
         if (keys.contains(key)) {
           final s = (value ?? '').toString().trim();
           if (s.isNotEmpty) return s;
         }
 
-        // recurse
         final found = _deepFindStringByKeys(value, keys);
         if (found != null && found.trim().isNotEmpty) return found;
       }
@@ -78,7 +76,6 @@ class AuthSessionModel {
 
   static Map<String, dynamic>? _deepFindUserMap(dynamic node) {
     bool looksLikeUser(Map m) {
-      // أقل شروط معقولة: id + first_name/last_name
       final hasId = m.containsKey('id');
       final hasFirst = m.containsKey('first_name') || m.containsKey('firstName');
       final hasLast = m.containsKey('last_name') || m.containsKey('lastName');
@@ -86,7 +83,6 @@ class AuthSessionModel {
     }
 
     if (node is Map) {
-      // direct user key
       final u = node['user'];
       if (u is Map && looksLikeUser(u)) return Map<String, dynamic>.from(u);
 
@@ -146,14 +142,12 @@ class AuthSessionModel {
   }
 
   factory AuthSessionModel.fromJson(Map<String, dynamic> json) {
-    // ✅ خذ التوكن من أي مكان بالـ response (حتى لو nested)
     final rawToken = _deepFindStringByKeys(
       json,
       {'token', 'access_token', 'auth_token', 'jwt'},
     );
     final token = (rawToken == null) ? null : _normalizeToken(rawToken);
 
-    // ✅ user من أي مكان
     final userMap = _deepFindUserMap(json);
     final user = userMap != null ? UserModel.fromJson(userMap) : null;
 

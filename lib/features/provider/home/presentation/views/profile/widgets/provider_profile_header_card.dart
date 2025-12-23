@@ -26,6 +26,9 @@ class ProviderProfileHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final expLabel =
+        state.experienceYears > 0 ? '${state.experienceYears} سنة' : '—';
+
     return Container(
       padding: SizeConfig.padding(all: 18),
       decoration: BoxDecoration(
@@ -81,6 +84,18 @@ class ProviderProfileHeaderCard extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
           ),
+
+          // ✅ NEW: Experience
+          SizeConfig.v(6),
+          Text(
+            'سنوات الخبرة: $expLabel',
+            style: AppTextStyles.label12.copyWith(
+              fontSize: SizeConfig.ts(12),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
           SizeConfig.v(14),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,

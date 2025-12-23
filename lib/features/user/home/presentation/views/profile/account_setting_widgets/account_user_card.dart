@@ -11,9 +11,9 @@ class AccountUserCard extends StatelessWidget {
 
   String _initials(String s) {
     final parts = s.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
-    if (parts.isEmpty) return 'ض';
+    if (parts.isEmpty) return '؟';
     final first = parts.first;
-    return first.characters.isNotEmpty ? first.characters.first : 'ض';
+    return first.characters.isNotEmpty ? first.characters.first : '؟';
   }
 
   String _memberSinceAr(DateTime? createdAt) {
@@ -26,15 +26,63 @@ class AccountUserCard extends StatelessWidget {
     return '$m ${createdAt.year}';
   }
 
+  void _showValueSheet(BuildContext context, {required String title, required String value}) {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 8,
+              bottom: 16 + MediaQuery.of(context).padding.bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(14),
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(10)),
+                SelectableText(
+                  value,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(13),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                SizedBox(height: SizeConfig.h(12)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isLoading = profile == null;
+
     final name = (profile?.name ?? '').trim();
-    final safeName = name.isNotEmpty ? name : 'ضيف عزيز';
+    // ✅ بدل “ضيف عزيز” (اللي كانت تظهر قبل تحميل البيانات)
+    final safeName = isLoading ? 'جاري التحميل...' : (name.isNotEmpty ? name : '—');
 
     final email = (profile?.email ?? '').trim();
     final phone = (profile?.phone ?? '').trim();
 
-    final city = (profile?.city ?? '').trim(); // ✅ City فقط
+    final city = (profile?.city ?? '').trim();
     final createdAt = profile?.createdAt;
 
     return Container(
@@ -53,7 +101,6 @@ class AccountUserCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Avatar
           Container(
             width: SizeConfig.w(64),
             height: SizeConfig.w(64),
@@ -122,7 +169,6 @@ class AccountUserCard extends StatelessWidget {
           Container(height: 1, color: Colors.grey.withValues(alpha: 0.14)),
           SizedBox(height: SizeConfig.h(10)),
 
-          // Contact row (زي الصورة تحت)
           Row(
             children: [
               Expanded(
@@ -130,14 +176,23 @@ class AccountUserCard extends StatelessWidget {
                   icon: Icons.phone_outlined,
                   text: phone.isNotEmpty ? phone : '—',
                   ltr: true,
+                  maxLines: 1,
+                  onTap: phone.isNotEmpty
+                      ? () => _showValueSheet(context, title: 'رقم الهاتف', value: phone)
+                      : null,
                 ),
               ),
               SizedBox(width: SizeConfig.w(10)),
               Expanded(
                 child: _MiniInfo(
                   icon: Icons.email_outlined,
+                  // ✅ خلي البريد يظهر أكثر (سطرين) + إمكانية فتحه كامل
                   text: email.isNotEmpty ? email : '—',
                   ltr: true,
+                  maxLines: 2,
+                  onTap: email.isNotEmpty
+                      ? () => _showValueSheet(context, title: 'البريد الإلكتروني', value: email)
+                      : null,
                 ),
               ),
             ],
@@ -152,15 +207,41 @@ class _MiniInfo extends StatelessWidget {
   final IconData icon;
   final String text;
   final bool ltr;
+  final int maxLines;
+  final VoidCallback? onTap;
 
   const _MiniInfo({
     required this.icon,
     required this.text,
     this.ltr = false,
+    this.maxLines = 1,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final content = Row(
+      children: [
+        Icon(icon, size: SizeConfig.w(16), color: AppColors.textSecondary),
+        SizedBox(width: SizeConfig.w(8)),
+        Expanded(
+          child: Directionality(
+            textDirection: ltr ? TextDirection.ltr : TextDirection.rtl,
+            child: Text(
+              text,
+              maxLines: maxLines,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: SizeConfig.ts(12),
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
     return Container(
       padding: SizeConfig.padding(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
@@ -168,27 +249,13 @@ class _MiniInfo extends StatelessWidget {
         borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
         border: Border.all(color: Colors.grey.withValues(alpha: 0.14)),
       ),
-      child: Row(
-        children: [
-          Icon(icon, size: SizeConfig.w(16), color: AppColors.textSecondary),
-          SizedBox(width: SizeConfig.w(8)),
-          Expanded(
-            child: Directionality(
-              textDirection: ltr ? TextDirection.ltr : TextDirection.rtl,
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: SizeConfig.ts(12),
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
+      child: onTap == null
+          ? content
+          : InkWell(
+              borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+              onTap: onTap,
+              child: content,
             ),
-          ),
-        ],
-      ),
     );
   }
 }

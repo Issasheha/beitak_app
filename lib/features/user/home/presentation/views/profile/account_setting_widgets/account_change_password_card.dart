@@ -34,6 +34,13 @@ class _AccountChangePasswordCardState extends ConsumerState<AccountChangePasswor
     vm = ChangePasswordViewModel(
       changePasswordUseCase: ChangePasswordUseCase(repo),
     );
+
+    // ✅ إذا كان في خطأ من السيرفر على كلمة المرور الحالية، أول ما يبلش يكتب امسحه
+    currentC.addListener(() {
+      if (vm.currentPasswordError != null) {
+        vm.clearCurrentPasswordError();
+      }
+    });
   }
 
   @override
@@ -45,27 +52,77 @@ class _AccountChangePasswordCardState extends ConsumerState<AccountChangePasswor
     super.dispose();
   }
 
+  void _showSnack(String msg, {bool success = true}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: 16 + MediaQuery.of(context).padding.bottom,
+        ),
+        duration: const Duration(seconds: 3),
+        backgroundColor: success ? AppColors.lightGreen : Colors.black87,
+        content: Row(
+          children: [
+            Icon(success ? Icons.check_circle : Icons.info_outline, color: Colors.white),
+            SizedBox(width: SizeConfig.w(10)),
+            Expanded(
+              child: Text(
+                msg,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: SizeConfig.ts(12.5),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _validateCurrent(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'كلمة المرور الحالية مطلوبة';
+    if (vm.currentPasswordError != null) return vm.currentPasswordError;
+    return null;
+  }
+
   String? _validateNewPassword(String? v) {
     final s = (v ?? '');
-    if (s.isEmpty) return 'كلمة المرور الجديدة مطلوبة';
-    if (s.contains(' ')) return 'بدون مسافات';
-    if (s.length < 6) return '• 6 أحرف على الأقل';
-    if (!RegExp(r'[A-Z]').hasMatch(s)) return '• حرف كبير واحد على الأقل (A-Z)';
-    if (!RegExp(r'\d').hasMatch(s)) return '• رقم واحد على الأقل';
+    if (s.trim().isEmpty) return 'كلمة المرور الجديدة مطلوبة';
+    if (s.contains(' ')) return 'كلمة المرور الجديدة لا يجب أن تحتوي على مسافات';
+
+    // ✅ QA: لازم 8 أحرف (مش 6)
+    if (s.length < 8) return 'كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل';
+
+    if (!RegExp(r'[A-Z]').hasMatch(s)) return 'أضف حرفًا كبيرًا واحدًا على الأقل (A-Z)';
+    if (!RegExp(r'\d').hasMatch(s)) return 'أضف رقمًا واحدًا على الأقل';
     if (!RegExp(r'[@#$%^&*()_\-+=\[\]{};:,.!?/\\|<>~`]').hasMatch(s)) {
-      return '• رمز خاص واحد على الأقل (مثل @ أو # أو \$)';
+      return 'أضف رمزًا خاصًا واحدًا على الأقل (مثل @ أو #)';
     }
     return null;
   }
 
   String? _validateConfirm(String? v) {
-    if ((v ?? '').isEmpty) return 'تأكيد كلمة المرور مطلوب';
-    if (v != newC.text) return 'كلمتا المرور غير متطابقتين';
+    final s = (v ?? '');
+    if (s.trim().isEmpty) return 'تأكيد كلمة المرور مطلوب';
+    if (s != newC.text) return 'كلمتا المرور غير متطابقتين';
     return null;
   }
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
+
+    // امسح أخطاء السيرفر قبل الفحص
+    vm.clearCurrentPasswordError();
+
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -81,13 +138,16 @@ class _AccountChangePasswordCardState extends ConsumerState<AccountChangePasswor
       currentC.clear();
       newC.clear();
       confirmC.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تغيير كلمة المرور بنجاح')),
-      );
+      _showSnack('تم تغيير كلمة المرور بنجاح');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(vm.errorMessage ?? 'حدث خطأ، حاول مرة أخرى')),
-      );
+      // ✅ إذا المشكلة من كلمة المرور الحالية: أظهرها تحت الحقل بشكل واضح
+      if (vm.currentPasswordError != null) {
+        _formKey.currentState?.validate();
+        _showSnack(vm.currentPasswordError!, success: false);
+        return;
+      }
+
+      _showSnack(vm.errorMessage ?? 'حدث خطأ، حاول مرة أخرى', success: false);
     }
   }
 
@@ -124,7 +184,7 @@ class _AccountChangePasswordCardState extends ConsumerState<AccountChangePasswor
                   controller: currentC,
                   obscure: hideCurrent,
                   onToggle: () => setState(() => hideCurrent = !hideCurrent),
-                  validator: (v) => (v ?? '').isEmpty ? 'كلمة المرور الحالية مطلوبة' : null,
+                  validator: _validateCurrent,
                 ),
                 SizedBox(height: SizeConfig.h(10)),
 
@@ -206,6 +266,7 @@ class _PwdField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        errorMaxLines: 3,
         suffixIcon: IconButton(
           onPressed: onToggle,
           icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),

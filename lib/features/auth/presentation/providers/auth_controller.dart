@@ -176,23 +176,16 @@ class AuthController extends StateNotifier<AuthState> {
       throw Exception('تعذر المتابعة كزائر، حاول مرة أخرى.');
     }
   }
-
-  Future<void> logout() async {
-    try {
-      await _repo.logout();
-      state = const AuthState.unauthenticated();
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
-        throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
-      }
-      throw Exception('حدث خطأ في الاتصال، حاول مرة أخرى.');
-    } on SocketException {
-      throw Exception('تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.');
-    } catch (_) {
-      throw Exception('تعذر تسجيل الخروج، حاول مرة أخرى.');
-    }
+Future<void> logout() async {
+  // ✅ 1) دائماً خليك تعتبر logout محلي أولاً (حتى لو API فشل)
+  try {
+    await _repo.logout();
+  } catch (_) {
+    // نتجاهل أي خطأ من السيرفر/الشبكة
+  } finally {
+    // ✅ 2) المهم: صفّر الحالة دائماً
+    state = const AuthState.unauthenticated();
   }
 }
+
+  }
