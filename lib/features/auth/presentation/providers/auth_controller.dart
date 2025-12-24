@@ -20,11 +20,13 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final session = await _repo.loadSavedSession();
 
+      // ✅ بعد تعديل التخزين: الضيف لن يكون محفوظ، فسيكون null بعد restart
       if (session == null) {
         state = const AuthState.unauthenticated();
         return;
       }
 
+      // احتياط لو رجع guest (ما لازم يصير بعد التعديل)
       if (session.isGuest) {
         state = AuthState.guest(session);
         return;
@@ -50,12 +52,10 @@ class AuthController extends StateNotifier<AuthState> {
   String _mapLoginError(String msg, {int? statusCode}) {
     final m = msg.toLowerCase().trim();
 
-    // provider_suspended
     if (m.contains('provider_suspended')) {
       return 'حساب مزود الخدمة موقوف. يرجى التواصل مع الدعم.';
     }
 
-    // invalid credentials / wrong login
     if (m.contains('invalid credentials') ||
         m.contains('invalid credential') ||
         m.contains('unauthorized') ||
@@ -64,7 +64,6 @@ class AuthController extends StateNotifier<AuthState> {
       return 'بيانات الدخول غير صحيحة. تأكد منها';
     }
 
-    // generic network english coming from somewhere
     if (m.contains('network error')) {
       return 'تعذر الاتصال بالإنترنت، تحقق من الشبكة وحاول مرة أخرى.';
     }
@@ -90,7 +89,6 @@ class AuthController extends StateNotifier<AuthState> {
 
       state = AuthState.authenticated(session);
     } on DioException catch (e) {
-      // ✅ تعريب أخطاء الشبكة
       if (e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
@@ -159,6 +157,8 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> continueAsGuest() async {
     try {
       final session = await _repo.continueAsGuest();
+
+      // ✅ هذا سيُدخل الضيف داخل نفس تشغيل التطبيق فقط
       state = AuthState.guest(session);
     } on CacheException catch (e) {
       throw Exception(e.message);
@@ -176,16 +176,14 @@ class AuthController extends StateNotifier<AuthState> {
       throw Exception('تعذر المتابعة كزائر، حاول مرة أخرى.');
     }
   }
-Future<void> logout() async {
-  // ✅ 1) دائماً خليك تعتبر logout محلي أولاً (حتى لو API فشل)
-  try {
-    await _repo.logout();
-  } catch (_) {
-    // نتجاهل أي خطأ من السيرفر/الشبكة
-  } finally {
-    // ✅ 2) المهم: صفّر الحالة دائماً
-    state = const AuthState.unauthenticated();
+
+  Future<void> logout() async {
+    try {
+      await _repo.logout();
+    } catch (_) {
+      // نتجاهل أي خطأ
+    } finally {
+      state = const AuthState.unauthenticated();
+    }
   }
 }
-
-  }

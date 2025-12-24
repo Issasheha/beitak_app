@@ -1,5 +1,3 @@
-// lib/features/auth/data/repositories/auth_repository_impl.dart
-
 import '../../domain/entities/auth_session_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_local_datasource.dart';
@@ -57,7 +55,6 @@ class AuthRepositoryImpl implements AuthRepository {
       areaId: areaId,
     );
 
-    // نحفظ الجلسة (token + user) تماماً مثل تسجيل الدخول
     await _local.cacheAuthSession(sessionModel);
 
     return sessionModel.toEntity();
@@ -84,8 +81,6 @@ class AuthRepositoryImpl implements AuthRepository {
     required String code,
     required String newPassword,
   }) {
-    // نفس ملاحظة الـ Remote Data Source:
-    // ما في Endpoint واضح، فهذه تعتمد على تطوير الباك إند لاحقاً.
     return _remote.resetPassword(
       phone: phone,
       code: code,
@@ -103,15 +98,16 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<void> logout() async {
-    // في الباك إند ما فيه /auth/logout حالياً
-    // فبنكتفي بمسح السشن المحلي
     await _local.clearSession();
   }
 
   @override
   Future<AuthSessionEntity> continueAsGuest() async {
     final guestSession = AuthSessionModel.guest();
-    await _local.cacheAuthSession(guestSession);
+
+    // ✅ ممنوع نخزّن الضيف (Runtime فقط)
+    // await _local.cacheAuthSession(guestSession);
+
     return guestSession.toEntity();
   }
 }

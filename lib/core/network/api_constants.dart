@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'https://rounds-dom-edt-stream.trycloudflare.com';
+      'https://airlines-across-cayman-spyware.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
   static const String login = '/auth/login';
   static const String signup = '/auth/signup';

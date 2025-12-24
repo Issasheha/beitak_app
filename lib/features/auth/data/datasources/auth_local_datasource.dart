@@ -15,7 +15,7 @@ abstract class AuthLocalDataSource {
   /// حذف الجلسة كاملة (تسجيل خروج).
   Future<void> clearSession();
 
-  /// ✅ NEW: تحديث بيانات المستخدم داخل الجلسة المخزنة (بدون ما نخرب التوكن)
+  /// ✅ تحديث بيانات المستخدم داخل الجلسة المخزنة (بدون ما نخرب التوكن)
   Future<void> updateCachedUser({
     String? firstName,
     String? lastName,
@@ -33,24 +33,41 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   static const _isGuestKey = 'is_guest';
   static const _seenOnboardingKey = 'seen_onboarding';
 
-  // 🔹 مفتاح جديد لتخزين role المستخدم (customer / provider / ..)
+  // 🔹 مفتاح لتخزين role المستخدم (customer / provider / ..)
   static const _userRoleKey = 'user_role';
 
   @override
   Future<void> cacheAuthSession(AuthSessionModel session) async {
     final prefs = await SharedPreferences.getInstance();
 
-    // ✅ تنظيف التوكن + تحديد guest بناءً على وجود token
+    // ✅ تنظيف التوكن
     final raw = (session.token ?? '').trim();
     final clean = raw.toLowerCase().startsWith('bearer ')
         ? raw.substring(7).trim()
         : raw;
     final hasToken = clean.isNotEmpty;
 
+    // ✅ مهم: الضيف لا يُخزَّن نهائيًا (جلسة مؤقتة داخل runtime فقط)
+    if (!hasToken) {
+      // تنظيف أي بقايا سابقة
+      await prefs.remove(_sessionKey);
+
+      // اعتبره غير مسجّل دخول عند إعادة فتح التطبيق
+      await prefs.setBool(_isLoggedInKey, false);
+      await prefs.setBool(_isGuestKey, false);
+
+      // onboarding نتركه true بعد أول مرة
+      await prefs.setBool(_seenOnboardingKey, true);
+
+      await prefs.remove(_userRoleKey);
+      return;
+    }
+
+    // ✅ مستخدم حقيقي فقط
     final fixedSession = AuthSessionModel(
-      token: hasToken ? clean : null,
+      token: clean,
       user: session.user,
-      isGuest: !hasToken,
+      isGuest: false,
       isNewUser: session.isNewUser,
       expiresAt: session.expiresAt,
     );
@@ -62,12 +79,10 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       throw const CacheException('Failed to cache auth session');
     }
 
-    // ✅ أي جلسة (ضيف أو مستخدم حقيقي) نعتبره "داخل التطبيق"
     await prefs.setBool(_isLoggedInKey, true);
     await prefs.setBool(_seenOnboardingKey, true);
-    await prefs.setBool(_isGuestKey, fixedSession.isGuest);
+    await prefs.setBool(_isGuestKey, false);
 
-    // 🔹 نخزّن الـ role لو موجود
     final role = fixedSession.user?.role;
     if (role != null && role.isNotEmpty) {
       await prefs.setString(_userRoleKey, role);
@@ -85,7 +100,19 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
     try {
       final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
-      return AuthSessionModel.fromJson(jsonMap);
+      final session = AuthSessionModel.fromJson(jsonMap);
+
+      // ✅ Migration + Safety:
+      // لو لأي سبب session طلعت Guest (token فاضي) → اعتبرها null وامسحها.
+      if (session.isGuest || session.token == null || session.token!.isEmpty) {
+        await prefs.remove(_sessionKey);
+        await prefs.setBool(_isLoggedInKey, false);
+        await prefs.setBool(_isGuestKey, false);
+        await prefs.remove(_userRoleKey);
+        return null;
+      }
+
+      return session;
     } catch (_) {
       throw const CacheException('Failed to parse cached auth session');
     }
@@ -102,7 +129,6 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     final session = await getCachedAuthSession();
     if (session == null) return;
 
-    // لو ضيف أو ما في user، ما في إشي نحدّثه
     final currentUser = session.user;
     if (session.isGuest || currentUser == null) return;
 
@@ -116,7 +142,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
     final updatedSession = session.copyWith(user: updatedUser);
 
-    // ✅ استخدم نفس cacheAuthSession عشان ما نخرب مفاتيح is_guest/is_logged_in والـrole
+    // ✅ يعيد تخزين session كمستخدم حقيقي فقط
     await cacheAuthSession(updatedSession);
   }
 
@@ -125,12 +151,11 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionKey);
 
-    // تسجيل خروج: مش مسجّل دخول، ومش ضيف
     await prefs.setBool(_isLoggedInKey, false);
     await prefs.setBool(_isGuestKey, false);
-    // ما بنرجّع الـ onboarding، نخلي seen_onboarding زي ما هو (غالباً true)
 
-    // 🔹 نمسح الـ role كمان
+    // seen_onboarding نخليه زي ما هو
+
     await prefs.remove(_userRoleKey);
   }
 }
