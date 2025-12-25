@@ -24,6 +24,14 @@ class AreaDropdownField extends StatelessWidget {
     required this.onRetry,
   });
 
+  String _areaName(AreaModel a) {
+    final ar = a.nameAr.trim();
+    final en = a.nameEn.trim();
+    if (ar.isNotEmpty) return ar;
+    if (en.isNotEmpty) return en;
+    return a.slug.trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!enabled) {
@@ -78,10 +86,7 @@ class AreaDropdownField extends StatelessWidget {
             (a) => DropdownMenuItem(
               value: a,
               child: Text(
-                // افترض إن عندك name_ar أو name في الـ model
-                (a.nameAr?.trim().isNotEmpty == true)
-                    ? a.nameAr!.trim()
-                    : (a.nameAr?.toString() ?? ''),
+                _areaName(a),
                 textDirection: TextDirection.rtl,
                 overflow: TextOverflow.ellipsis,
               ),

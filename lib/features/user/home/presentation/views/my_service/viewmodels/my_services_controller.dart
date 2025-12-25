@@ -426,6 +426,7 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     }
   }
 
+  // ✅ UPDATED: archive صار يشمل incomplete
   List<BookingListItem> _applyTabFilter(
     MyServicesTab tab,
     List<BookingListItem> items,
@@ -435,7 +436,7 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       if (tab == MyServicesTab.upcoming) return it.isUpcoming;
 
       if (tab == MyServicesTab.archive) {
-        return it.isCompleted || it.isCancelled;
+        return it.isCompleted || it.isCancelled || it.isIncomplete;
       }
       return true;
     }).toList();
@@ -459,13 +460,14 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       serviceNameRaw = (service['name_ar'] ??
               service['nameAr'] ??
               service['name_localized'] ??
+              service['nameLocalized'] ??
               service['name'] ??
               '')
           .toString()
           .trim();
     }
 
-    // category العربي موجود في provider.category.name_ar (زي الريسبونس عندك)
+    // category العربي موجود في provider.category.name_ar
     String? categoryAr;
     final provider = json['provider'];
     if (provider is Map<String, dynamic>) {
@@ -481,7 +483,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     } else if (_hasArabic(serviceNameRaw)) {
       serviceName = serviceNameRaw;
     } else {
-      // ✅ إنجليزي → ترجمة محلية
       serviceName = _fallbackServiceNameAr(
         englishName: serviceNameRaw,
         categoryAr: categoryAr,
@@ -536,10 +537,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     );
   }
 
-  // -------------------------
-  // ✅ NEW: Arabic fallback for English service names
-  // -------------------------
-
   bool _hasArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
 
   String _fallbackServiceNameAr({
@@ -548,7 +545,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
   }) {
     final key = englishName.trim().toLowerCase();
 
-    // 1) قاموس سريع للأسماء الشائعة
     const dict = <String, String>{
       'plumbing repair': 'تصليح السباكة',
       'plumbing': 'سباكة',
@@ -558,14 +554,14 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       'electrical repair': 'تصليح كهرباء',
       'appliance repair': 'تصليح أجهزة',
       'ac repair': 'تصليح تكييف',
+      'ceiling fan installation': 'تركيب مروحة سقف',
+      'deep house cleaning': 'تنظيف منزل عميق',
     };
 
     final direct = dict[key];
     if (direct != null) return direct;
 
-    // 2) قواعد بسيطة
     if (key.contains('repair') && categoryAr != null && categoryAr.isNotEmpty) {
-      // مثال: Repair + categoryAr => تصليح السباكة
       return 'تصليح $categoryAr';
     }
 
@@ -573,7 +569,6 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       return 'تنظيف $categoryAr';
     }
 
-    // 3) آخر fallback: اسم عربي عام من التصنيف
     if (categoryAr != null && categoryAr.isNotEmpty) {
       return 'خدمة $categoryAr';
     }
@@ -581,23 +576,31 @@ class MyServicesController extends StateNotifier<MyServicesState> {
     return 'خدمة';
   }
 
+  // ✅ UPDATED: added incomplete
   String _statusToType(String status) {
     switch (status) {
       case 'pending_provider_accept':
       case 'pending':
         return 'قيد الانتظار';
+
       case 'confirmed':
       case 'provider_on_way':
       case 'provider_arrived':
       case 'in_progress':
         return 'قادمة';
+
       case 'completed':
         return 'مكتملة';
+
+      case 'incomplete':
+        return 'غير مكتملة';
+
       case 'cancelled':
       case 'refunded':
         return 'ملغاة';
+
       default:
-        return 'قيد الانتظار';
+        return 'حالة الطلب';
     }
   }
 

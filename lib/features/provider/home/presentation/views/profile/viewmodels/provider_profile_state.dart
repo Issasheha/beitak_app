@@ -3,7 +3,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-enum DocStatus { verified, inReview, required }
+enum DocStatus { verified, inReview, required, recommended }
 
 extension DocStatusX on DocStatus {
   String get labelAr {
@@ -14,6 +14,8 @@ extension DocStatusX on DocStatus {
         return 'قيد المراجعة';
       case DocStatus.required:
         return 'مطلوب';
+      case DocStatus.recommended:
+        return 'مستحسن';
     }
   }
 
@@ -25,6 +27,8 @@ extension DocStatusX on DocStatus {
         return const Color(0xFFFFF8E1);
       case DocStatus.required:
         return const Color(0xFFFFEBEE);
+      case DocStatus.recommended:
+        return const Color(0xFFE7F1FF);
     }
   }
 
@@ -36,6 +40,8 @@ extension DocStatusX on DocStatus {
         return const Color(0xFFF57F17);
       case DocStatus.required:
         return const Color(0xFFC62828);
+      case DocStatus.recommended:
+        return const Color(0xFF1E5AA8);
     }
   }
 }
@@ -65,26 +71,27 @@ class ProviderDocumentItem {
 class ProviderProfileState {
   final Map<String, dynamic> provider;
 
-  // header stats
   final int totalBookings;
   final double rating;
   final int ratingCount;
   final int completedBookings;
 
-  // ✅ NEW
   final int experienceYears;
 
-  // header identity
   final String displayName;
   final String categoryLabel;
   final String memberSinceLabel;
 
-  // sections
   final String bio;
   final bool isAvailable;
   final String locationLabel;
 
   final List<ProviderDocumentItem> documents;
+
+  final bool isFullyVerified;
+  final List<String> missingRequiredDocs;
+
+  final bool isUpdatingAvailability;
 
   const ProviderProfileState({
     required this.provider,
@@ -100,6 +107,9 @@ class ProviderProfileState {
     required this.isAvailable,
     required this.locationLabel,
     required this.documents,
+    required this.isFullyVerified,
+    required this.missingRequiredDocs,
+    required this.isUpdatingAvailability,
   });
 
   factory ProviderProfileState.empty() {
@@ -112,11 +122,14 @@ class ProviderProfileState {
       experienceYears: 0,
       displayName: 'مزود خدمة',
       categoryLabel: 'خدمات',
-      memberSinceLabel: 'Member since —',
+      memberSinceLabel: 'عضو منذ —',
       bio: '—',
       isAvailable: false,
-      locationLabel: 'عمان، الأردن',
+      locationLabel: '',
       documents: <ProviderDocumentItem>[],
+      isFullyVerified: false,
+      missingRequiredDocs: <String>[],
+      isUpdatingAvailability: false,
     );
   }
 
@@ -134,6 +147,9 @@ class ProviderProfileState {
     bool? isAvailable,
     String? locationLabel,
     List<ProviderDocumentItem>? documents,
+    bool? isFullyVerified,
+    List<String>? missingRequiredDocs,
+    bool? isUpdatingAvailability,
   }) {
     return ProviderProfileState(
       provider: provider ?? this.provider,
@@ -149,14 +165,20 @@ class ProviderProfileState {
       isAvailable: isAvailable ?? this.isAvailable,
       locationLabel: locationLabel ?? this.locationLabel,
       documents: documents ?? this.documents,
+      isFullyVerified: isFullyVerified ?? this.isFullyVerified,
+      missingRequiredDocs: missingRequiredDocs ?? this.missingRequiredDocs,
+      isUpdatingAvailability: isUpdatingAvailability ?? this.isUpdatingAvailability,
     );
   }
 
+  // ✅ PERFORMANCE NOTE:
+  // لا تعمل deep compare على provider map (مكلف جدًا).
+  // اعمل compare بالـidentity فقط.
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other is ProviderProfileState &&
-            mapEquals(other.provider, provider) &&
+            identical(other.provider, provider) &&
             other.totalBookings == totalBookings &&
             other.rating == rating &&
             other.ratingCount == ratingCount &&
@@ -168,12 +190,15 @@ class ProviderProfileState {
             other.bio == bio &&
             other.isAvailable == isAvailable &&
             other.locationLabel == locationLabel &&
-            listEquals(other.documents, documents));
+            listEquals(other.documents, documents) &&
+            other.isFullyVerified == isFullyVerified &&
+            listEquals(other.missingRequiredDocs, missingRequiredDocs) &&
+            other.isUpdatingAvailability == isUpdatingAvailability);
   }
 
   @override
   int get hashCode => Object.hash(
-        _mapHash(provider),
+        identityHashCode(provider),
         totalBookings,
         rating,
         ratingCount,
@@ -186,9 +211,8 @@ class ProviderProfileState {
         isAvailable,
         locationLabel,
         Object.hashAll(documents),
+        isFullyVerified,
+        Object.hashAll(missingRequiredDocs),
+        isUpdatingAvailability,
       );
-
-  static int _mapHash(Map<String, dynamic> m) {
-    return Object.hashAll(m.entries.map((e) => Object.hash(e.key, e.value)));
-  }
 }

@@ -1,9 +1,10 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/time_format.dart'; // ✅ نستخدم الملف الموحد
 import 'package:flutter/material.dart';
 
 class TimeSelectionField extends StatelessWidget {
-  final String? selectedHour; // "HH:00"
+  final String? selectedHour; // stored as "HH:00"
   final ValueChanged<String> onPickHour;
 
   const TimeSelectionField({
@@ -14,6 +15,10 @@ class TimeSelectionField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final display = (selectedHour == null)
+        ? null
+        : TimeFormat.timeStringToAr12(selectedHour!); // ✅ "9:00 ص" / "1:00 م"
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -56,12 +61,17 @@ class TimeSelectionField extends StatelessWidget {
                             separatorBuilder: (_, __) => const Divider(height: 1),
                             itemBuilder: (c, i) {
                               final hh = i.toString().padLeft(2, '0');
-                              final value = '$hh:00';
+                              final value = '$hh:00'; // ✅ المخزن/المرسل للـ API (مثل قبل)
+                              final label = TimeFormat.timeStringToAr12(value); // ✅ "9:00 ص"
                               final selected = selectedHour == value;
+
                               return ListTile(
-                                leading: Icon(Icons.schedule, color: selected ? AppColors.lightGreen : AppColors.textSecondary),
+                                leading: Icon(
+                                  Icons.schedule,
+                                  color: selected ? AppColors.lightGreen : AppColors.textSecondary,
+                                ),
                                 title: Text(
-                                  value,
+                                  label,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     color: selected ? AppColors.lightGreen : AppColors.textPrimary,
@@ -96,11 +106,13 @@ class TimeSelectionField extends StatelessWidget {
                 SizedBox(width: SizeConfig.w(10)),
                 Expanded(
                   child: Text(
-                    selectedHour ?? 'اختر الوقت',
+                    display ?? 'اختر الوقت',
                     style: TextStyle(
                       fontSize: SizeConfig.ts(13),
                       fontWeight: FontWeight.w800,
-                      color: selectedHour == null ? AppColors.textSecondary.withValues(alpha: 0.7) : AppColors.textPrimary,
+                      color: selectedHour == null
+                          ? AppColors.textSecondary.withValues(alpha: 0.7)
+                          : AppColors.textPrimary,
                     ),
                   ),
                 ),

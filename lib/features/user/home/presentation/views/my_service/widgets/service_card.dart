@@ -22,6 +22,7 @@ class ServiceCard extends ConsumerWidget {
 
     final isCancelled = s == 'cancelled' || s == 'refunded';
     final isCompleted = s == 'completed';
+    final isIncomplete = s == 'incomplete'; // ✅ NEW
     final isPending = s == 'pending_provider_accept' || s == 'pending';
     final isUpcoming = const {
       'confirmed',
@@ -57,6 +58,15 @@ class ServiceCard extends ConsumerWidget {
         label: 'قادمة',
         color: AppColors.lightGreen,
         icon: Icons.schedule_rounded,
+      );
+    }
+
+    // ✅ NEW
+    if (isIncomplete) {
+      return _CardStatusUi(
+        label: 'غير مكتملة',
+        color: Colors.grey.shade700,
+        icon: Icons.error_outline_rounded,
       );
     }
 
@@ -106,7 +116,6 @@ class ServiceCard extends ConsumerWidget {
           ),
           child: Stack(
             children: [
-              // ✅ الخط الملوّن على اليمين (start في RTL = يمين)
               PositionedDirectional(
                 start: 0,
                 top: 10,
@@ -119,13 +128,11 @@ class ServiceCard extends ConsumerWidget {
                   ),
                 ),
               ),
-
               Padding(
                 padding: SizeConfig.padding(all: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // ✅ مثل الصورة: البادج يسار - رقم الطلب يمين
                     Row(
                       children: [
                         _StatusPill(ui: ui),
@@ -141,9 +148,7 @@ class ServiceCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-
                     SizeConfig.v(12),
-
                     Text(
                       title.isEmpty ? '—' : title,
                       textAlign: TextAlign.center,
@@ -153,10 +158,7 @@ class ServiceCard extends ConsumerWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
-
                     SizeConfig.v(14),
-
-                    // ✅ مثل الصورة: (النص ثم الأيقونة) للتاريخ والوقت
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -171,10 +173,7 @@ class ServiceCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-
                     SizeConfig.v(12),
-
-                    // ✅ مثل الصورة: الموقع ثم أيقونة الدبوس بالآخر
                     Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
@@ -197,16 +196,12 @@ class ServiceCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-
                     SizeConfig.v(16),
-
-                    // ✅ زر مثل الصورة: يسار + سهم باليمين
                     Align(
                       alignment: Alignment.centerRight,
                       child: SizedBox(
                         height: 40,
                         child: ElevatedButton(
-
                           onPressed: () => _openDetails(context),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.lightGreen,
@@ -283,7 +278,6 @@ class _StatusPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ✅ مثل الصورة: النص وبعدين الأيقونة (عشان الأيقونة تبين يسار داخل البادج)
           Text(
             ui.label,
             style: TextStyle(

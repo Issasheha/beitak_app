@@ -1,14 +1,18 @@
+// lib/features/provider/home/presentation/views/profile/account/provider_account_edit_view.dart
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/profile/account/account_edit_state.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/profile/account/account_profile_providers.dart';
+import 'package:beitak_app/features/provider/home/presentation/providers/provider_home_providers.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/viewmodels/account_edit_state.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/viewmodels/account_profile_providers.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/widgets/account_error_view.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/widgets/provider_account_password_card.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/widgets/provider_account_profile_card.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/widgets/provider_change_phone_sheet.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/account/widgets/provider_phone_otp_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-// ✅ لتحديث اسم الداشبورد فوراً
-import 'package:beitak_app/features/provider/home/presentation/providers/provider_home_providers.dart';
 
 // ✅ لاستخدام local provider بدل إنشاء Impl جديد
 import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
@@ -36,13 +40,14 @@ class _ProviderAccountEditViewState
 
   bool _initFromState = false;
 
-  bool _showCurrent = false;
-  bool _showNew = false;
-  bool _showConfirm = false;
+  // ✅ listenables لتحديث كارد واحد بدل الصفحة كلها
+  late final Listenable _profileListen;
+  late final Listenable _passwordListen;
 
   @override
   void initState() {
     super.initState();
+
     _fullNameCtrl = TextEditingController();
     _emailCtrl = TextEditingController();
     _phoneCtrl = TextEditingController();
@@ -50,6 +55,10 @@ class _ProviderAccountEditViewState
     _currentPassCtrl = TextEditingController();
     _newPassCtrl = TextEditingController();
     _confirmPassCtrl = TextEditingController();
+
+    _profileListen = Listenable.merge([_fullNameCtrl, _emailCtrl]);
+    _passwordListen =
+        Listenable.merge([_currentPassCtrl, _newPassCtrl, _confirmPassCtrl]);
   }
 
   @override
@@ -69,324 +78,144 @@ class _ProviderAccountEditViewState
 
     final asyncState = ref.watch(accountEditControllerProvider);
 
+    // ✅ نقل تهيئة الكنترولرز خارج الـ build logic (أسرع وأأمن)
+    ref.listen(accountEditControllerProvider, (prev, next) {
+      final st = next.asData?.value;
+      if (st == null) return;
+
+      if (!_initFromState) {
+        _fullNameCtrl.text = st.fullName;
+        _emailCtrl.text = st.email;
+        _phoneCtrl.text = st.phone;
+        _initFromState = true;
+      } else {
+        // ✅ الهاتف يتغير بعد OTP
+        if (_phoneCtrl.text.trim() != st.phone.trim()) {
+          _phoneCtrl.text = st.phone;
+        }
+      }
+    });
+
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(
-              Icons.arrow_back_ios_new,
-              color: AppColors.textPrimary,
-            ),
-            onPressed: () => context.pop(),
-          ),
-          title: Text(
-            'تعديل معلومات الحساب',
-            style: AppTextStyles.title18.copyWith(
-              fontSize: SizeConfig.ts(18),
-              fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          centerTitle: true,
-        ),
-        body: asyncState.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => _ErrorView(
-            message: err.toString(),
-            onRetry: () => ref.invalidate(accountEditControllerProvider),
-          ),
-          data: (state) {
-            if (!_initFromState) {
-              _fullNameCtrl.text = state.fullName;
-              _emailCtrl.text = state.email;
-              _phoneCtrl.text = state.phone;
-              _initFromState = true;
-            }
-
-            return SafeArea(
-              child: SingleChildScrollView(
-                padding: SizeConfig.padding(horizontal: 16, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildProfileCard(context, state),
-                    SizeConfig.v(18),
-                    _buildPasswordCard(context, state),
-                    SizeConfig.v(24),
-                  ],
-                ),
+      child: WillPopScope(
+        onWillPop: () async => await _confirmLeaveIfDirty(),
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new,
+                color: AppColors.textPrimary,
               ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  // -------- كارد البيانات الأساسية --------
-  Widget _buildProfileCard(BuildContext context, AccountEditState state) {
-    return Form(
-      key: _profileFormKey,
-      child: Container(
-        padding: SizeConfig.padding(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-          border: Border.all(
-            color: AppColors.lightGreen.withValues(alpha: 0.7),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _FieldLabel(text: 'الاسم الكامل', requiredStar: true),
-            SizeConfig.v(6),
-            _TextInput(
-              controller: _fullNameCtrl,
-              hint: 'أحمد محمود',
-              textInputAction: TextInputAction.next,
-              keyboardType: TextInputType.name,
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'الاسم مطلوب';
-                if (s.length < 3) return 'الاسم قصير جداً';
-                return null;
+              onPressed: () async {
+                final ok = await _confirmLeaveIfDirty();
+                if (!mounted) return;
+                if (ok) context.pop();
               },
             ),
-            SizeConfig.v(12),
-
-            const _FieldLabel(text: 'البريد الإلكتروني', requiredStar: true),
-            SizeConfig.v(6),
-            _TextInput(
-              controller: _emailCtrl,
-              hint: 'ahmad@example.com',
-              textInputAction: TextInputAction.next,
-              keyboardType: TextInputType.emailAddress,
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'البريد الإلكتروني مطلوب';
-                final ok = RegExp(r'^\S+@\S+\.\S+$').hasMatch(s);
-                if (!ok) return 'صيغة البريد غير صحيحة';
-                return null;
-              },
-            ),
-            SizeConfig.v(4),
-            _VerifiedRow(
-              isVerified: state.isEmailVerified,
-              labelWhenVerified: 'البريد موثّق',
-              labelWhenNotVerified: 'البريد غير موثّق',
-            ),
-            SizeConfig.v(12),
-
-            // ✅ رقم الهاتف: صار تغييره عبر OTP
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const _FieldLabel(text: 'رقم الهاتف', requiredStar: false),
-                TextButton.icon(
-                  onPressed: () => _openChangePhoneSheet(state.phone),
-                  icon: const Icon(Icons.edit, size: 18, color: AppColors.lightGreen),
-                  label: Text(
-                    'تغيير الرقم',
-                    style: AppTextStyles.body14.copyWith(
-                      color: AppColors.lightGreen,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizeConfig.v(6),
-            _TextInput(
-              controller: _phoneCtrl,
-              hint: '+962 79 123 4567',
-              textInputAction: TextInputAction.done,
-              keyboardType: TextInputType.phone,
-              enabled: false, // ✅ دائماً disabled (التغيير عبر OTP)
-            ),
-            SizeConfig.v(6),
-            Text(
-              'تغيير الرقم يتم عبر رمز تحقق (OTP)',
-              textAlign: TextAlign.right,
-              style: AppTextStyles.caption11.copyWith(
-                fontSize: SizeConfig.ts(11.5),
-                color: AppColors.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            SizeConfig.v(6),
-            _VerifiedRow(
-              isVerified: state.isPhoneVerified,
-              labelWhenVerified: 'الرقم موثّق',
-              labelWhenNotVerified: 'الرقم غير موثّق',
-            ),
-
-            SizeConfig.v(16),
-
-            SizedBox(
-              height: SizeConfig.h(46),
-              child: ElevatedButton(
-                onPressed: state.isSavingProfile ? null : _onSaveProfile,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.lightGreen,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-                  ),
-                ),
-                child: state.isSavingProfile
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        'حفظ بيانات الحساب',
-                        style: AppTextStyles.body14.copyWith(
-                          fontSize: SizeConfig.ts(14),
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // -------- كارد تغيير كلمة المرور --------
-  Widget _buildPasswordCard(BuildContext context, AccountEditState state) {
-    return Form(
-      key: _passwordFormKey,
-      child: Container(
-        padding: SizeConfig.padding(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-          border: Border.all(
-            color: AppColors.lightGreen.withValues(alpha: 0.7),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'تغيير كلمة المرور',
-              textAlign: TextAlign.right,
-              style: AppTextStyles.body14.copyWith(
-                fontSize: SizeConfig.ts(14.5),
+            title: Text(
+              'تعديل معلومات الحساب',
+              style: AppTextStyles.title18.copyWith(
+                fontSize: SizeConfig.ts(18),
                 fontWeight: FontWeight.w900,
                 color: AppColors.textPrimary,
               ),
             ),
-            SizeConfig.v(12),
-
-            const _FieldLabel(text: 'كلمة المرور الحالية', requiredStar: false),
-            SizeConfig.v(6),
-            _PasswordInput(
-              controller: _currentPassCtrl,
-              hint: 'أدخل كلمة المرور الحالية',
-              obscure: !_showCurrent,
-              onToggleVisibility: () =>
-                  setState(() => _showCurrent = !_showCurrent),
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'كلمة المرور الحالية مطلوبة';
-                return null;
-              },
+            centerTitle: true,
+          ),
+          body: asyncState.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (err, _) => AccountErrorView(
+              message: err.toString(),
+              onRetry: () => ref.invalidate(accountEditControllerProvider),
             ),
-            SizeConfig.v(12),
-
-            const _FieldLabel(text: 'كلمة المرور الجديدة', requiredStar: false),
-            SizeConfig.v(6),
-            _PasswordInput(
-              controller: _newPassCtrl,
-              hint: 'أدخل كلمة المرور الجديدة',
-              obscure: !_showNew,
-              onToggleVisibility: () => setState(() => _showNew = !_showNew),
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'كلمة المرور الجديدة مطلوبة';
-                if (s.length < 8) return 'يجب أن تحتوي على 8 أحرف على الأقل';
-                return null;
-              },
-            ),
-            SizeConfig.v(4),
-            Text(
-              'يجب أن تحتوي على 8 أحرف على الأقل',
-              textAlign: TextAlign.right,
-              style: AppTextStyles.caption11.copyWith(
-                fontSize: SizeConfig.ts(11.5),
-                color: AppColors.textSecondary,
-              ),
-            ),
-            SizeConfig.v(12),
-
-            const _FieldLabel(text: 'تأكيد كلمة المرور', requiredStar: false),
-            SizeConfig.v(6),
-            _PasswordInput(
-              controller: _confirmPassCtrl,
-              hint: 'أعد إدخال كلمة المرور الجديدة',
-              obscure: !_showConfirm,
-              onToggleVisibility: () =>
-                  setState(() => _showConfirm = !_showConfirm),
-              validator: (v) {
-                final s = (v ?? '').trim();
-                if (s.isEmpty) return 'تأكيد كلمة المرور مطلوب';
-                if (s != _newPassCtrl.text.trim()) {
-                  return 'كلمتا المرور غير متطابقتين';
-                }
-                return null;
-              },
-            ),
-            SizeConfig.v(16),
-
-            SizedBox(
-              height: SizeConfig.h(46),
-              child: ElevatedButton(
-                onPressed: state.isChangingPassword ? null : _onChangePassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.textPrimary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+            data: (state) {
+              return SafeArea(
+                child: SingleChildScrollView(
+                  padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ProviderAccountProfileCard(
+                        formKey: _profileFormKey,
+                        state: state,
+                        fullNameCtrl: _fullNameCtrl,
+                        emailCtrl: _emailCtrl,
+                        phoneCtrl: _phoneCtrl,
+                        listenable: _profileListen,
+                        onChangePhoneTap: () => _openChangePhoneFlow(state.phone),
+                        onSave: _onSaveProfile,
+                      ),
+                      SizeConfig.v(18),
+                      ProviderAccountPasswordCard(
+                        formKey: _passwordFormKey,
+                        state: state,
+                        currentCtrl: _currentPassCtrl,
+                        newCtrl: _newPassCtrl,
+                        confirmCtrl: _confirmPassCtrl,
+                        listenable: _passwordListen,
+                        onSave: _onChangePassword,
+                      ),
+                      SizeConfig.v(24),
+                    ],
                   ),
                 ),
-                child: state.isChangingPassword
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Text(
-                        'تحديث كلمة المرور',
-                        style: AppTextStyles.body14.copyWith(
-                          fontSize: SizeConfig.ts(14),
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-              ),
-            ),
-          ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 
-  // -------- Actions --------
+  // ===================== Dirty helpers =====================
+
+  String _norm(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+  bool _isProfileDirty(AccountEditState state) {
+    final name = _norm(_fullNameCtrl.text);
+    final email = _norm(_emailCtrl.text);
+    return name != _norm(state.fullName) || email != _norm(state.email);
+  }
+
+  bool _isPasswordDirty() {
+    return _currentPassCtrl.text.trim().isNotEmpty ||
+        _newPassCtrl.text.trim().isNotEmpty ||
+        _confirmPassCtrl.text.trim().isNotEmpty;
+  }
+
+  Future<bool> _confirmLeaveIfDirty() async {
+    final asyncState = ref.read(accountEditControllerProvider);
+    final st = asyncState.asData?.value;
+    if (st == null) return true;
+
+    final dirty = _isProfileDirty(st) || _isPasswordDirty();
+    if (!dirty) return true;
+
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('تأكيد'),
+        content: const Text('في تغييرات غير محفوظة. بدك تطلع بدون حفظ؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            child: const Text('نعم، اطلع'),
+          ),
+        ],
+      ),
+    );
+    return res ?? false;
+  }
+
+  // ===================== Actions =====================
 
   Future<void> _onSaveProfile() async {
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
@@ -395,18 +224,17 @@ class _ProviderAccountEditViewState
 
     final fullName = _fullNameCtrl.text.trim();
     final email = _emailCtrl.text.trim();
-    final phone = _phoneCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim(); // cache only
 
     final error = await notifier.saveProfile(
       fullName: fullName,
       email: email,
-      phone: phone, // ✅ لن يتم إرساله للباك (OTP مسؤول عنه)
+      phone: phone,
     );
 
     if (!mounted) return;
 
     if (error == null) {
-      // ✅ تحديث الكاش + الداشبورد فوراً
       final parts = fullName
           .split(RegExp(r'\s+'))
           .where((s) => s.trim().isNotEmpty)
@@ -426,9 +254,7 @@ class _ProviderAccountEditViewState
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(error ?? 'تم حفظ بيانات الحساب بنجاح'),
-      ),
+      SnackBar(content: Text(error ?? 'تم حفظ بيانات الحساب بنجاح')),
     );
   }
 
@@ -452,591 +278,66 @@ class _ProviderAccountEditViewState
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(error ?? 'تم تغيير كلمة المرور بنجاح'),
-      ),
+      SnackBar(content: Text(error ?? 'تم تغيير كلمة المرور بنجاح')),
     );
   }
 
-  // ===================== Phone OTP Flow =====================
+  // ===================== Phone OTP Flow (Sheets) =====================
 
-  Future<void> _runWithLoading(Future<void> Function() action) async {
+  Future<void> _openChangePhoneFlow(String currentPhone) async {
+    final normalizedPhone = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(22)),
+        ),
+      ),
+      builder: (_) {
+        return ProviderChangePhoneSheet(
+          currentPhone: currentPhone,
+          onRequestOtp: (phone) async {
+            final notifier = ref.read(accountEditControllerProvider.notifier);
+            return await notifier.requestPhoneOtp(phone);
+          },
+        );
+      },
+    );
+
+    if (!mounted || normalizedPhone == null) return;
+
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(22)),
+        ),
+      ),
+      builder: (_) {
+        return ProviderPhoneOtpSheet(
+          phone: normalizedPhone,
+          onResend: () async {
+            final notifier = ref.read(accountEditControllerProvider.notifier);
+            return await notifier.requestPhoneOtp(normalizedPhone);
+          },
+          onVerify: (otp) async {
+            final notifier = ref.read(accountEditControllerProvider.notifier);
+            return await notifier.verifyPhoneOtp(phone: normalizedPhone, otp: otp);
+          },
+        );
+      },
+    );
+
     if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
 
-    try {
-      await action();
-    } finally {
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    if (ok == true) {
+      _phoneCtrl.text = normalizedPhone;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تحديث رقم الهاتف بنجاح')),
+      );
     }
-  }
-
-  void _openChangePhoneSheet(String currentPhone) {
-    final phoneC = TextEditingController(text: currentPhone);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(SizeConfig.radius(22)),
-        ),
-      ),
-      builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 120),
-            padding: EdgeInsets.only(
-              left: SizeConfig.w(16),
-              right: SizeConfig.w(16),
-              top: SizeConfig.h(14),
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + SizeConfig.h(14),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: SizeConfig.w(48),
-                    height: SizeConfig.h(5),
-                    decoration: BoxDecoration(
-                      color: AppColors.borderLight,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  SizeConfig.v(14),
-                  Text(
-                    'تغيير رقم الهاتف',
-                    style: AppTextStyles.body16.copyWith(
-                      fontSize: SizeConfig.ts(16),
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizeConfig.v(10),
-                  TextField(
-                    controller: phoneC,
-                    autofocus: true,
-                    keyboardType: TextInputType.phone,
-                    textAlign: TextAlign.right,
-                    decoration: InputDecoration(
-                      hintText: 'مثال: 962771234567',
-                      hintStyle: AppTextStyles.body14.copyWith(
-                        fontSize: SizeConfig.ts(13),
-                        color: AppColors.textSecondary.withValues(alpha: 0.6),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding:
-                          SizeConfig.padding(horizontal: 14, vertical: 12),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(12)),
-                        borderSide: BorderSide(
-                          color: AppColors.borderLight.withValues(alpha: 0.8),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(12)),
-                        borderSide: const BorderSide(
-                          color: AppColors.lightGreen,
-                          width: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizeConfig.v(10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: SizeConfig.h(46),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.lightGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(SizeConfig.radius(12)),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final newPhone = phoneC.text.trim();
-                        Navigator.pop(ctx);
-
-                        final notifier =
-                            ref.read(accountEditControllerProvider.notifier);
-
-                        try {
-                          await _runWithLoading(() async {
-                            final err =
-                                await notifier.requestPhoneOtp(newPhone);
-                            if (err != null) throw Exception(err);
-                          });
-
-                          if (!mounted) return;
-                          _openOtpSheet(phone: newPhone);
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.toString().replaceFirst('Exception: ', ''),
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      child: Text(
-                        'إرسال رمز التحقق',
-                        style: AppTextStyles.body14.copyWith(
-                          fontSize: SizeConfig.ts(14),
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizeConfig.v(8),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _openOtpSheet({required String phone}) {
-    final otpC = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(SizeConfig.radius(22)),
-        ),
-      ),
-      builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 120),
-            padding: EdgeInsets.only(
-              left: SizeConfig.w(16),
-              right: SizeConfig.w(16),
-              top: SizeConfig.h(14),
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + SizeConfig.h(14),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: SizeConfig.w(48),
-                    height: SizeConfig.h(5),
-                    decoration: BoxDecoration(
-                      color: AppColors.borderLight,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  SizeConfig.v(14),
-                  Text(
-                    'أدخل رمز التحقق',
-                    style: AppTextStyles.body16.copyWith(
-                      fontSize: SizeConfig.ts(16),
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizeConfig.v(6),
-                  Text(
-                    'تم إرسال رمز إلى: $phone',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.caption11.copyWith(
-                      fontSize: SizeConfig.ts(12),
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  SizeConfig.v(12),
-                  TextField(
-                    controller: otpC,
-                    autofocus: true,
-                    maxLength: 6,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    decoration: InputDecoration(
-                      counterText: '',
-                      hintText: '123456',
-                      hintStyle: AppTextStyles.body14.copyWith(
-                        fontSize: SizeConfig.ts(14),
-                        color: AppColors.textSecondary.withValues(alpha: 0.6),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding:
-                          SizeConfig.padding(horizontal: 14, vertical: 12),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(12)),
-                        borderSide: BorderSide(
-                          color: AppColors.borderLight.withValues(alpha: 0.8),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(12)),
-                        borderSide: const BorderSide(
-                          color: AppColors.lightGreen,
-                          width: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizeConfig.v(10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: SizeConfig.h(46),
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.lightGreen,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(SizeConfig.radius(12)),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final code = otpC.text.trim();
-                        Navigator.pop(ctx);
-
-                        final notifier =
-                            ref.read(accountEditControllerProvider.notifier);
-
-                        try {
-                          await _runWithLoading(() async {
-                            final err = await notifier.verifyPhoneOtp(
-                              phone: phone,
-                              otp: code,
-                            );
-                            if (err != null) throw Exception(err);
-                          });
-
-                          if (!mounted) return;
-
-                          // ✅ حدّث النص فوراً (حتى لو ما رجع phone بالرد)
-                          _phoneCtrl.text = phone;
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('تم تحديث رقم الهاتف بنجاح'),
-                            ),
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.toString().replaceFirst('Exception: ', ''),
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      child: Text(
-                        'تأكيد',
-                        style: AppTextStyles.body14.copyWith(
-                          fontSize: SizeConfig.ts(14),
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SizeConfig.v(8),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ===================== Widgets مساعدة =====================
-
-class _FieldLabel extends StatelessWidget {
-  final String text;
-  final bool requiredStar;
-
-  const _FieldLabel({
-    required this.text,
-    required this.requiredStar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            text,
-            style: AppTextStyles.body14.copyWith(
-              fontSize: SizeConfig.ts(13),
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (requiredStar) ...[
-            SizeConfig.hSpace(4),
-            Text(
-              '*',
-              style: AppTextStyles.body14.copyWith(
-                fontSize: SizeConfig.ts(13),
-                color: Colors.redAccent,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _TextInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final TextInputType keyboardType;
-  final TextInputAction textInputAction;
-  final String? Function(String?)? validator;
-  final bool enabled;
-
-  const _TextInput({
-    required this.controller,
-    required this.hint,
-    required this.keyboardType,
-    required this.textInputAction,
-    this.validator,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      enabled: enabled,
-      readOnly: !enabled,
-      textAlign: TextAlign.right,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      validator: validator,
-      style: AppTextStyles.body14.copyWith(
-        fontSize: SizeConfig.ts(13.5),
-        color: enabled ? AppColors.textPrimary : AppColors.textSecondary,
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: AppTextStyles.body14.copyWith(
-          fontSize: SizeConfig.ts(13),
-          color: AppColors.textSecondary.withValues(alpha: 0.6),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: SizeConfig.padding(horizontal: 14, vertical: 12),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.8),
-          ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.8),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(
-            color: AppColors.lightGreen,
-            width: 1.2,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-      ),
-    );
-  }
-}
-
-class _PasswordInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final bool obscure;
-  final VoidCallback onToggleVisibility;
-  final String? Function(String?)? validator;
-
-  const _PasswordInput({
-    required this.controller,
-    required this.hint,
-    required this.obscure,
-    required this.onToggleVisibility,
-    this.validator,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      textAlign: TextAlign.right,
-      validator: validator,
-      style: AppTextStyles.body14.copyWith(
-        fontSize: SizeConfig.ts(13.5),
-        color: AppColors.textPrimary,
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: AppTextStyles.body14.copyWith(
-          fontSize: SizeConfig.ts(13),
-          color: AppColors.textSecondary.withValues(alpha: 0.6),
-        ),
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding: SizeConfig.padding(horizontal: 14, vertical: 12),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure ? Icons.visibility_off : Icons.visibility,
-            color: AppColors.textSecondary,
-          ),
-          onPressed: onToggleVisibility,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: BorderSide(
-            color: AppColors.borderLight.withValues(alpha: 0.8),
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(
-            color: AppColors.lightGreen,
-            width: 1.2,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-          borderSide: const BorderSide(color: Colors.redAccent),
-        ),
-      ),
-    );
-  }
-}
-
-class _VerifiedRow extends StatelessWidget {
-  final bool isVerified;
-  final String labelWhenVerified;
-  final String labelWhenNotVerified;
-
-  const _VerifiedRow({
-    required this.isVerified,
-    required this.labelWhenVerified,
-    required this.labelWhenNotVerified,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isVerified ? AppColors.lightGreen : AppColors.textSecondary;
-    final icon = isVerified ? Icons.check_circle : Icons.error_outline;
-
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            isVerified ? labelWhenVerified : labelWhenNotVerified,
-            style: AppTextStyles.caption11.copyWith(
-              fontSize: SizeConfig.ts(11.5),
-              color: color,
-              fontWeight: isVerified ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-          SizeConfig.hSpace(4),
-          Icon(
-            icon,
-            size: SizeConfig.ts(16),
-            color: color,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: SizeConfig.padding(all: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body14.copyWith(
-                fontSize: SizeConfig.ts(13),
-                color: AppColors.textSecondary,
-              ),
-            ),
-            SizeConfig.v(12),
-            ElevatedButton(
-              onPressed: onRetry,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.lightGreen,
-              ),
-              child: Text(
-                'إعادة المحاولة',
-                style: AppTextStyles.body14.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

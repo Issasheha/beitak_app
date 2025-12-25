@@ -33,8 +33,13 @@ class BookingListItem {
 
   bool get isCancelled => status == 'cancelled' || status == 'refunded';
   bool get isCompleted => status == 'completed';
+
+  // ✅ NEW
+  bool get isIncomplete => status == 'incomplete';
+
   bool get isPending =>
       status == 'pending_provider_accept' || status == 'pending';
+
   bool get isUpcoming => const {
         'confirmed',
         'provider_on_way',

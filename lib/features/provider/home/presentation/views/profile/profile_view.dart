@@ -8,9 +8,9 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
-import 'package:beitak_app/features/user/home/presentation/views/profile/account_setting_widgets/confirm_action_dialog.dart'; // ✅ NEW
+import 'package:beitak_app/features/user/home/presentation/views/profile/account_setting_widgets/confirm_action_dialog.dart';
 
-import 'package:beitak_app/features/provider/home/presentation/views/profile/providers/provider_profile_providers.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/profile/viewmodels/provider_profile_providers.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_profile_header_card.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_about_section.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/reviews/provider_reviews_section.dart';
@@ -52,6 +52,14 @@ class ProviderProfileView extends ConsumerWidget {
             ),
           ),
           centerTitle: true,
+          actions: [
+            IconButton(
+              tooltip: 'تعديل الحساب',
+              icon:
+                  const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
+              onPressed: () => context.push(AppRoutes.provideraccountEdit),
+            ),
+          ],
         ),
         body: SafeArea(
           child: async.when(
@@ -66,16 +74,19 @@ class ProviderProfileView extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (!state.isFullyVerified)
+                      _VerificationBanner(
+                        missing: state.missingRequiredDocs,
+                        onTapDocs: () =>
+                            context.push(AppRoutes.providerdocumentsView),
+                      ),
                     ProviderProfileHeaderCard(state: state),
                     SizeConfig.v(14),
                     ProviderAboutSection(state: state, controller: controller),
                     SizeConfig.v(12),
                     ProviderReviewsSection(state: state),
                     SizeConfig.v(12),
-                    ProviderAvailabilitySection(
-                      state: state,
-                      controller: controller,
-                    ),
+                    const ProviderAvailabilitySection(),
                     SizeConfig.v(12),
                     ProviderLocationSection(state: state),
                     SizeConfig.v(12),
@@ -84,8 +95,6 @@ class ProviderProfileView extends ConsumerWidget {
                       child: ProviderSupportSection(),
                     ),
                     SizeConfig.v(18),
-
-                    // ✅ زر تسجيل الخروج مع Dialog تأكيد مثل اليوزر
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -94,9 +103,8 @@ class ProviderProfileView extends ConsumerWidget {
                           foregroundColor: Colors.white,
                           padding: SizeConfig.padding(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              SizeConfig.radius(14),
-                            ),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
                           ),
                         ),
                         onPressed: () async {
@@ -104,8 +112,7 @@ class ProviderProfileView extends ConsumerWidget {
                             context: context,
                             barrierDismissible: true,
                             builder: (_) => const ConfirmActionDialog(
-                              mode: ConfirmMode.logout,
-                            ),
+                                mode: ConfirmMode.logout),
                           );
 
                           if (confirmed != true) return;
@@ -133,7 +140,6 @@ class ProviderProfileView extends ConsumerWidget {
                         ),
                       ),
                     ),
-
                     SizeConfig.v(10),
                     Center(
                       child: Text(
@@ -152,6 +158,61 @@ class ProviderProfileView extends ConsumerWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _VerificationBanner extends StatelessWidget {
+  final List<String> missing;
+  final VoidCallback onTapDocs;
+
+  const _VerificationBanner({
+    required this.missing,
+    required this.onTapDocs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final msg = missing.isEmpty
+        ? 'يلزم توثيق الوثائق لإتاحة جميع الميزات.'
+        : 'يلزم توثيق: ${missing.join('، ')}';
+
+    return Container(
+      margin: EdgeInsets.only(bottom: SizeConfig.h(12)),
+      padding: SizeConfig.padding(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+        border:
+            Border.all(color: const Color(0xFFFBC02D).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, color: Color(0xFFF57F17)),
+          SizeConfig.hSpace(10),
+          Expanded(
+            child: Text(
+              msg,
+              style: AppTextStyles.body14.copyWith(
+                fontSize: SizeConfig.ts(13),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: onTapDocs,
+            child: Text(
+              'إدارة الوثائق',
+              style: AppTextStyles.body14.copyWith(
+                color: AppColors.lightGreen,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -176,18 +237,16 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: AppTextStyles.body14.copyWith(
-                color: AppColors.textPrimary,
-              ),
+              style:
+                  AppTextStyles.body14.copyWith(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: onRetry,
               child: Text(
                 'إعادة المحاولة',
-                style: AppTextStyles.body14.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style:
+                    AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],

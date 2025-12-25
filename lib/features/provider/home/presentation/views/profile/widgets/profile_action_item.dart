@@ -37,7 +37,6 @@ class ProfileActionItem extends StatelessWidget {
   final VoidCallback onTap;
   final Color? color;
 
-  /// ✅ جديد: عشان نعمل نفس تصميم القائمة بالصورة (خط فاصل بين العناصر)
   final bool showDivider;
 
   const ProfileActionItem({

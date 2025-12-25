@@ -13,50 +13,56 @@ class ContinueAsGuestButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = SizeConfig.h(52);
-    final radius = SizeConfig.radius(30);
+    final radius = SizeConfig.radius(18);
 
     return SizedBox(
       width: double.infinity,
-      height: height,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: AppColors.lightGreen.withValues(alpha: 0.08),
-          foregroundColor: AppColors.textPrimary,
-          side: BorderSide(
-            color: AppColors.lightGreen.withValues(alpha: 0.55),
-            width: 1.4,
-          ),
-          shape: RoundedRectangleBorder(
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(radius),
+        child: Ink(
+          padding: SizeConfig.padding(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
             borderRadius: BorderRadius.circular(radius),
-          ),
-          padding: SizeConfig.padding(horizontal: 16, vertical: 12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.person_outline,
-              size: SizeConfig.ts(20),
-              color: AppColors.textPrimary,
+            border: Border.all(
+              color: AppColors.lightGreen.withValues(alpha: 0.45),
+              width: 1.4,
             ),
-            SizedBox(width: SizeConfig.w(10)),
-            Text(
-              'متابعة كزائر',
-              style: AppTextStyles.body16.copyWith(
-                fontSize: SizeConfig.ts(17),
-                fontWeight: FontWeight.w700,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: SizeConfig.ts(22),
                 color: AppColors.textPrimary,
               ),
-            ),
-            SizedBox(width: SizeConfig.w(10)),
-            Icon(
-              Icons.arrow_back_ios_new_rounded, // ✅ RTL: سهم لليسار
-              size: SizeConfig.ts(16),
-              color: AppColors.textSecondary,
-            ),
-          ],
+              SizedBox(width: SizeConfig.w(10)),
+              Text(
+                'متابعة كزائر',
+                style: AppTextStyles.body16.copyWith(
+                  fontSize: SizeConfig.ts(18), // ✅ أكبر وواضحة
+                  fontWeight: FontWeight.w700, // ✅ أوضح من w300
+                  color: AppColors.lightGreen,
+                  height: 1.1,
+                ),
+              ),
+              SizedBox(width: SizeConfig.w(10)),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: SizeConfig.ts(18),
+                color: AppColors.textSecondary,
+              ),
+            ],
+          ),
         ),
       ),
     );

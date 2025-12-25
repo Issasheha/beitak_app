@@ -1,3 +1,4 @@
+// lib/features/provider/home/presentation/views/profile/account/account_edit_state.dart
 import 'package:flutter/foundation.dart';
 
 @immutable
@@ -22,15 +23,17 @@ class AccountEditState {
     required this.isChangingPassword,
   });
 
-  factory AccountEditState.initial() => const AccountEditState(
-        fullName: '',
-        email: '',
-        phone: '',
-        isEmailVerified: false,
-        isPhoneVerified: false,
-        isSavingProfile: false,
-        isChangingPassword: false,
-      );
+  factory AccountEditState.initial() {
+    return const AccountEditState(
+      fullName: '',
+      email: '',
+      phone: '',
+      isEmailVerified: false,
+      isPhoneVerified: false,
+      isSavingProfile: false,
+      isChangingPassword: false,
+    );
+  }
 
   AccountEditState copyWith({
     String? fullName,
@@ -48,8 +51,7 @@ class AccountEditState {
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
       isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
       isSavingProfile: isSavingProfile ?? this.isSavingProfile,
-      isChangingPassword:
-          isChangingPassword ?? this.isChangingPassword,
+      isChangingPassword: isChangingPassword ?? this.isChangingPassword,
     );
   }
 }

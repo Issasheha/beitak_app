@@ -1,5 +1,3 @@
-// lib/features/user/home/presentation/views/request_service/viewmodels/request_service_controller.dart
-
 import 'dart:io';
 
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
@@ -25,7 +23,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   RequestServiceController(this._vm, this._authLocal)
       : super(const RequestServiceState());
 
-  // ✅ نفس normalization داخل VM (نكررها هون عشان ما نعتمد على private)
   String _normSlug(String s) {
     var x = s.trim().toLowerCase();
     x = x.replaceAll(RegExp(r'\s+'), ' ');
@@ -34,8 +31,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
     return x;
   }
-
-  // --------- bootstrap ---------
 
   Future<void> bootstrap() async {
     state = state.copyWith(sessionLoading: true);
@@ -49,8 +44,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       }
     }
   }
-
-  // --------- Session ---------
 
   Future<void> _loadSession() async {
     try {
@@ -93,8 +86,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       );
     }
   }
-
-  // --------- Cities & Areas ---------
 
   Future<void> _loadCities() async {
     if (!mounted) return;
@@ -204,8 +195,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     state = state.copyWith(selectedArea: area);
   }
 
-  // --------- Categories ---------
-
   Future<void> _loadCategories() async {
     if (!mounted) return;
     state = state.copyWith(categoryError: null);
@@ -219,8 +208,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       state = state.copyWith(categoryError: _niceError(e));
     }
   }
-
-  // --------- Date & time ---------
 
   void setDateType(ServiceDateType type) {
     if (!mounted) return;
@@ -250,14 +237,10 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     }
   }
 
-  // --------- Service type ---------
-
   void selectServiceType(ServiceTypeOption option) {
     if (!mounted) return;
     state = state.copyWith(selectedServiceType: option);
   }
-
-  // --------- Files ---------
 
   Future<void> pickImages(BuildContext context) async {
     final picker = ImagePicker();
@@ -286,8 +269,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     state = state.copyWith(files: list);
   }
 
-  // --------- Submit ---------
-
   Future<void> submit({
     required BuildContext context,
     required GlobalKey<FormState> formKey,
@@ -300,27 +281,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
 
     FocusScope.of(context).unfocus();
 
-    if (state.selectedServiceType == null) {
-      _snack(context, 'اختر نوع الخدمة');
-      return;
-    }
-    if (state.selectedCity == null) {
-      _snack(context, 'اختر المحافظة');
-      return;
-    }
-    if (state.selectedArea == null) {
-      _snack(context, 'اختر المنطقة');
-      return;
-    }
-    if (state.dateType == ServiceDateType.other && state.otherDate == null) {
-      _snack(context, 'اختر التاريخ');
-      return;
-    }
-    if (state.selectedHour == null) {
-      _snack(context, 'اختر الوقت');
-      return;
-    }
-
+    // ✅ كل أخطاء الحقول المطلوبة صارت داخل الفورم (تحت كل حقل)
     final ok = formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -340,7 +301,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       return;
     }
 
-    // ✅✅ أهم سطر: normalize slug قبل ما نجيب id
     final rawSlug = state.selectedServiceType!.categorySlug;
     final normalized = _normSlug(rawSlug);
 
@@ -351,13 +311,11 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       _snack(
         context,
         'تعذر تحديد الفئة من السيرفر.\n'
-        'Slug: "$rawSlug"\n'
         'جرّب تحديث الشاشة أو تأكد من slugs في /api/categories.',
       );
       return;
     }
 
-    // show share dialog (context used before await ok)
     final share = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -396,14 +354,19 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         guestOtp = guestOtp.trim();
       }
 
-      final serviceDateIso =
-          _resolveSelectedDateIso(state.dateType, state.otherDate);
+      final serviceDateIso = _resolveSelectedDateIso(state.dateType, state.otherDate);
       if (serviceDateIso == null) {
         if (context.mounted) _snack(context, 'تعذر تحديد التاريخ. حاول مجدداً.');
         return;
       }
 
       final budget = _budgetValue(budgetCtrl.text);
+      // ✅ Safety (مع أنه المفروض الفورم يمنعها)
+      if (budget != null && (budget < 10 || budget > 10000)) {
+        _snack(context, 'الميزانية يجب أن تكون بين 10 و 10000 دينار');
+        return;
+      }
+
       final dateTypeApi = _apiServiceDateType(state.dateType);
 
       final draft = ServiceRequestDraft(
@@ -416,7 +379,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         budget: budget,
         serviceDateIso: serviceDateIso,
         serviceDateType: dateTypeApi,
-        serviceTimeHour: state.selectedHour!,
+        serviceTimeHour: state.selectedHour!, // still "HH:00"
         sharePhoneWithProvider: share,
         files: List<File>.from(state.files),
         isGuest: state.isGuest,
@@ -435,6 +398,7 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       if (!context.mounted) return;
       if (!mounted) return;
 
+      // reset
       nameCtrl.clear();
       phoneCtrl.clear();
       descCtrl.clear();
@@ -451,6 +415,11 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
         areasError: null,
         files: const [],
       );
+
+      // ✅ QA: بعد النجاح رجّع المستخدم للهوم
+      if (context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } catch (e) {
       if (!context.mounted) return;
       _snack(context, _niceError(e));
@@ -461,14 +430,11 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
     }
   }
 
-  // --------- Helpers ---------
-
   double? _budgetValue(String text) {
     final txt = text.trim();
     if (txt.isEmpty) return null;
 
-    final normalized =
-        txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
+    final normalized = txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
     return double.tryParse(normalized);
   }
 
@@ -502,7 +468,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   }
 
   void _snack(BuildContext context, String msg) {
-    // ملاحظة: دايماً نتحقق من mounted قبل استخدام context (خصوصاً بعد await)
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg)),

@@ -6,21 +6,30 @@ import 'package:go_router/go_router.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 
-class ProviderAccountSettingsView extends StatefulWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
+
+import 'package:beitak_app/core/network/api_client.dart';
+import 'package:beitak_app/core/network/api_constants.dart';
+import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+
+class ProviderAccountSettingsView extends ConsumerStatefulWidget {
   const ProviderAccountSettingsView({super.key});
 
   @override
-  State<ProviderAccountSettingsView> createState() =>
+  ConsumerState<ProviderAccountSettingsView> createState() =>
       _ProviderAccountSettingsViewState();
 }
 
 class _ProviderAccountSettingsViewState
-    extends State<ProviderAccountSettingsView> {
+    extends ConsumerState<ProviderAccountSettingsView> {
   bool _newRequests = true;
   bool _bookingUpdates = true;
   bool _payments = true;
   bool _messages = true;
   bool _promotions = true;
+
+  bool _isDeleting = false;
 
   @override
   Widget build(BuildContext context) {
@@ -90,14 +99,10 @@ class _ProviderAccountSettingsViewState
                   },
                 ),
                 SizeConfig.v(24),
+
                 _DeleteAccountButton(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('تنبيه: سيتم تنفيذ منطق حذف الحساب لاحقًا'),
-                      ),
-                    );
-                  },
+                  isLoading: _isDeleting,
+                  onTap: _isDeleting ? null : () => _onDeleteAccountTap(),
                 ),
               ],
             ),
@@ -105,6 +110,79 @@ class _ProviderAccountSettingsViewState
         ),
       ),
     );
+  }
+
+  Future<void> _onDeleteAccountTap() async {
+    final result = await showDialog<_DeletePayload?>(
+      context: context,
+      barrierDismissible:   false,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+
+    if (result == null) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      // ✅ DELETE /users/profile
+      final res = await ApiClient.dio.delete(
+        ApiConstants.userProfile, // نفس endpoint اللي أعطاك الباك
+        data: {
+          "password": result.password,
+          "confirmation": result.confirmation,
+        },
+      );
+
+      final success = res.data?['success'] == true;
+
+      if (!success) {
+        final msg = (res.data?['message'] ?? 'فشل حذف الحساب').toString();
+        throw Exception(msg);
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم حذف الحساب بنجاح')),
+      );
+
+      // ✅ سجّل خروج (يمسح الجلسة)
+      await ref.read(authControllerProvider.notifier).logout();
+
+      if (!mounted) return;
+      // عادة الـ redirect تبع GoRouter رح يتعامل، بس هذا ضمان إضافي
+      context.go(AppRoutes.login);
+    } on DioException catch (e) {
+      final msg = _friendlyDeleteError(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
+  String _friendlyDeleteError(DioException e) {
+    final code = e.response?.statusCode;
+    final msg = (e.response?.data?['message'] ?? '').toString();
+
+    if (code == 400) {
+      // الباك ممكن يرجع رسائل مختلفة، نخليها واضحة
+      if (msg.isNotEmpty) return msg;
+      return 'بيانات الحذف غير صحيحة. تأكد من كلمة المرور وجملة التأكيد.';
+    }
+    if (code == 401) return 'غير مصرح. تأكد أنك مسجل دخول.';
+    if (code == 403) return 'ليس لديك صلاحية.';
+    if (code == 404) return 'المسار غير موجود على السيرفر.';
+    if (msg.isNotEmpty) return msg;
+
+    return 'حدث خطأ بالشبكة، حاول مرة أخرى.';
   }
 }
 
@@ -386,9 +464,13 @@ class _SettingsNavCard extends StatelessWidget {
 // ==================== Delete Account Button ====================
 
 class _DeleteAccountButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isLoading;
 
-  const _DeleteAccountButton({required this.onTap});
+  const _DeleteAccountButton({
+    required this.onTap,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -403,19 +485,289 @@ class _DeleteAccountButton extends StatelessWidget {
             side: const BorderSide(color: Colors.redAccent),
           ),
         ),
-        icon: Icon(
-          Icons.delete_outline,
-          color: Colors.redAccent,
-          size: SizeConfig.ts(20),
-        ),
+        icon: isLoading
+            ? SizedBox(
+                width: SizeConfig.ts(18),
+                height: SizeConfig.ts(18),
+                child: const CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: SizeConfig.ts(20),
+              ),
         label: Text(
-          'حذف الحساب',
+          isLoading ? 'جاري حذف الحساب...' : 'حذف الحساب',
           style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(14.5),
             fontWeight: FontWeight.w800,
             color: Colors.redAccent,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ==================== Delete Dialog ====================
+
+class _DeletePayload {
+  final String password;
+  final String confirmation;
+
+  const _DeletePayload({
+    required this.password,
+    required this.confirmation,
+  });
+}
+
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  // ✅ المستخدم يكتبها بالعربي
+  static const uiPhraseAr = 'حذف حسابي';
+
+  // ✅ اللي الباك بده ياه (ثابت)
+  static const apiPhraseEn = 'DELETE MY ACCOUNT';
+
+  final _passCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  bool _obscure = true;
+
+  bool get _canSubmit {
+    return _passCtrl.text.trim().isNotEmpty &&
+        _confirmCtrl.text.trim() == uiPhraseAr;
+  }
+
+  @override
+  void dispose() {
+    _passCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    SizeConfig.init(context);
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // ✅ حل overflow: حدّ أعلى للارتفاع + scroll
+          final maxH = MediaQuery.of(context).size.height * 0.80;
+
+          return ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 420,
+              maxHeight: maxH,
+            ),
+            child: Stack(
+              alignment: Alignment.topCenter,
+              children: [
+                // ===== Card Body =====
+                Padding(
+                  padding: EdgeInsets.only(top: SizeConfig.h(44)),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+                    child: Material(
+                      color: Colors.white,
+                      child: SingleChildScrollView(
+                        padding: SizeConfig.padding(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizeConfig.v(22),
+
+                            Text(
+                              'هل أنت متأكد أنك تريد حذف الحساب؟',
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.body16.copyWith(
+                                fontSize: SizeConfig.ts(15.5),
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            SizeConfig.v(8),
+
+                            Text(
+                              'هذا الإجراء نهائي ولا يمكن التراجع عنه.\nسيتم حذف جميع بياناتك.',
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.body14.copyWith(
+                                fontSize: SizeConfig.ts(12.8),
+                                color: AppColors.textSecondary,
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+
+                            SizeConfig.v(14),
+
+                            // Password
+                            TextField(
+                              controller: _passCtrl,
+                              obscureText: _obscure,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'كلمة المرور',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    SizeConfig.radius(12),
+                                  ),
+                                ),
+                                suffixIcon: IconButton(
+                                  onPressed: () =>
+                                      setState(() => _obscure = !_obscure),
+                                  icon: Icon(
+                                    _obscure
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            SizeConfig.v(12),
+
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                uiPhraseAr, // ✅ صارت بالعربي
+                                style: AppTextStyles.body14.copyWith(
+                                  fontSize: SizeConfig.ts(12.8),
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ),
+                            SizeConfig.v(6),
+
+                            TextField(
+                              controller: _confirmCtrl,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: 'اكتب جملة التأكيد',
+                                hintText: uiPhraseAr, // ✅ بالعربي
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    SizeConfig.radius(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            SizeConfig.v(16),
+
+                            // Buttons
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                        color: Colors.redAccent
+                                            .withValues(alpha: 0.55),
+                                      ),
+                                      padding: SizeConfig.padding(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          SizeConfig.radius(12),
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'إلغاء',
+                                      style: AppTextStyles.body14.copyWith(
+                                        fontSize: SizeConfig.ts(13.5),
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizeConfig.hSpace(10),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: !_canSubmit
+                                        ? null
+                                        : () {
+                                            Navigator.pop(
+                                              context,
+                                              _DeletePayload(
+                                                password: _passCtrl.text.trim(),
+                                                // ✅ نبعت للباك النص الإنجليزي الثابت
+                                                confirmation: apiPhraseEn,
+                                              ),
+                                            );
+                                          },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.redAccent,
+                                      foregroundColor: Colors.white,
+                                      padding: SizeConfig.padding(vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          SizeConfig.radius(12),
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'حذف الحساب',
+                                      style: AppTextStyles.body14.copyWith(
+                                        fontSize: SizeConfig.ts(13.5),
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            SizeConfig.v(4),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ===== Top Circle Icon (like screenshot) =====
+                Container(
+                  width: SizeConfig.w(88),
+                  height: SizeConfig.w(88),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.redAccent, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.delete_rounded,
+                    size: SizeConfig.ts(44),
+                    color: Colors.redAccent,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

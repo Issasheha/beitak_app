@@ -38,89 +38,99 @@ class CityDropdownField extends StatelessWidget {
           ),
         ),
         SizedBox(height: SizeConfig.h(8)),
-        Container(
-          padding: SizeConfig.padding(horizontal: 14, vertical: 2),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderLight),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.location_city, color: AppColors.textSecondary),
-              SizedBox(width: SizeConfig.w(10)),
-              Expanded(
-                child: loading
-                    ? Padding(
-                        padding: SizeConfig.padding(vertical: 14),
-                        child: Row(
-                          children: [
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            SizedBox(width: SizeConfig.w(10)),
-                            Text(
-                              'جارٍ تحميل المحافظات...',
-                              style: TextStyle(
-                                fontSize: SizeConfig.ts(13),
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : DropdownButtonHideUnderline(
-                        child: DropdownButton<CityModel>(
-                          isExpanded: true,
-                          value: selected,
-                          hint: Text(
-                            'اختر المحافظة',
-                            style: TextStyle(
-                              fontSize: SizeConfig.ts(13),
-                              color: AppColors.textSecondary.withValues(alpha: 0.7),
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          items: cities
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c,
-                                  child: Text(
-                                    c.localizedName(preferArabic: preferArabic),
-                                    style: TextStyle(
-                                      fontSize: SizeConfig.ts(13),
-                                      fontWeight: FontWeight.w900,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: onChanged,
-                        ),
-                      ),
-              ),
-              if (!loading && error != null)
-                IconButton(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh, color: AppColors.lightGreen),
-                  tooltip: 'إعادة المحاولة',
+
+        if (loading)
+          Container(
+            padding: SizeConfig.padding(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderLight),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-            ],
+                SizedBox(width: SizeConfig.w(10)),
+                Text(
+                  'جارٍ تحميل المحافظات...',
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(13),
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          DropdownButtonFormField<CityModel>(
+            value: selected,
+            isExpanded: true,
+            items: cities
+                .map(
+                  (c) => DropdownMenuItem(
+                    value: c,
+                    child: Text(
+                      c.localizedName(preferArabic: preferArabic),
+                      style: TextStyle(
+                        fontSize: SizeConfig.ts(13),
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: onChanged,
+            validator: (v) => (v == null) ? 'المحافظة مطلوبة' : null,
+            decoration: InputDecoration(
+              hintText: 'اختر المحافظة',
+              filled: true,
+              fillColor: AppColors.white,
+              contentPadding: SizeConfig.padding(horizontal: 14, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: AppColors.borderLight),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: AppColors.borderLight),
+              ),
+              suffixIcon: const Icon(Icons.location_city, color: AppColors.textSecondary),
+            ),
           ),
-        ),
+
         if (!loading && error != null) ...[
           SizedBox(height: SizeConfig.h(8)),
-          Text(
-            error!,
-            style: TextStyle(
-              fontSize: SizeConfig.ts(12),
-              color: Colors.red.shade700,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  error!,
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(12),
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: onRetry,
+                child: Text(
+                  'إعادة المحاولة',
+                  style: TextStyle(
+                    fontSize: SizeConfig.ts(12),
+                    color: AppColors.lightGreen,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ],

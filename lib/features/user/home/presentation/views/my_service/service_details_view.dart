@@ -135,9 +135,50 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     return _toArabicDigits(r);
   }
 
+  // ✅ NEW: provider_notes لحالة incomplete بصيغة عربية واضحة
+  String _incompleteNoteArabic(String raw) {
+    final r = raw.trim();
+    if (r.isEmpty) return '';
+    if (_hasArabic(r)) return r;
+
+    final lower = r.toLowerCase();
+
+    if (lower.contains('automatically marked as incomplete')) {
+      // مثال:
+      // [System] Automatically marked as incomplete on 2025-12-25T08:12:22.035Z (25.2 hours overdue)
+      final isoMatch = RegExp(r'on\s+([0-9T:\.\-Z]+)').firstMatch(r);
+      final hoursMatch = RegExp(r'\(([\d\.]+)\s*hours').firstMatch(r);
+
+      final iso = isoMatch?.group(1) ?? '';
+      final hours = hoursMatch?.group(1) ?? '';
+
+      String when = '';
+      if (iso.isNotEmpty && iso.contains('T')) {
+        final parts = iso.split('T');
+        final date = parts[0];
+        final time = parts[1].replaceAll('Z', '');
+        final hhmm = time.length >= 5 ? time.substring(0, 5) : time;
+        when = '${_toArabicDigits(date)} ${_toArabicDigits(hhmm)}';
+      } else if (iso.isNotEmpty) {
+        when = _toArabicDigits(iso);
+      }
+
+      final hoursText = hours.isEmpty ? '' : _toArabicDigits(hours);
+
+      final w = when.isEmpty ? '' : ' بتاريخ $when';
+      final h = hoursText.isEmpty ? '' : ' بعد تأخر $hoursText ساعة عن الموعد';
+
+      return 'تم تحويل الحجز إلى "غير مكتمل"$w$h.';
+    }
+
+    // fallback عام
+    return 'ملاحظة: $r';
+  }
+
   StatusUi _statusUi(String status) {
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
+    final isIncomplete = status == 'incomplete'; // ✅ NEW
     final isPending =
         status == 'pending_provider_accept' || status == 'pending';
 
@@ -185,8 +226,20 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       );
     }
 
+    // ✅ NEW
+    if (isIncomplete) {
+      return StatusUi(
+        label: 'غير مكتملة',
+        color: Colors.grey.shade700,
+        bg: Colors.grey.withValues(alpha: 0.10),
+        border: Colors.grey.withValues(alpha: 0.35),
+        footerText:
+            'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
+      );
+    }
+
     return StatusUi(
-      label: 'قيد الانتظار',
+      label: 'حالة الطلب',
       color: Colors.orange.shade800,
       bg: Colors.orange.withValues(alpha: 0.10),
       border: Colors.orange.withValues(alpha: 0.35),
@@ -224,6 +277,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
+    final isIncomplete = status == 'incomplete'; // ✅ NEW
     final isPending =
         status == 'pending_provider_accept' || status == 'pending';
     final isUpcoming = const {
@@ -233,15 +287,21 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       'in_progress',
     }.contains(status);
 
+    // ✅ IMPORTANT: لا تستبدل الاسم العربي بالإنجليزي
     String serviceName = base.serviceName;
     if (details != null) {
       final service = details['service'];
       if (service is Map<String, dynamic>) {
-        serviceName = _readString(
+        final ar = _readString(
           service,
-          ['name_ar', 'name_localized', 'name'],
-          fallback: serviceName,
+          ['name_ar', 'nameAr', 'name_localized', 'nameLocalized'],
+          fallback: '',
         );
+
+        if (ar.isNotEmpty && _hasArabic(ar)) {
+          serviceName = ar;
+        }
+        // إذا ما في عربي، خلي الاسم مثل الكرت (base.serviceName)
       }
     }
 
@@ -298,6 +358,12 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
           ]);
     final cancelReason = _cancelReasonArabic(rawCancelReason);
 
+    // ✅ NEW: provider_notes للـ incomplete
+    final rawProviderNotes =
+        details == null ? '' : _readString(details, ['provider_notes']);
+    final incompleteNote =
+        isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
+
     final bookingNumber = _toArabicDigits(
       base.bookingNumber.startsWith('#')
           ? base.bookingNumber
@@ -340,6 +406,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 background: ui.bg,
               ),
               SizeConfig.v(18),
+
               Center(
                 child: Text(
                   'تفاصيل الخدمة',
@@ -351,6 +418,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 ),
               ),
               SizeConfig.v(18),
+
               DetailsLine(
                 icon: Icons.calendar_today_rounded,
                 iconColor: AppColors.textSecondary,
@@ -387,9 +455,9 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   icon: Icons.phone_rounded,
                   iconColor: AppColors.textSecondary,
                   label: 'الهاتف:',
-                  // ✅ إزالة ! (غير ضروري) لأنه داخل شرط يضمن عدم null
                   value: _toArabicDigits(providerPhone),
                 ),
+
               if (isCancelled)
                 DetailsLine(
                   icon: Icons.info_outline_rounded,
@@ -397,10 +465,12 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   label: 'سبب الإلغاء:',
                   value: cancelReason.isEmpty ? 'غير محدد' : cancelReason,
                 ),
+
               if (state.isLoading) ...[
                 SizeConfig.v(14),
                 const Center(child: CircularProgressIndicator()),
               ],
+
               if (state.error != null) ...[
                 SizeConfig.v(12),
                 Container(
@@ -421,19 +491,61 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   ),
                 ),
               ],
+
               SizeConfig.v(18),
+
               StatusFooterBox(
                 text: ui.footerText,
                 bg: ui.bg,
                 border: ui.border,
                 textColor: ui.color,
               ),
-              if (!isCancelled && !isCompleted && (isPending || isUpcoming))
+
+              // ✅ NEW: صندوق ملاحظة incomplete من provider_notes
+              if (isIncomplete && incompleteNote.isNotEmpty) ...[
+                SizeConfig.v(12),
+                Container(
+                  padding: SizeConfig.padding(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: Colors.grey.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          color: Colors.grey.shade700),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          incompleteNote,
+                          style: TextStyle(
+                            fontSize: SizeConfig.ts(13),
+                            fontWeight: FontWeight.w800,
+                            color: Colors.grey.shade800,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // ✅ ما بنعرض إلغاء للحالات غير المناسبة
+              if (!isCancelled &&
+                  !isCompleted &&
+                  !isIncomplete &&
+                  (isPending || isUpcoming))
                 CancelButton(
                   isLoading:
                       ref.watch(serviceDetailsControllerProvider).isCancelling,
                   onPressed: () => _confirmCancel(status),
                 ),
+
               SizeConfig.v(10),
             ],
           ),
@@ -582,7 +694,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     );
 
     if (ok != true) {
-      // ✅ ملاحظة صغيرة: تنظيف الكنترولر حتى لو المستخدم لغى
       noteCtrl.dispose();
       return;
     }
@@ -597,12 +708,10 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
           noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
     );
 
-    // ✅ ملاحظة صغيرة: الآن خلصنا من noteCtrl
     noteCtrl.dispose();
 
     final latest = ref.read(serviceDetailsControllerProvider);
 
-    // ✅ حل تحذيرات use_build_context_synchronously
     if (!mounted) return;
 
     if (success) {

@@ -1,3 +1,5 @@
+// lib/features/provider/home/presentation/views/profile/documents/viewmodels/provider_documents_controller.dart
+
 import 'dart:async';
 import 'dart:io';
 
@@ -9,6 +11,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'provider_documents_state.dart';
 
 class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> {
+  static const int _maxFilesPerDoc = 2;
+  static const int _maxBytesPerFile = 5 * 1024 * 1024; // 5MB
+
+  static const Set<String> _allowedExt = {
+    'jpg',
+    'jpeg',
+    'png',
+    'pdf',
+  };
+
+  int? _cachedProviderId;
+
   @override
   FutureOr<ProviderDocumentsState> build() async {
     return _loadFromApi();
@@ -17,6 +31,8 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
   // ---------------- helpers ----------------
 
   Future<int> _resolveProviderId() async {
+    if (_cachedProviderId != null) return _cachedProviderId!;
+
     final res = await ApiClient.dio.get(ApiConstants.authProfile);
     final data = res.data ?? {};
     final u = data['data']?['user'];
@@ -28,6 +44,8 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     if (providerId == null || providerId <= 0) {
       throw Exception('تعذر تحديد رقم مزود الخدمة (providerId).');
     }
+
+    _cachedProviderId = providerId;
     return providerId;
   }
 
@@ -38,20 +56,25 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     return false;
   }
 
-  /// ✅ NEW: يدعم String أو List<String>
+  /// ✅ يدعم String أو List<String>
   List<String> _files(dynamic v) {
     if (v == null) return <String>[];
-
     if (v is List) {
       return v
           .map((e) => (e ?? '').toString().trim())
           .where((s) => s.isNotEmpty)
           .toList();
     }
-
     final s = v.toString().trim();
     if (s.isEmpty) return <String>[];
     return <String>[s];
+  }
+
+  String _extOfPath(String path) {
+    final p = path.toLowerCase();
+    final i = p.lastIndexOf('.');
+    if (i == -1 || i == p.length - 1) return '';
+    return p.substring(i + 1);
   }
 
   // ---------------- load ----------------
@@ -59,7 +82,6 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
   Future<ProviderDocumentsState> _loadFromApi() async {
     final providerId = await _resolveProviderId();
 
-    // ✅ GET /api/providers/:id
     final res = await ApiClient.dio.get(ApiConstants.providerById(providerId));
     final data = res.data ?? {};
     final provider = (data['data'] ?? {})['provider'] ?? {};
@@ -98,16 +120,25 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
+    // ✅ تحسين: لو عندك بيانات، اعمل silent refresh بدون ما تقلب Loading
+    final prev = state.asData?.value;
+    if (prev == null) {
+      state = const AsyncLoading();
+    }
+
     try {
       final newState = await _loadFromApi();
       state = AsyncData(newState);
     } catch (e, st) {
-      state = AsyncError(e, st);
+      if (prev != null) {
+        state = AsyncData(prev);
+      } else {
+        state = AsyncError(e, st);
+      }
     }
   }
 
-  // ---------------- upload (multi files) ----------------
+  // ---------------- upload ----------------
 
   Future<String?> uploadDocument({
     required ProviderDocKind kind,
@@ -116,8 +147,44 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     final current = state.asData?.value;
     if (current == null) return 'لم يتم تحميل البيانات بعد';
 
-    final cleanFiles = files.where((f) => f.existsSync()).toList();
+    final doc = current.docs.firstWhere((d) => d.kind == kind);
+
+    // ✅ avoid sync IO
+    final cleanFiles = <File>[];
+    for (final f in files) {
+      try {
+        if (await f.exists()) cleanFiles.add(f);
+      } catch (_) {}
+    }
     if (cleanFiles.isEmpty) return 'لم يتم اختيار أي ملف';
+
+    if (cleanFiles.length > _maxFilesPerDoc) {
+      return 'يمكنك رفع ملفين كحد أقصى لكل وثيقة';
+    }
+
+    final existingCount = doc.fileNames.length;
+    if (existingCount + cleanFiles.length > _maxFilesPerDoc) {
+      final remaining = (_maxFilesPerDoc - existingCount).clamp(0, 2);
+      return remaining == 0
+          ? 'لديك بالفعل ملفين لهذه الوثيقة. قم بتحديثهما لاحقًا عند توفر خيار الحذف/الاستبدال.'
+          : 'يمكنك رفع $remaining ملف/ملفات إضافية فقط لهذه الوثيقة';
+    }
+
+    // ✅ type + size validations (async)
+    for (final f in cleanFiles) {
+      final ext = _extOfPath(f.path);
+      if (!_allowedExt.contains(ext)) {
+        return 'نوع الملف غير مدعوم. الصيغ المدعومة: PDF, JPG, PNG';
+      }
+      try {
+        final bytes = await f.length();
+        if (bytes > _maxBytesPerFile) {
+          return 'حجم الملف كبير. الحد الأقصى 5MB لكل ملف';
+        }
+      } catch (_) {
+        return 'تعذر قراءة حجم الملف، حاول اختيار ملف آخر';
+      }
+    }
 
     // loading state
     final docsLoading = current.docs
@@ -129,8 +196,6 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
       final fieldName = _fieldNameForKind(kind);
 
       final formData = FormData();
-
-      // ✅ أهم نقطة: نضيف نفس المفتاح أكثر من مرة (multi upload لنفس الحقل)
       for (final f in cleanFiles) {
         formData.files.add(
           MapEntry(
@@ -145,7 +210,6 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
         );
       }
 
-      // نفس endpoint اللي يدعم الملفات
       final res = await ApiClient.dio.post(
         ApiConstants.providerCompleteProfile,
         data: formData,
@@ -154,7 +218,6 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
       final data = res.data ?? {};
       final provider = (data['data'] ?? {})['provider'] ?? {};
 
-      // تحديث الدوكز من الرد
       final updatedDocs = current.docs.map((d) {
         if (d.kind == ProviderDocKind.idCard) {
           return d.copyWith(
@@ -182,13 +245,12 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
 
       state = AsyncData(current.copyWith(docs: updatedDocs));
       return null;
-    } on DioException catch (_) {
-      // rollback loading flag
+    } on DioException catch (e) {
       final rollbackDocs = current.docs
           .map((d) => d.kind == kind ? d.copyWith(isUploading: false) : d)
           .toList();
       state = AsyncData(current.copyWith(docs: rollbackDocs));
-      return 'فشل رفع الوثيقة، حاول مرة أخرى';
+      return _friendlyDio(e);
     } catch (_) {
       final rollbackDocs = current.docs
           .map((d) => d.kind == kind ? d.copyWith(isUploading: false) : d)
@@ -207,5 +269,21 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
       case ProviderDocKind.policeClearance:
         return 'police_clearance_image';
     }
+  }
+
+  String _friendlyDio(DioException e) {
+    final code = e.response?.statusCode;
+    final data = e.response?.data;
+
+    String msg = '';
+    if (data is Map) msg = (data['message'] ?? data['error'] ?? '').toString();
+    if (data is String) msg = data;
+
+    if (code == 400) return msg.isNotEmpty ? msg : 'بيانات غير صحيحة';
+    if (code == 401) return 'انتهت الجلسة، أعد تسجيل الدخول';
+    if (code == 403) return 'ليس لديك صلاحية';
+    if (msg.isNotEmpty) return msg;
+
+    return 'خطأ بالشبكة، حاول مرة أخرى';
   }
 }

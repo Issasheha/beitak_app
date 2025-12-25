@@ -1,3 +1,5 @@
+// lib/core/network/token_provider.dart
+
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,12 +15,12 @@ class TokenProvider {
       if (sessionJson == null || sessionJson.trim().isEmpty) return null;
 
       final decoded = jsonDecode(sessionJson);
-      if (decoded is! Map<String, dynamic>) return null;
+      if (decoded is! Map) return null;
 
       final token = (decoded['token'] ?? '').toString().trim();
       if (token.isEmpty) return null;
 
-      // هنا token صار خام (بدون Bearer) بسبب cacheAuthSession
+      // token خام (بدون Bearer)
       return token;
     } catch (_) {
       return null;

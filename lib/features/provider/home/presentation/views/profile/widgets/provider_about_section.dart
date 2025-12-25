@@ -1,3 +1,5 @@
+// lib/features/provider/home/presentation/views/profile/widgets/provider_about_section.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,48 +20,42 @@ class ProviderAboutSection extends ConsumerWidget {
     required this.controller,
   });
 
+  static const int _maxAboutLength = 300; // عدّلها لو السيرفر عنده رقم مختلف
+
+  String _sanitize(String input) {
+    final noHtml = input.replaceAll(RegExp(r'<[^>]*>'), '');
+    return noHtml.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final expLabel =
-        state.experienceYears > 0 ? '${state.experienceYears} سنة' : '—';
-
     return ProviderProfileSectionCard(
-      title: 'نبذة عنك',
+      title: 'النبذة',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // actions row (styled chips)
-          Row(
-            children: [
-              Expanded(
-                child: _ActionChip(
-                  icon: Icons.edit,
-                  label: 'تعديل النبذة',
-                  onTap: () => _openEditBioSheet(context),
-                ),
-              ),
-              SizeConfig.hSpace(10),
-              Expanded(
-                child: _ActionChip(
-                  icon: Icons.badge_outlined,
-                  label: 'الخبرة: $expLabel',
-                  onTap: () => _openEditExperienceSheet(context),
-                ),
-              ),
-            ],
-          ),
-
-          SizeConfig.v(10),
-          Divider(color: AppColors.borderLight.withValues(alpha: 0.9)),
-          SizeConfig.v(10),
-
-          // bio
           Text(
-            state.bio,
+            state.bio.trim().isEmpty ? '—' : state.bio.trim(),
             style: AppTextStyles.body14.copyWith(
-              fontSize: SizeConfig.ts(13.5),
+              fontSize: SizeConfig.ts(13.6),
               color: AppColors.textPrimary,
-              height: 1.55,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizeConfig.v(10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => _openEditSheet(context),
+              child: Text(
+                'تعديل النبذة',
+                style: AppTextStyles.body14.copyWith(
+                  fontSize: SizeConfig.ts(13),
+                  color: AppColors.lightGreen,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
         ],
@@ -67,314 +63,145 @@ class ProviderAboutSection extends ConsumerWidget {
     );
   }
 
-  // ===================== Bottom Sheets =====================
+  void _openEditSheet(BuildContext context) {
+    final ctrl = TextEditingController(text: state.bio == '—' ? '' : state.bio);
+    final error = ValueNotifier<String?>(null);
+    final counter = ValueNotifier<int>(_sanitize(ctrl.text).length);
 
-  void _openEditBioSheet(BuildContext context) {
-    final c = TextEditingController(text: state.bio == '—' ? '' : state.bio);
+    void validateNow() {
+      final sanitized = _sanitize(ctrl.text);
+      counter.value = sanitized.length;
+      error.value = sanitized.length > _maxAboutLength ? 'النص طويل جداً.' : null;
+    }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
-      ),
-      builder: (sheetCtx) {
-        final bottomInset = MediaQuery.viewInsetsOf(sheetCtx).bottom;
-
-        return SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: SizeConfig.w(16),
-              right: SizeConfig.w(16),
-              top: SizeConfig.h(14),
-              bottom: bottomInset + SizeConfig.h(14),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: SizeConfig.w(48),
-                  height: SizeConfig.h(5),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                SizeConfig.v(14),
-                Text(
-                  'تعديل النبذة',
-                  style: AppTextStyles.body16.copyWith(
-                    fontSize: SizeConfig.ts(16),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizeConfig.v(12),
-
-                // ✅ autoFocus + keyboard safe
-                TextField(
-                  controller: c,
-                  autofocus: true,
-                  maxLines: 6,
-                  minLines: 4,
-                  textInputAction: TextInputAction.newline,
-                  style: AppTextStyles.body14.copyWith(
-                    fontSize: SizeConfig.ts(13.5),
-                    color: AppColors.textPrimary,
-                    height: 1.5,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'اكتب نبذة قصيرة عن خدماتك...',
-                    hintStyle: AppTextStyles.body14.copyWith(
-                      fontSize: SizeConfig.ts(13),
-                      color: AppColors.textSecondary.withValues(alpha: 0.65),
-                      fontWeight: FontWeight.w400,
-                    ),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                      borderSide: BorderSide(
-                        color: AppColors.borderLight.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                      borderSide: const BorderSide(color: AppColors.lightGreen),
-                    ),
-                  ),
-                ),
-
-                SizeConfig.v(12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.lightGreen,
-                      foregroundColor: Colors.white,
-                      padding: SizeConfig.padding(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(14)),
-                      ),
-                    ),
-                    onPressed: () async {
-                      Navigator.pop(sheetCtx);
-
-                      try {
-                        await controller.updateBio(c.text);
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('تم حفظ النبذة بنجاح')),
-                        );
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              e.toString().replaceFirst('Exception: ', ''),
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: Text(
-                      'حفظ',
-                      style: AppTextStyles.body14.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                SizeConfig.v(6),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _openEditExperienceSheet(BuildContext context) {
-    final c = TextEditingController(
-      text: state.experienceYears > 0 ? state.experienceYears.toString() : '',
-    );
+    ctrl.addListener(validateNow);
+    validateNow();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
       ),
-      builder: (sheetCtx) {
-        final bottomInset = MediaQuery.viewInsetsOf(sheetCtx).bottom;
-
-        return SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              left: SizeConfig.w(16),
-              right: SizeConfig.w(16),
-              top: SizeConfig.h(14),
-              bottom: bottomInset + SizeConfig.h(14),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: SizeConfig.w(48),
-                  height: SizeConfig.h(5),
-                  decoration: BoxDecoration(
-                    color: AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(99),
+      builder: (_) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: SizeConfig.w(16),
+            right: SizeConfig.w(16),
+            top: SizeConfig.h(14),
+            bottom: MediaQuery.of(context).viewInsets.bottom + SizeConfig.h(14),
+          ),
+          child: ValueListenableBuilder<String?>(
+            valueListenable: error,
+            builder: (context, err, __) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'تعديل النبذة',
+                          style: AppTextStyles.body16.copyWith(
+                            fontSize: SizeConfig.ts(16),
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
                   ),
-                ),
-                SizeConfig.v(14),
-                Text(
-                  'تعديل سنوات الخبرة',
-                  style: AppTextStyles.body16.copyWith(
-                    fontSize: SizeConfig.ts(16),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                SizeConfig.v(12),
-
-                // ✅ autoFocus
-                TextField(
-                  controller: c,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  style: AppTextStyles.body14.copyWith(
-                    fontSize: SizeConfig.ts(14),
-                    color: AppColors.textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'مثال: 7',
-                    hintStyle: AppTextStyles.body14.copyWith(
-                      color: AppColors.textSecondary.withValues(alpha: 0.65),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                      borderSide: BorderSide(
-                        color: AppColors.borderLight.withValues(alpha: 0.7),
+                  TextField(
+                    controller: ctrl,
+                    autofocus: true,
+                    maxLines: 5,
+                    minLines: 3,
+                    decoration: InputDecoration(
+                      hintText: 'اكتب نبذة قصيرة عن خدماتك...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                        borderSide: const BorderSide(color: AppColors.lightGreen, width: 1.6),
                       ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                      borderSide: const BorderSide(color: AppColors.lightGreen),
-                    ),
                   ),
-                ),
-
-                SizeConfig.v(12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
+                  SizeConfig.v(8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: err == null
+                            ? const SizedBox.shrink()
+                            : Text(
+                                err,
+                                style: AppTextStyles.caption11.copyWith(
+                                  fontSize: SizeConfig.ts(12),
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: counter,
+                        builder: (_, n, __) {
+                          final over = n > _maxAboutLength;
+                          return Text(
+                            '$n/$_maxAboutLength',
+                            style: AppTextStyles.caption11.copyWith(
+                              fontSize: SizeConfig.ts(12),
+                              color: over ? Colors.red : AppColors.textSecondary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  SizeConfig.v(12),
+                  ElevatedButton(
+                    onPressed: err != null
+                        ? null
+                        : () async {
+                            final sanitized = _sanitize(ctrl.text);
+                            if (sanitized.length > _maxAboutLength) return;
+                            await controller.updateBio(sanitized);
+                            if (context.mounted) {
+                              Navigator.of(context).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('تم تحديث النبذة بنجاح')),
+                              );
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.lightGreen,
                       foregroundColor: Colors.white,
-                      padding: SizeConfig.padding(vertical: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(SizeConfig.radius(14)),
+                        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                       ),
+                      padding: SizeConfig.padding(vertical: 12),
                     ),
-                    onPressed: () async {
-                      final parsed = int.tryParse(c.text.trim()) ?? 0;
-                      Navigator.pop(sheetCtx);
-
-                      try {
-                        await controller.updateExperienceYears(parsed);
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('تم حفظ سنوات الخبرة بنجاح'),
-                          ),
-                        );
-                      } catch (e) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              e.toString().replaceFirst('Exception: ', ''),
-                            ),
-                          ),
-                        );
-                      }
-                    },
                     child: Text(
                       'حفظ',
                       style: AppTextStyles.body14.copyWith(
-                        fontWeight: FontWeight.w800,
+                        fontSize: SizeConfig.ts(14),
+                        fontWeight: FontWeight.w900,
                         color: Colors.white,
                       ),
                     ),
                   ),
-                ),
-                SizeConfig.v(6),
-              ],
-            ),
+                ],
+              );
+            },
           ),
         );
       },
-    );
-  }
-}
-
-class _ActionChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _ActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.lightGreen.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        onTap: onTap,
-        child: Padding(
-          padding: SizeConfig.padding(horizontal: 12, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: AppColors.lightGreen),
-              SizeConfig.hSpace(8),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body14.copyWith(
-                    fontSize: SizeConfig.ts(13),
-                    color: AppColors.lightGreen,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

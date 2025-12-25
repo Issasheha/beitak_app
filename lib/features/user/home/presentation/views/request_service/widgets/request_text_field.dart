@@ -2,6 +2,7 @@ import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class RequestTextField extends StatelessWidget {
   final TextEditingController controller;
@@ -13,6 +14,10 @@ class RequestTextField extends StatelessWidget {
   final bool enabled;
   final Widget? suffix;
 
+  // ✅ NEW
+  final int? maxLength;
+  final List<TextInputFormatter>? inputFormatters;
+
   const RequestTextField({
     super.key,
     required this.controller,
@@ -23,6 +28,8 @@ class RequestTextField extends StatelessWidget {
     this.maxLines = 1,
     this.enabled = true,
     this.suffix,
+    this.maxLength,
+    this.inputFormatters,
   });
 
   @override
@@ -45,12 +52,15 @@ class RequestTextField extends StatelessWidget {
           validator: validator,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          maxLength: maxLength,
+          inputFormatters: inputFormatters,
           textDirection: TextDirection.rtl,
           style: AppTextStyles.body14.copyWith(
             fontSize: SizeConfig.ts(13),
             color: AppColors.textPrimary,
           ),
           decoration: InputDecoration(
+            counterText: '', // ✅ نخفي العداد حتى ما يخرب الشكل
             hintText: hint,
             hintStyle: AppTextStyles.body14.copyWith(
               color: AppColors.textSecondary.withValues(alpha: 0.7),
@@ -70,8 +80,7 @@ class RequestTextField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide:
-                  const BorderSide(color: AppColors.lightGreen, width: 1.2),
+              borderSide: const BorderSide(color: AppColors.lightGreen, width: 1.2),
             ),
           ),
         ),

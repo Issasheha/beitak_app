@@ -1,6 +1,10 @@
+// lib/features/user/home/presentation/views/request_service/widgets/date_selection_section.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:flutter/material.dart';
+
+import 'arabic_date_picker_sheet.dart'; // ✅ DatePicker مخصص عربي (BottomSheet)
 
 enum ServiceDateType { today, tomorrow, dayAfter, other }
 
@@ -32,8 +36,12 @@ class DateSelectionSection extends StatelessWidget {
   }
 
   String _selectedText() {
-    if (selectedType != ServiceDateType.other) return 'تم اختيار: ${_label(selectedType)}';
+    if (selectedType != ServiceDateType.other) {
+      return 'تم اختيار: ${_label(selectedType)}';
+    }
+
     if (selectedOtherDate == null) return 'لم يتم اختيار تاريخ';
+
     final d = selectedOtherDate!;
     final mm = d.month.toString().padLeft(2, '0');
     final dd = d.day.toString().padLeft(2, '0');
@@ -65,20 +73,27 @@ class DateSelectionSection extends StatelessWidget {
                 label: _label(t),
                 selected: selectedType == t,
                 onTap: () async {
+                  // ✅ حدّث النوع أولاً
                   onTypeSelected(t);
+
                   if (t == ServiceDateType.other) {
                     final now = DateTime.now();
-                    final picked = await showDatePicker(
+                    final today = DateTime(now.year, now.month, now.day);
+
+                    final initial = selectedOtherDate ?? today;
+
+                    // ✅ DatePicker عربي مخصص (BottomSheet)
+                    final picked = await showArabicDatePickerSheet(
                       context: context,
-                      initialDate: selectedOtherDate ?? now,
-                      firstDate: now,
-                      lastDate: DateTime(now.year + 1),
-                      builder: (context, child) {
-                        return Directionality(textDirection: TextDirection.rtl, child: child!);
-                      },
+                      initialDate: initial,
+                      firstDate: today,
+                      lastDate: DateTime(now.year + 1, now.month, now.day),
                     );
+
+                    // ✅ لو المستخدم كبس إلغاء رح تكون null
                     onOtherPicked(picked);
                   } else {
+                    // ✅ لو مش other نمسح otherDate
                     onOtherPicked(null);
                   }
                 },
@@ -104,7 +119,11 @@ class _Chip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _Chip({required this.label, required this.selected, required this.onTap});
+  const _Chip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +133,7 @@ class _Chip extends StatelessWidget {
       child: Container(
         padding: SizeConfig.padding(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.lightGreen.withValues(alpha: 0.18): AppColors.white,
+          color: selected ? AppColors.lightGreen.withValues(alpha: 0.18) : AppColors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? AppColors.lightGreen : AppColors.borderLight,
