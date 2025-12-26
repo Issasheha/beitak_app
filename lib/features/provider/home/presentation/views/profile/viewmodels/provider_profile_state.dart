@@ -1,5 +1,3 @@
-// lib/features/provider/home/presentation/views/profile/viewmodels/provider_profile_state.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -84,7 +82,12 @@ class ProviderProfileState {
 
   final String bio;
   final bool isAvailable;
+
+  /// قد يحتوي city فقط أو city + تفاصيل (لو تغيرت الداتا لاحقًا)
   final String locationLabel;
+
+  /// ✅ NEW: City only (محسوبة مرة وحدة في الـ controller)
+  final String cityLabel;
 
   final List<ProviderDocumentItem> documents;
 
@@ -106,6 +109,7 @@ class ProviderProfileState {
     required this.bio,
     required this.isAvailable,
     required this.locationLabel,
+    required this.cityLabel,
     required this.documents,
     required this.isFullyVerified,
     required this.missingRequiredDocs,
@@ -126,6 +130,7 @@ class ProviderProfileState {
       bio: '—',
       isAvailable: false,
       locationLabel: '',
+      cityLabel: '',
       documents: <ProviderDocumentItem>[],
       isFullyVerified: false,
       missingRequiredDocs: <String>[],
@@ -146,6 +151,7 @@ class ProviderProfileState {
     String? bio,
     bool? isAvailable,
     String? locationLabel,
+    String? cityLabel,
     List<ProviderDocumentItem>? documents,
     bool? isFullyVerified,
     List<String>? missingRequiredDocs,
@@ -164,6 +170,7 @@ class ProviderProfileState {
       bio: bio ?? this.bio,
       isAvailable: isAvailable ?? this.isAvailable,
       locationLabel: locationLabel ?? this.locationLabel,
+      cityLabel: cityLabel ?? this.cityLabel,
       documents: documents ?? this.documents,
       isFullyVerified: isFullyVerified ?? this.isFullyVerified,
       missingRequiredDocs: missingRequiredDocs ?? this.missingRequiredDocs,
@@ -190,6 +197,7 @@ class ProviderProfileState {
             other.bio == bio &&
             other.isAvailable == isAvailable &&
             other.locationLabel == locationLabel &&
+            other.cityLabel == cityLabel &&
             listEquals(other.documents, documents) &&
             other.isFullyVerified == isFullyVerified &&
             listEquals(other.missingRequiredDocs, missingRequiredDocs) &&
@@ -210,6 +218,7 @@ class ProviderProfileState {
         bio,
         isAvailable,
         locationLabel,
+        cityLabel,
         Object.hashAll(documents),
         isFullyVerified,
         Object.hashAll(missingRequiredDocs),

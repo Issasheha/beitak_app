@@ -12,8 +12,9 @@ class ServerException implements Exception {
     this.errors,
   });
 
+  /// ✅ مهم: حتى لو حدا عمل err.toString() ما يطلع "ServerException" ولا أي انجليزي
   @override
-  String toString() => 'ServerException($statusCode): $message';
+  String toString() => message;
 }
 
 /// أخطاء التخزين المحلي (SharedPreferences مثلاً).
@@ -22,6 +23,7 @@ class CacheException implements Exception {
 
   const CacheException(this.message);
 
+  /// ✅ نفس الفكرة: ما نطلع أي prefix انجليزي
   @override
-  String toString() => 'CacheException: $message';
+  String toString() => message;
 }

@@ -53,6 +53,63 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
+  bool _hasProviderRatingData(Map<String, dynamic> booking) {
+    // rating.provider_rating OR booking.provider_rating
+    final rating = booking['rating'];
+    if (rating is Map<String, dynamic>) {
+      final pr = rating['provider_rating'];
+      final msg = rating['provider_response'];
+      if ((pr is num && pr.toInt() > 0) || (msg != null && msg.toString().trim().isNotEmpty)) {
+        return true;
+      }
+    }
+    final pr2 = booking['provider_rating'];
+    final msg2 = booking['provider_response'];
+    if ((pr2 is num && pr2.toInt() > 0) || (msg2 != null && msg2.toString().trim().isNotEmpty)) {
+      return true;
+    }
+    return false;
+  }
+
+  Future<Map<String, dynamic>?> _fetchBookingFromMy({
+    required int bookingId,
+    required String token,
+  }) async {
+    try {
+      final res = await _dio.get(
+        '/bookings/my',
+        queryParameters: const {
+          'page': 1,
+          'limit': 20,
+          'status': 'completed',
+          'sort_by': 'created_at',
+          'order': 'DESC',
+        },
+        options: _opts(token),
+      );
+
+      final code = res.statusCode ?? 0;
+      final body = _ensureMap(res.data, code);
+      _ensureSuccess(body, code);
+
+      final data = body['data'];
+      if (data is! Map<String, dynamic>) return null;
+
+      final list = data['bookings'];
+      if (list is! List) return null;
+
+      for (final e in list) {
+        if (e is Map<String, dynamic>) {
+          final id = int.tryParse('${e['id']}') ?? 0;
+          if (id == bookingId) return e;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// تحميل تفاصيل حجز معيّن من /bookings/:id
   Future<void> loadBookingDetails({required int bookingId}) async {
     state = state.copyWith(
@@ -96,13 +153,32 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         );
       }
 
+      // ✅ fallback: إذا /bookings/:id ما رجّع rating
+      if (!_hasProviderRatingData(booking)) {
+        final fromMy = await _fetchBookingFromMy(bookingId: bookingId, token: token);
+        if (fromMy != null) {
+          // خذ rating إذا موجود
+          if (fromMy['rating'] is Map<String, dynamic>) {
+            booking['rating'] = fromMy['rating'];
+          }
+          // أو خذ provider_rating مباشرة إذا موجودة
+          if (fromMy.containsKey('provider_rating')) {
+            booking['provider_rating'] = fromMy['provider_rating'];
+          }
+          if (fromMy.containsKey('provider_response')) {
+            booking['provider_response'] = fromMy['provider_response'];
+          }
+          if (fromMy.containsKey('amount_paid') && (booking['amount_paid'] == null || '${booking['amount_paid']}'.trim().isEmpty)) {
+            booking['amount_paid'] = fromMy['amount_paid'];
+          }
+        }
+      }
+
       state = state.copyWith(data: booking);
     } on DioException catch (e) {
       if (e.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']
-                  ?.toString() ??
-              'Server error',
+          error: (e.response!.data as Map<String, dynamic>)['message']?.toString() ?? 'Server error',
         );
       } else {
         state = state.copyWith(error: 'Network error');
@@ -116,10 +192,8 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
-  /// ✅ إلغاء ذكي حسب الحالة + متوافق مع باكك الحالي
-  /// - pending_provider_accept / pending: PATCH update status => cancelled
-  /// - confirmed: POST cancel endpoint (مع سبب) لأنه يطبق شرط الوقت
-  /// - غير ذلك: يحاول update status => cancelled (والباك يرجّع خطأ لو ممنوع)
+  // ======== باقي كود الإلغاء كما هو ========
+
   Future<bool> cancelBooking({
     required int bookingId,
     required String currentStatus,
@@ -141,9 +215,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
 
     try {
-      // pending => عبر update status
-      if (currentStatus == 'pending_provider_accept' ||
-          currentStatus == 'pending') {
+      if (currentStatus == 'pending_provider_accept' || currentStatus == 'pending') {
         await _updateStatus(
           token: token,
           bookingId: bookingId,
@@ -152,7 +224,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         return true;
       }
 
-      // confirmed => عبر cancel endpoint الرسمي
       if (currentStatus == 'confirmed') {
         final ok = await _cancelWithReason(
           token: token,
@@ -162,7 +233,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         );
         if (ok) return true;
 
-        // fallback (لو المسار مش مفعّل)
         await _updateStatus(
           token: token,
           bookingId: bookingId,
@@ -171,7 +241,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         return true;
       }
 
-      // غير ذلك: جرّب update status (الباك سيتحكم)
       await _updateStatus(
         token: token,
         bookingId: bookingId,
@@ -181,9 +250,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     } on DioException catch (e) {
       if (e.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']
-                  ?.toString() ??
-              'Server error',
+          error: (e.response!.data as Map<String, dynamic>)['message']?.toString() ?? 'Server error',
         );
       } else {
         state = state.copyWith(error: 'Network error');
@@ -221,7 +288,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       _ensureSuccess(body, code);
       return true;
     } on DioException catch (e) {
-      // لو المسار غير موجود أصلاً (404) نخليها false عشان fallback
       if (e.response?.statusCode == 404) return false;
       rethrow;
     }
@@ -233,8 +299,8 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     required String status,
   }) async {
     final candidates = <String>[
-      '/bookings/$bookingId/status', // شائع
-      '/bookings/$bookingId', // شائع
+      '/bookings/$bookingId/status',
+      '/bookings/$bookingId',
     ];
 
     DioException? last;

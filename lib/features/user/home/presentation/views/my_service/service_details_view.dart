@@ -13,6 +13,7 @@ import 'widgets_details/booking_header_card.dart';
 import 'widgets_details/details_line.dart';
 import 'widgets_details/status_footer_box.dart';
 import 'widgets_details/cancel_button.dart';
+import 'widgets_details/provider_rating_box.dart';
 
 class ServiceDetailsView extends ConsumerStatefulWidget {
   final BookingListItem initialItem;
@@ -56,6 +57,17 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       final v = j[k];
       if (v is num) return v.toDouble();
       final parsed = double.tryParse('$v');
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  int? _readInt(Map<String, dynamic> j, List<String> keys) {
+    for (final k in keys) {
+      final v = j[k];
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      final parsed = int.tryParse('$v');
       if (parsed != null) return parsed;
     }
     return null;
@@ -135,7 +147,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     return _toArabicDigits(r);
   }
 
-  // ✅ NEW: provider_notes لحالة incomplete بصيغة عربية واضحة
   String _incompleteNoteArabic(String raw) {
     final r = raw.trim();
     if (r.isEmpty) return '';
@@ -144,8 +155,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     final lower = r.toLowerCase();
 
     if (lower.contains('automatically marked as incomplete')) {
-      // مثال:
-      // [System] Automatically marked as incomplete on 2025-12-25T08:12:22.035Z (25.2 hours overdue)
       final isoMatch = RegExp(r'on\s+([0-9T:\.\-Z]+)').firstMatch(r);
       final hoursMatch = RegExp(r'\(([\d\.]+)\s*hours').firstMatch(r);
 
@@ -171,16 +180,14 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       return 'تم تحويل الحجز إلى "غير مكتمل"$w$h.';
     }
 
-    // fallback عام
     return 'ملاحظة: $r';
   }
 
   StatusUi _statusUi(String status) {
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
-    final isIncomplete = status == 'incomplete'; // ✅ NEW
-    final isPending =
-        status == 'pending_provider_accept' || status == 'pending';
+    final isIncomplete = status == 'incomplete';
+    final isPending = status == 'pending_provider_accept' || status == 'pending';
 
     final isUpcoming = const {
       'confirmed',
@@ -225,16 +232,13 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         footerText: 'تمت الموافقة على طلبك وسيتم تنفيذ الخدمة حسب الموعد.',
       );
     }
-
-    // ✅ NEW
     if (isIncomplete) {
       return StatusUi(
         label: 'غير مكتملة',
         color: Colors.grey.shade700,
         bg: Colors.grey.withValues(alpha: 0.10),
         border: Colors.grey.withValues(alpha: 0.35),
-        footerText:
-            'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
+        footerText: 'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
       );
     }
 
@@ -254,11 +258,18 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final k = r.toLowerCase();
     if (k.contains('provider')) return 'تم الإلغاء من قبل المزود';
-    if (k.contains('customer') || k.contains('user')) {
-      return 'تم الإلغاء من قبل العميل';
-    }
+    if (k.contains('customer') || k.contains('user')) return 'تم الإلغاء من قبل العميل';
     if (k.contains('system')) return 'تم الإلغاء تلقائياً';
     return 'سبب الإلغاء غير محدد';
+  }
+
+  // ✅ NEW: قراءة تقييم المزود من حالتين:
+  // 1) rating.provider_rating / rating.amount_paid / rating.provider_response
+  // 2) provider_rating / amount_paid / provider_response مباشرة داخل booking
+  Map<String, dynamic>? _readRatingMap(Map<String, dynamic> booking) {
+    final r = booking['rating'];
+    if (r is Map<String, dynamic>) return r;
+    return null;
   }
 
   @override
@@ -277,9 +288,9 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
-    final isIncomplete = status == 'incomplete'; // ✅ NEW
-    final isPending =
-        status == 'pending_provider_accept' || status == 'pending';
+    final isIncomplete = status == 'incomplete';
+    final isPending = status == 'pending_provider_accept' || status == 'pending';
+
     final isUpcoming = const {
       'confirmed',
       'provider_on_way',
@@ -287,7 +298,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       'in_progress',
     }.contains(status);
 
-    // ✅ IMPORTANT: لا تستبدل الاسم العربي بالإنجليزي
     String serviceName = base.serviceName;
     if (details != null) {
       final service = details['service'];
@@ -301,7 +311,6 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         if (ar.isNotEmpty && _hasArabic(ar)) {
           serviceName = ar;
         }
-        // إذا ما في عربي، خلي الاسم مثل الكرت (base.serviceName)
       }
     }
 
@@ -318,14 +327,15 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     String city = details != null ? _readString(details, ['service_city']) : '';
     city = _onlyArabicCity(city);
     final loc = city.isEmpty ? '' : city;
+const currency = 'د.أ';
 
     final price = details != null
         ? (_readNum(details, ['total_price', 'base_price']) ?? base.price)
         : base.price;
-    final currency = (base.currency ?? 'JOD').trim();
+        
     final priceText = price == null
-        ? 'غير محدد'
-        : '$currency ${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))}';
+    ? 'غير محدد'
+    : '${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))} $currency';
 
     String? providerName = base.providerName;
     String? providerPhone = base.providerPhone;
@@ -358,17 +368,39 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
           ]);
     final cancelReason = _cancelReasonArabic(rawCancelReason);
 
-    // ✅ NEW: provider_notes للـ incomplete
-    final rawProviderNotes =
-        details == null ? '' : _readString(details, ['provider_notes']);
-    final incompleteNote =
-        isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
+    final rawProviderNotes = details == null ? '' : _readString(details, ['provider_notes']);
+    final incompleteNote = isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
 
     final bookingNumber = _toArabicDigits(
-      base.bookingNumber.startsWith('#')
-          ? base.bookingNumber
-          : '#${base.bookingNumber}',
+      base.bookingNumber.startsWith('#') ? base.bookingNumber : '#${base.bookingNumber}',
     );
+
+    // ✅ NEW: rating data
+    final ratingMap = details == null ? null : _readRatingMap(details);
+
+    final providerRating = details == null
+        ? null
+        : (_readInt(ratingMap ?? details, ['provider_rating', 'providerRating']));
+
+    final amountPaid = details == null
+        ? null
+        : (_readNum(ratingMap ?? details, ['amount_paid', 'amountPaid']));
+
+    final providerResponse = details == null
+        ? ''
+        : _readString(
+            ratingMap ?? details,
+            ['provider_response', 'providerResponse'],
+            fallback: '',
+          );
+
+    final providerRatedAt = details == null
+        ? null
+        : _readString(
+            ratingMap ?? details,
+            ['provider_response_at', 'providerResponseAt'],
+            fallback: '',
+          ).trim();
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -501,7 +533,19 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 textColor: ui.color,
               ),
 
-              // ✅ NEW: صندوق ملاحظة incomplete من provider_notes
+              // ✅ NEW: عرض تقييم مزود الخدمة للمستخدم (ضمن الحجز المكتمل)
+              if (isCompleted) ...[
+                SizeConfig.v(12),
+                ProviderRatingBox(
+                  rating: providerRating,
+                  amountPaid: amountPaid,
+                  currency: currency,
+                  message: providerResponse,
+                  ratedAt: providerRatedAt!.isEmpty ? null : providerRatedAt,
+                ),
+              ],
+
+              // ✅ صندوق ملاحظة incomplete من provider_notes
               if (isIncomplete && incompleteNote.isNotEmpty) ...[
                 SizeConfig.v(12),
                 Container(
@@ -516,8 +560,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded,
-                          color: Colors.grey.shade700),
+                      Icon(Icons.info_outline_rounded, color: Colors.grey.shade700),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -536,13 +579,9 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
               ],
 
               // ✅ ما بنعرض إلغاء للحالات غير المناسبة
-              if (!isCancelled &&
-                  !isCompleted &&
-                  !isIncomplete &&
-                  (isPending || isUpcoming))
+              if (!isCancelled && !isCompleted && !isIncomplete && (isPending || isUpcoming))
                 CancelButton(
-                  isLoading:
-                      ref.watch(serviceDetailsControllerProvider).isCancelling,
+                  isLoading: ref.watch(serviceDetailsControllerProvider).isCancelling,
                   onPressed: () => _confirmCancel(status),
                 ),
 
@@ -624,9 +663,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                                 style: TextStyle(
                                   fontSize: SizeConfig.ts(12),
                                   fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? Colors.red.shade700
-                                      : AppColors.textPrimary,
+                                  color: isSelected ? Colors.red.shade700 : AppColors.textPrimary,
                                 ),
                               ),
                             ),
@@ -704,8 +741,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       bookingId: widget.initialItem.bookingId,
       currentStatus: currentStatus,
       cancellationCategory: selectedCategory,
-      cancellationReason:
-          noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+      cancellationReason: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
     );
 
     noteCtrl.dispose();

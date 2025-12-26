@@ -1,5 +1,3 @@
-// lib/features/provider/home/presentation/views/profile/viewmodels/provider_profile_controller.dart
-
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -7,10 +5,11 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
 
+import 'package:beitak_app/core/error/exceptions.dart';
+
 import 'provider_profile_state.dart';
 
-class ProviderProfileController
-    extends StateNotifier<AsyncValue<ProviderProfileState>> {
+class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfileState>> {
   ProviderProfileController(this.ref) : super(const AsyncLoading()) {
     load();
   }
@@ -42,6 +41,48 @@ class ProviderProfileController
     return false;
   }
 
+  // ===================== Safe JSON =====================
+
+  Map<String, dynamic> _expectMap(dynamic data, {String? fallback}) {
+    if (data is Map) return Map<String, dynamic>.from(data);
+
+    if (data is String) {
+      final s = data.toLowerCase();
+      if (s.contains('<html') || s.contains('cloudflare')) {
+        throw const ServerException(message: 'يوجد عطل مؤقت في الخادم. حاول مرة أخرى بعد قليل.');
+      }
+      throw ServerException(message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.');
+    }
+
+    throw ServerException(message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.');
+  }
+
+  Map<String, dynamic> _extractDataMap(Map<String, dynamic> root) {
+    final d = root['data'];
+    if (d is Map) return Map<String, dynamic>.from(d);
+    return root;
+  }
+
+  // ===================== City =====================
+
+  static const _citySeps = <String>['،', ',', ' - ', '-', '|'];
+
+  String _cityOnlyLabel(String label) {
+    final t = label.trim();
+    if (t.isEmpty) return '';
+
+    for (final s in _citySeps) {
+      final idx = t.indexOf(s);
+      if (idx != -1) {
+        final first = t.substring(0, idx).trim();
+        if (first.isNotEmpty) return first;
+      }
+    }
+    return t;
+  }
+
+  // ===================== Docs =====================
+
   DocStatus _docStatus({
     required bool verified,
     required bool hasFile,
@@ -58,30 +99,47 @@ class ProviderProfileController
     return year.isEmpty ? 'عضو منذ —' : 'عضو منذ $year';
   }
 
+  // ===================== API =====================
+
   Future<Map<String, dynamic>> _fetchAuthUserCached() async {
     if (_cachedAuthUser != null) return _cachedAuthUser!;
 
-    final res = await ApiClient.dio.get(ApiConstants.authProfile);
-    final u = (res.data?['data']?['user'] ?? <String, dynamic>{})
-        as Map<String, dynamic>;
+    try {
+      final res = await ApiClient.dio.get(ApiConstants.authProfile);
 
-    _cachedAuthUser = u;
-    return u;
+      final root = _expectMap(
+        res.data,
+        fallback: 'تعذر قراءة بيانات المستخدم من الخادم.',
+      );
+      final data = _extractDataMap(root);
+
+      final userRaw = data['user'];
+      final user = _expectMap(
+        userRaw,
+        fallback: 'تعذر قراءة بيانات المستخدم من الخادم.',
+      );
+
+      _cachedAuthUser = user;
+      return user;
+    } on DioException catch (e) {
+      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+    } on ServerException {
+      rethrow;
+    } catch (_) {
+      throw const ServerException(message: 'حدث خطأ غير متوقع. حاول مرة أخرى.');
+    }
   }
 
   Future<int> _resolveProviderId() async {
-    if (_cachedProviderId != null && _cachedProviderId! > 0) {
-      return _cachedProviderId!;
-    }
+    if (_cachedProviderId != null && _cachedProviderId! > 0) return _cachedProviderId!;
 
     final u = await _fetchAuthUserCached();
     final pp = u['provider_profile'];
     final id = (pp is Map) ? pp['id'] : null;
 
-    final providerId =
-        (id is num) ? id.toInt() : int.tryParse(id?.toString() ?? '');
+    final providerId = (id is num) ? id.toInt() : int.tryParse(id?.toString() ?? '');
     if (providerId == null || providerId <= 0) {
-      throw Exception('تعذر تحديد رقم مزود الخدمة (providerId).');
+      throw const ServerException(message: 'تعذر تحديد رقم مزود الخدمة.');
     }
 
     _cachedProviderId = providerId;
@@ -105,25 +163,31 @@ class ProviderProfileController
   Future<void> _ensureCategoriesLoaded() async {
     if (_categoriesById.isNotEmpty) return;
 
-    final res = await ApiClient.dio.get(ApiConstants.categories);
-    final data = res.data;
+    try {
+      final res = await ApiClient.dio.get(ApiConstants.categories);
 
-    final list = (data is Map)
-        ? (data['data']?['categories'] ??
-            data['data']?['items'] ??
-            data['categories'] ??
-            data['items'])
-        : null;
+      final root = _expectMap(
+        res.data,
+        fallback: 'تعذر تحميل التصنيفات.',
+      );
+      final data = _extractDataMap(root);
 
-    if (list is List) {
-      for (final item in list) {
-        if (item is Map) {
-          final id = _i(item['id']);
-          if (id > 0) {
-            _categoriesById[id] = Map<String, dynamic>.from(item);
+      final list = (data['categories'] ?? data['items']) ?? (root['categories'] ?? root['items']);
+
+      if (list is List) {
+        for (final item in list) {
+          if (item is Map) {
+            final id = _i(item['id']);
+            if (id > 0) _categoriesById[id] = Map<String, dynamic>.from(item);
           }
         }
       }
+    } on DioException catch (e) {
+      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+    } on ServerException {
+      rethrow;
+    } catch (_) {
+      throw const ServerException(message: 'تعذر تحميل التصنيفات. حاول مرة أخرى.');
     }
   }
 
@@ -159,10 +223,8 @@ class ProviderProfileController
     return (lbl.trim().isEmpty) ? '—' : lbl;
   }
 
-  // ✅ server بده email (وأحيانًا غيره) موجودين دائمًا في PATCH (bio/experience etc.)
-  Future<Map<String, dynamic>> _enrichPatchPayload(
-    Map<String, dynamic> payload,
-  ) async {
+  // ✅ server بده email (وأحيانًا غيره) موجودين دائمًا في PATCH
+  Future<Map<String, dynamic>> _enrichPatchPayload(Map<String, dynamic> payload) async {
     final enriched = Map<String, dynamic>.from(payload);
 
     final current = state.asData?.value;
@@ -199,26 +261,18 @@ class ProviderProfileController
     putIfMissing('last_name', lastName);
 
     if (_s(enriched['email']).isEmpty) {
-      throw Exception('تعذر تحديث البروفايل: البريد الإلكتروني غير متوفر محلياً.');
+      throw const ServerException(message: 'تعذر تحديث البروفايل: البريد الإلكتروني غير متوفر محلياً.');
     }
 
     return enriched;
   }
 
-  /// ✅ قراءة is_active من:
-  /// 1) providerData.user.is_active
-  /// 2) auth cache user.is_active
-  /// 3) fallback قديم: providerData.instant_booking
   bool _resolveIsActive(Map<String, dynamic> providerData) {
     final u1 = providerData['user'];
-    if (u1 is Map && u1.containsKey('is_active')) {
-      return _b(u1['is_active']);
-    }
+    if (u1 is Map && u1.containsKey('is_active')) return _b(u1['is_active']);
 
     final auth = _cachedAuthUser;
-    if (auth != null && auth.containsKey('is_active')) {
-      return _b(auth['is_active']);
-    }
+    if (auth != null && auth.containsKey('is_active')) return _b(auth['is_active']);
 
     return providerData['instant_booking'] == true;
   }
@@ -237,18 +291,12 @@ class ProviderProfileController
 
     final displayName = (first.isNotEmpty || last.isNotEmpty)
         ? ('$first $last').trim()
-        : (_s(providerData['business_name']).isNotEmpty
-            ? _s(providerData['business_name'])
-            : 'مزود خدمة');
+        : (_s(providerData['business_name']).isNotEmpty ? _s(providerData['business_name']) : 'مزود خدمة');
 
-    final memberSinceLabel =
-        _memberSinceLabelFromIso(_s(providerData['created_at']));
-
+    final memberSinceLabel = _memberSinceLabelFromIso(_s(providerData['created_at']));
     final bio = _extractBio(providerData);
 
-    // ✅ يعتمد على is_active
     final isAvailable = _resolveIsActive(providerData);
-
     final experienceYears = _i(providerData['experience_years']);
 
     String locationLabel = '';
@@ -258,14 +306,12 @@ class ProviderProfileController
       final cityName = _s(city is Map ? city['name'] : null);
       final cityEn = _s(city is Map ? city['name_en'] : null);
 
-      if (cityAr.isNotEmpty) {
-        locationLabel = cityAr;
-      } else if (cityName.isNotEmpty) {
-        locationLabel = cityName;
-      } else if (cityEn.isNotEmpty) {
-        locationLabel = cityEn;
-      }
+      if (cityAr.isNotEmpty) locationLabel = cityAr;
+      else if (cityName.isNotEmpty) locationLabel = cityName;
+      else if (cityEn.isNotEmpty) locationLabel = cityEn;
     }
+
+    final cityLabel = _cityOnlyLabel(locationLabel);
 
     final hasIdFile = _s(providerData['id_verified_image']).isNotEmpty;
     final hasLicenseFile = _s(providerData['vocational_license_image']).isNotEmpty;
@@ -275,7 +321,6 @@ class ProviderProfileController
     final licenseVerified = _b(providerData['is_license_verified']);
     final policeVerified = _b(providerData['is_police_clearance_verified']);
 
-    // ✅ حسب كلامك: المطلوب للتفعيل = هوية + رخصة فقط
     final isFullyVerified = idVerified && licenseVerified;
 
     final missingRequiredDocs = <String>[];
@@ -285,27 +330,15 @@ class ProviderProfileController
     final docs = <ProviderDocumentItem>[
       ProviderDocumentItem(
         title: 'الهوية الوطنية',
-        status: _docStatus(
-          verified: idVerified,
-          hasFile: hasIdFile,
-          requiredDoc: true,
-        ),
+        status: _docStatus(verified: idVerified, hasFile: hasIdFile, requiredDoc: true),
       ),
       ProviderDocumentItem(
         title: 'الرخصة التجارية',
-        status: _docStatus(
-          verified: licenseVerified,
-          hasFile: hasLicenseFile,
-          requiredDoc: true,
-        ),
+        status: _docStatus(verified: licenseVerified, hasFile: hasLicenseFile, requiredDoc: true),
       ),
       ProviderDocumentItem(
         title: 'فحص السجل الجنائي',
-        status: _docStatus(
-          verified: policeVerified,
-          hasFile: hasPoliceFile,
-          requiredDoc: false,
-        ),
+        status: _docStatus(verified: policeVerified, hasFile: hasPoliceFile, requiredDoc: false),
       ),
     ];
 
@@ -322,6 +355,7 @@ class ProviderProfileController
       bio: bio,
       isAvailable: isAvailable,
       locationLabel: locationLabel,
+      cityLabel: cityLabel,
       documents: docs,
       isFullyVerified: isFullyVerified,
       missingRequiredDocs: missingRequiredDocs,
@@ -334,73 +368,78 @@ class ProviderProfileController
     state = const AsyncLoading();
 
     state = await AsyncValue.guard(() async {
-      await _fetchAuthUserCached();
+      try {
+        await _fetchAuthUserCached();
 
-      final providerId = await _resolveProviderId();
+        final providerId = await _resolveProviderId();
 
-      final providerFuture = ApiClient.dio.get(ApiConstants.providerById(providerId));
-      final statsFuture = ApiClient.dio
-          .get(ApiConstants.providerDashboardStats)
-          .catchError((_) => null);
+        final providerFuture = ApiClient.dio.get(ApiConstants.providerById(providerId));
+        final statsFuture = ApiClient.dio.get(ApiConstants.providerDashboardStats).catchError((_) => null);
 
-      final providerRes = await providerFuture;
-      final providerData =
-          (providerRes.data?['data']?['provider'] ?? <String, dynamic>{})
-              as Map<String, dynamic>;
+        final providerRes = await providerFuture;
 
-      int totalBookings = _i(providerData['total_bookings']);
-      int completedBookings = 0;
-      double rating = _d(providerData['rating_avg']);
-      int ratingCount = _i(providerData['rating_count']);
+        final root = _expectMap(providerRes.data, fallback: 'تعذر قراءة بيانات مزود الخدمة.');
+        final data = _extractDataMap(root);
 
-      final statsRes = await statsFuture;
-      if (statsRes != null) {
-        final stats = statsRes.data?['data']?['statistics'] ?? {};
-        totalBookings = _i(stats['total_bookings']);
-        completedBookings = _i(stats['completed_bookings']);
-        rating = _d(stats['rating']);
-        ratingCount = _i(stats['rating_count']);
+        final providerData = _expectMap(data['provider'], fallback: 'تعذر تحميل بيانات مزود الخدمة.');
+
+        int totalBookings = _i(providerData['total_bookings']);
+        int completedBookings = 0;
+        double rating = _d(providerData['rating_avg']);
+        int ratingCount = _i(providerData['rating_count']);
+
+        final statsRes = await statsFuture;
+        if (statsRes != null) {
+          final statsRoot = _expectMap(statsRes.data, fallback: 'تعذر قراءة إحصائيات المزود.');
+          final statsData = _extractDataMap(statsRoot);
+
+          final stats = (statsData['statistics'] is Map)
+              ? Map<String, dynamic>.from(statsData['statistics'])
+              : <String, dynamic>{};
+
+          totalBookings = _i(stats['total_bookings']);
+          completedBookings = _i(stats['completed_bookings']);
+          rating = _d(stats['rating']);
+          ratingCount = _i(stats['rating_count']);
+        }
+
+        final categoryLabel = await _resolveCategoryLabel(providerData);
+
+        return _buildStateFromProviderSync(
+          providerData: providerData,
+          totalBookings: totalBookings,
+          completedBookings: completedBookings,
+          rating: rating,
+          ratingCount: ratingCount,
+          categoryLabel: categoryLabel,
+        );
+      } on DioException catch (e) {
+        throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
       }
-
-      final categoryLabel = await _resolveCategoryLabel(providerData);
-
-      return _buildStateFromProviderSync(
-        providerData: providerData,
-        totalBookings: totalBookings,
-        completedBookings: completedBookings,
-        rating: rating,
-        ratingCount: ratingCount,
-        categoryLabel: categoryLabel,
-      );
     });
   }
 
   Future<void> refresh() => load();
 
-  Future<Map<String, dynamic>> _patchProviderProfile(
-    Map<String, dynamic> payload,
-  ) async {
+  Future<Map<String, dynamic>> _patchProviderProfile(Map<String, dynamic> payload) async {
     final enriched = await _enrichPatchPayload(payload);
 
-    final res = await ApiClient.dio.patch(
-      ApiConstants.providerProfilePatch,
-      data: enriched,
-    );
+    try {
+      final res = await ApiClient.dio.patch(ApiConstants.providerProfilePatch, data: enriched);
 
-    final provider =
-        (res.data?['data']?['provider'] ?? <String, dynamic>{})
-            as Map<String, dynamic>;
+      final root = _expectMap(res.data, fallback: 'تعذر تحديث البيانات.');
+      final data = _extractDataMap(root);
 
-    if (provider.isEmpty) {
-      throw Exception('فشل تحديث البروفايل: الرد لا يحتوي provider');
+      final provider = _expectMap(data['provider'], fallback: 'فشل تحديث البروفايل.');
+      if (provider.isEmpty) throw const ServerException(message: 'فشل تحديث البروفايل. حاول مرة أخرى.');
+
+      return provider;
+    } on DioException catch (e) {
+      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
     }
-    return provider;
   }
 
-  // ---------- updates ----------
-
-  /// ✅ NEW: تفعيل/تعطيل الحساب عبر endpoints الجديدة
-  /// - نأخذ is_active مباشرة من response (حل مشكلة "رجع غير مفعل")
+  /// ✅ تفعيل/تعطيل الحساب عبر endpoints الجديدة
   Future<void> updateAvailability(bool value) async {
     final current = state.asData?.value;
     if (current == null) return;
@@ -408,16 +447,17 @@ class ProviderProfileController
     state = AsyncData(current.copyWith(isUpdatingAvailability: true));
 
     try {
-      final endpoint =
-          value ? ApiConstants.providerActivate : ApiConstants.providerDeactivate;
+      final endpoint = value ? ApiConstants.providerActivate : ApiConstants.providerDeactivate;
 
       final res = await ApiClient.dio.patch(endpoint);
 
-      // ✅ اقرأ مباشرة من response
-      final serverActiveRaw = res.data?['data']?['user']?['is_active'];
+      final root = _expectMap(res.data, fallback: 'تعذر تحديث حالة الحساب.');
+      final data = _extractDataMap(root);
+
+      final userMap = (data['user'] is Map) ? Map<String, dynamic>.from(data['user']) : <String, dynamic>{};
+      final serverActiveRaw = userMap['is_active'];
       final finalActive = (serverActiveRaw == null) ? value : _b(serverActiveRaw);
 
-      // ✅ حدث provider.user.is_active داخل state
       final updatedProvider = Map<String, dynamic>.from(current.provider);
       final user = (updatedProvider['user'] is Map)
           ? Map<String, dynamic>.from(updatedProvider['user'] as Map)
@@ -426,7 +466,6 @@ class ProviderProfileController
       user['is_active'] = finalActive;
       updatedProvider['user'] = user;
 
-      // ✅ صفّر الكاش حتى الجلب القادم يكون نظيف
       _cachedAuthUser = null;
 
       state = AsyncData(
@@ -438,10 +477,13 @@ class ProviderProfileController
       );
     } on DioException catch (e) {
       state = AsyncData(current.copyWith(isUpdatingAvailability: false));
-      throw Exception(_friendlyDioError(e));
-    } catch (e) {
+      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+    } on ServerException catch (e) {
       state = AsyncData(current.copyWith(isUpdatingAvailability: false));
-      throw Exception(e.toString());
+      throw e;
+    } catch (_) {
+      state = AsyncData(current.copyWith(isUpdatingAvailability: false));
+      throw const ServerException(message: 'حدث خطأ غير متوقع. حاول مرة أخرى.');
     }
   }
 
@@ -466,12 +508,9 @@ class ProviderProfileController
         ratingCount: current.ratingCount,
         categoryLabel: categoryLabel,
       ));
-    } on DioException catch (e) {
-      state = AsyncData(current);
-      throw Exception(_friendlyDioError(e));
     } catch (e) {
       state = AsyncData(current);
-      throw Exception(e.toString());
+      rethrow;
     }
   }
 
@@ -494,30 +533,61 @@ class ProviderProfileController
         ratingCount: current.ratingCount,
         categoryLabel: categoryLabel,
       ));
-    } on DioException catch (e) {
-      state = AsyncData(current);
-      throw Exception(_friendlyDioError(e));
     } catch (e) {
       state = AsyncData(current);
-      throw Exception(e.toString());
+      rethrow;
     }
   }
 
+  // ✅ ترجمة أخطاء Dio (ومن ضمنها 530) + HTML/Cloudflare
   String _friendlyDioError(DioException e) {
     final code = e.response?.statusCode;
-    final msg = _s(e.response?.data?['message']);
+
+    final data = e.response?.data;
+    if (data is String) {
+      final lower = data.toLowerCase();
+      if (lower.contains('<html') || lower.contains('cloudflare')) {
+        return 'يوجد عطل مؤقت في الخادم. حاول مرة أخرى بعد قليل.';
+      }
+    }
+
+    // تايم آوت/اتصال
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout) {
+      return 'انتهت مهلة الاتصال. تأكد من الإنترنت وحاول مرة أخرى.';
+    }
+
+    if (e.type == DioExceptionType.connectionError) {
+      return 'تعذر الاتصال بالخادم. تأكد من الإنترنت أو جرّب لاحقاً.';
+    }
+
+    if (e.type == DioExceptionType.cancel) return 'تم إلغاء الطلب.';
+
+    // Status codes
+    if (code == 530) return 'يوجد عطل مؤقت في الخادم (530). حاول مرة أخرى بعد قليل.';
+    if (code == 502 || code == 503 || code == 504) {
+      return 'الخدمة غير متاحة حالياً. حاول مرة أخرى بعد قليل.';
+    }
+
+    // رسائل API
+    String msg = '';
+    if (data is Map) msg = (data['message']?.toString() ?? '').trim();
 
     if (code == 400 && msg == 'email_cannot_be_empty') {
-      return 'السيرفر يتطلب إرسال البريد الإلكتروني مع أي تعديل. (تمت معالجة ذلك، جرّب مرة ثانية)';
+      return 'السيرفر يتطلب إرسال البريد الإلكتروني مع أي تعديل.';
     }
     if (code == 401) return 'انتهت الجلسة. أعد تسجيل الدخول.';
     if (code == 403) return 'ليس لديك صلاحية.';
-    if (code == 404) return 'المسار غير موجود على السيرفر.';
+    if (code == 404) return 'المسار غير موجود على الخادم.';
+
     if (msg.isNotEmpty) {
-      // ✅ رسائل activate/deactivate
       if (msg == 'account_activated') return 'تم تفعيل الحساب';
+      if (msg == 'account_deactivated') return 'تم تعطيل الحساب';
       return msg;
     }
+
+    if (code != null && code >= 500) return 'حدث خطأ من الخادم. حاول مرة أخرى لاحقاً.';
     return 'حدث خطأ بالشبكة، حاول مرة أخرى.';
   }
 }

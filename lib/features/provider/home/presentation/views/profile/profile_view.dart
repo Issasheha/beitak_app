@@ -8,6 +8,9 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
+// ✅ NEW: لتصفية الأخطاء وترجمتها
+import 'package:beitak_app/core/error/error_text.dart';
+
 import 'package:beitak_app/features/user/home/presentation/views/profile/account_setting_widgets/confirm_action_dialog.dart';
 
 import 'package:beitak_app/features/provider/home/presentation/views/profile/viewmodels/provider_profile_providers.dart';
@@ -55,8 +58,7 @@ class ProviderProfileView extends ConsumerWidget {
           actions: [
             IconButton(
               tooltip: 'تعديل الحساب',
-              icon:
-                  const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
+              icon: const Icon(Icons.edit_outlined, color: AppColors.textPrimary),
               onPressed: () => context.push(AppRoutes.provideraccountEdit),
             ),
           ],
@@ -64,10 +66,13 @@ class ProviderProfileView extends ConsumerWidget {
         body: SafeArea(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
+
+            // ✅ IMPORTANT: لا تستخدم e.toString() نهائياً
             error: (e, _) => _ErrorState(
-              message: e.toString(),
+              message: errorText(e),
               onRetry: () => controller.refresh(),
             ),
+
             data: (state) {
               return SingleChildScrollView(
                 padding: SizeConfig.padding(horizontal: 16, vertical: 14),
@@ -103,30 +108,26 @@ class ProviderProfileView extends ConsumerWidget {
                           foregroundColor: Colors.white,
                           padding: SizeConfig.padding(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                           ),
                         ),
                         onPressed: () async {
                           final confirmed = await showDialog<bool>(
                             context: context,
                             barrierDismissible: true,
-                            builder: (_) => const ConfirmActionDialog(
-                                mode: ConfirmMode.logout),
+                            builder: (_) =>
+                                const ConfirmActionDialog(mode: ConfirmMode.logout),
                           );
 
                           if (confirmed != true) return;
 
                           try {
-                            await ref
-                                .read(authControllerProvider.notifier)
-                                .logout();
+                            await ref.read(authControllerProvider.notifier).logout();
                           } catch (_) {
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content:
-                                    Text('تعذر تسجيل الخروج، حاول مرة أخرى'),
+                                content: Text('تعذر تسجيل الخروج، حاول مرة أخرى'),
                               ),
                             );
                           }
@@ -184,8 +185,9 @@ class _VerificationBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF8E1),
         borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-        border:
-            Border.all(color: const Color(0xFFFBC02D).withValues(alpha: 0.35)),
+        border: Border.all(
+          color: const Color(0xFFFBC02D).withValues(alpha: 0.35),
+        ),
       ),
       child: Row(
         children: [
@@ -237,16 +239,16 @@ class _ErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style:
-                  AppTextStyles.body14.copyWith(color: AppColors.textPrimary),
+              style: AppTextStyles.body14.copyWith(
+                color: AppColors.textPrimary,
+              ),
             ),
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: onRetry,
               child: Text(
                 'إعادة المحاولة',
-                style:
-                    AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
+                style: AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],

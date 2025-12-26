@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/provider/home/data/models/provider_booking_model.dart';
 
-class ProviderBookingCard extends StatelessWidget {
+import 'package:beitak_app/core/constants/fixed_locations.dart';
+import 'package:beitak_app/core/providers/areas_name_map_provider.dart';
+
+class ProviderBookingCard extends ConsumerWidget {
   final ProviderBookingModel booking;
 
   /// Open details sheet
@@ -87,7 +91,7 @@ class ProviderBookingCard extends StatelessWidget {
 
   /// ✅ "HH:mm:ss" or "HH:mm" -> "h:mm ص/م"
   String _time12hAr(String hhmmss) {
-    final s = (hhmmss).trim();
+    final s = hhmmss.trim();
     if (s.isEmpty) return '—';
 
     final parts = s.split(':');
@@ -104,6 +108,55 @@ class ProviderBookingCard extends StatelessWidget {
 
     final mm = m.toString().padLeft(2, '0');
     return '$hour12:$mm $suffix';
+  }
+
+  // ---------------- Clean + Split helpers ----------------
+
+  bool _isPlaceholder(String s) {
+    final x = s.trim().toLowerCase();
+    return x.isEmpty ||
+        x == 'n/a' ||
+        x == 'na' ||
+        x == 'none' ||
+        x == 'null' ||
+        x == '-' ||
+        x == '—';
+  }
+
+  String _clean(String? s) {
+    final v = (s ?? '').trim();
+    if (v.isEmpty) return '';
+    if (_isPlaceholder(v)) return '';
+    return v;
+  }
+
+  /// ✅ يفك locationText إلى [city, area]
+  /// يقبل: "amman, abdoun" أو "amman - abdoun" أو "amman، abdoun"
+  List<String> _splitCityArea(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return const [];
+
+    var norm = s;
+
+    norm = norm.replaceAll('،', ',');
+    norm = norm.replaceAll(' - ', '-');
+    norm = norm.replaceAll(' — ', '-');
+
+    List<String> parts;
+    if (norm.contains(',')) {
+      parts = norm.split(',');
+    } else if (norm.contains('-')) {
+      parts = norm.split('-');
+    } else {
+      parts = [norm];
+    }
+
+    parts = parts.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
+    // إذا جزء واحد فقط: اعتبره منطقة
+    if (parts.length == 1) return ['', parts[0]];
+
+    return [parts[0], parts[1]];
   }
 
   // ---------------- Avatar helpers ----------------
@@ -157,7 +210,7 @@ class ProviderBookingCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final initials = _initials(booking.customerName);
     final avatar = _avatarColor(booking.customerName);
 
@@ -171,6 +224,38 @@ class ProviderBookingCard extends StatelessWidget {
 
     // ✅ فقط قبل القبول + فقط إذا كان فيه رقم/إيميل أصلاً
     final showContactHint = _isPending && _hasContactInfo(booking);
+
+    // ✅ City/Area chips
+    final areasMapAsync = ref.watch(areasNameMapProvider);
+
+    final locationRaw = _clean(booking.locationText);
+    final parts = _splitCityArea(locationRaw);
+
+    final cityRaw = parts.isNotEmpty ? parts[0] : '';
+    final areaRaw = parts.length > 1 ? parts[1] : '';
+
+    final cityAr = areasMapAsync.when(
+      data: (m) => FixedLocations.labelArFromAny(cityRaw, map: m),
+      loading: () => FixedLocations.labelArFromAny(cityRaw),
+      error: (_, __) => FixedLocations.labelArFromAny(cityRaw),
+    );
+
+    final areaAr = areasMapAsync.when(
+      data: (m) => FixedLocations.labelArFromAny(areaRaw, map: m),
+      loading: () => FixedLocations.labelArFromAny(areaRaw),
+      error: (_, __) => FixedLocations.labelArFromAny(areaRaw),
+    );
+
+    final cityShown = (cityRaw.trim().isEmpty)
+        ? ''
+        : (cityAr.trim().isEmpty ? cityRaw : cityAr);
+
+    final areaShown = (areaRaw.trim().isEmpty)
+        ? ''
+        : (areaAr.trim().isEmpty ? areaRaw : areaAr);
+
+    final hasCity = cityShown.trim().isNotEmpty && !_isPlaceholder(cityShown);
+    final hasArea = areaShown.trim().isNotEmpty && !_isPlaceholder(areaShown);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -279,7 +364,7 @@ class ProviderBookingCard extends StatelessWidget {
                         ],
                       ),
 
-                      // ✅ تنبيه بيانات التواصل قبل القبول (خفيف ومرتب)
+                      // ✅ تنبيه بيانات التواصل قبل القبول
                       if (showContactHint) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         const _ContactHiddenHint(),
@@ -288,8 +373,8 @@ class ProviderBookingCard extends StatelessWidget {
                       if (showNotes) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         Container(
-                          padding: SizeConfig.padding(
-                              horizontal: 10, vertical: 9),
+                          padding:
+                              SizeConfig.padding(horizontal: 10, vertical: 9),
                           decoration: BoxDecoration(
                             color: AppColors.background,
                             borderRadius:
@@ -357,31 +442,27 @@ class ProviderBookingCard extends StatelessWidget {
                         ],
                       ),
 
-                      SizedBox(height: SizeConfig.h(10)),
-
-                      // Location (✅ بعد إصلاح الموديل ما رح يتكرر)
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.place_outlined,
-                            size: 16,
-                            color: AppColors.textSecondary,
-                          ),
-                          SizedBox(width: SizeConfig.w(6)),
-                          Expanded(
-                            child: Text(
-                              booking.locationText,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body14.copyWith(
-                                fontSize: SizeConfig.ts(12.2),
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textSecondary,
+                      // ✅ Chips for City/Area (خفيفة)
+                      if (hasCity || hasArea) ...[
+                        SizedBox(height: SizeConfig.h(10)),
+                        Wrap(
+                          spacing: SizeConfig.w(8),
+                          runSpacing: SizeConfig.h(8),
+                          alignment: WrapAlignment.start,
+                          children: [
+                            if (hasCity)
+                              _MiniChip(
+                                icon: Icons.location_city_outlined,
+                                text: cityShown,
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
+                            if (hasArea)
+                              _MiniChip(
+                                icon: Icons.place_outlined,
+                                text: areaShown,
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -449,6 +530,8 @@ class ProviderBookingCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------- UI widgets ----------------
 
 class _ContactHiddenHint extends StatelessWidget {
   const _ContactHiddenHint();
@@ -525,6 +608,55 @@ class _Meta extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MiniChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _MiniChip({
+    required this.icon,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.w(10),
+        vertical: SizeConfig.h(7),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.lightGreen.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(SizeConfig.radius(999)),
+        border: Border.all(
+          color: AppColors.lightGreen.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        textDirection: TextDirection.rtl,
+        children: [
+          Icon(
+            icon,
+            size: SizeConfig.ts(14),
+            color: AppColors.textSecondary,
+          ),
+          SizedBox(width: SizeConfig.w(6)),
+          Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.body14.copyWith(
+              fontSize: SizeConfig.ts(12),
+              fontWeight: FontWeight.w800,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

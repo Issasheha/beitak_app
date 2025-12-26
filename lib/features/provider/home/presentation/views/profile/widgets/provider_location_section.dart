@@ -1,5 +1,3 @@
-// lib/features/provider/home/presentation/views/profile/widgets/provider_location_section.dart
-
 import 'package:flutter/material.dart';
 
 import 'package:beitak_app/core/constants/colors.dart';
@@ -16,32 +14,9 @@ class ProviderLocationSection extends StatelessWidget {
     required this.state,
   });
 
-  String _cityOnly(String label) {
-    final t = label.trim();
-    if (t.isEmpty) return '';
-
-    // جرّب أشهر الفواصل
-    final seps = <String>[
-      '،', // عربي
-      ',', // انجليزي
-      ' - ',
-      '-',
-      '|',
-    ];
-
-    for (final s in seps) {
-      if (t.contains(s)) {
-        final first = t.split(s).first.trim();
-        if (first.isNotEmpty) return first;
-      }
-    }
-    return t;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final raw = state.locationLabel.trim();
-    final city = _cityOnly(raw);
+    final city = state.cityLabel.trim();
 
     if (city.isEmpty) {
       return const SizedBox.shrink();
@@ -61,7 +36,7 @@ class ProviderLocationSection extends StatelessWidget {
             SizeConfig.hSpace(8),
             Expanded(
               child: Text(
-                city, // ✅ City فقط
+                city,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body14.copyWith(

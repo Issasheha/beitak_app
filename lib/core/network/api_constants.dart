@@ -1,6 +1,5 @@
 class ApiConstants {
-  static const String baseUrl =
-      'https://ended-quantities-neighbor-assets.trycloudflare.com';
+  static const String baseUrl ='https://weblogs-cook-appears-lined.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
 
   // Auth
@@ -30,6 +29,8 @@ class ApiConstants {
       '/providers/profile/phone/verify-otp';
 
   static String providerById(int id) => '/providers/$id';
+static String providerBookingRating(int bookingId) =>
+    '/providers/bookings/$bookingId/provider-rating';
 
   // Bookings
   static const String bookingsMy = '/bookings/my';
