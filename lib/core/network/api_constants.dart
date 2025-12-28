@@ -1,5 +1,5 @@
 class ApiConstants {
-  static const String baseUrl ='https://weblogs-cook-appears-lined.trycloudflare.com';
+  static const String baseUrl ='https://night-ink-gaps-activation.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
 
   // Auth

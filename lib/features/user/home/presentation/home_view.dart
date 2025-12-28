@@ -1,3 +1,5 @@
+// lib/features/user/home/presentation/views/home_view.dart
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
@@ -54,6 +56,10 @@ class HomeView extends ConsumerWidget {
                         onNotificationsTap: () =>
                             context.push(AppRoutes.notifications),
                         onSearchTap: () => context.push(AppRoutes.search),
+
+                        // ✅ لما يكبس مايك من الهوم:
+                        onVoiceSearchTap: () =>
+                            context.push('${AppRoutes.search}?auto_voice=1'),
                       ),
                       Expanded(
                         child: SingleChildScrollView(

@@ -1,4 +1,7 @@
-import 'package:beitak_app/core/helpers/search_normalizer.dart'; // ✅ جديد
+// lib/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart
+
+import 'package:beitak_app/core/cache/locations_cache.dart';
+import 'package:beitak_app/core/helpers/search_normalizer.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
 import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
@@ -21,6 +24,8 @@ class BrowseServicesViewModel {
   bool hasMore = true;
 
   Future<void> loadInitialServices({
+    int? cityId,
+    int? areaId, // حالياً مش مستخدم لأننا مش متأكدين اسم البراميتر عند السيرفر
     String? searchTerm,
     String? categoryKey,
     double? minPrice,
@@ -34,6 +39,8 @@ class BrowseServicesViewModel {
 
     final result = await _fetchPage(
       page: _page,
+      cityId: cityId,
+      areaId: areaId,
       searchTerm: searchTerm,
       categoryKey: categoryKey,
       minPrice: minPrice,
@@ -47,6 +54,8 @@ class BrowseServicesViewModel {
   }
 
   Future<void> loadMoreServices({
+    int? cityId,
+    int? areaId,
     String? searchTerm,
     String? categoryKey,
     double? minPrice,
@@ -62,6 +71,8 @@ class BrowseServicesViewModel {
 
       final result = await _fetchPage(
         page: nextPage,
+        cityId: cityId,
+        areaId: areaId,
         searchTerm: searchTerm,
         categoryKey: categoryKey,
         minPrice: minPrice,
@@ -78,34 +89,46 @@ class BrowseServicesViewModel {
     }
   }
 
- Future<int?> _categoryIdFromKey(String? key) async {
-  final raw = key?.trim();
-  if (raw == null || raw.isEmpty) return null;
+  Future<int?> _categoryIdFromKey(String? key) async {
+    final raw = key?.trim();
+    if (raw == null || raw.isEmpty) return null;
 
-  final map = await _ref.read(categoriesIdMapProvider.future);
+    final map = await _ref.read(categoriesIdMapProvider.future);
 
-  final k = raw.toLowerCase();
+    final k = raw.toLowerCase();
 
-  // 1) exact
-  final exact = map[k];
-  if (exact != null) return exact;
+    // 1) exact
+    final exact = map[k];
+    if (exact != null) return exact;
 
-  // 2) underscore fallback
-  final underscore = k.replaceAll(RegExp(r'\s+'), '_');
-  final byUnderscore = map[underscore];
-  if (byUnderscore != null) return byUnderscore;
+    // 2) underscore fallback
+    final underscore = k.replaceAll(RegExp(r'\s+'), '_');
+    final byUnderscore = map[underscore];
+    if (byUnderscore != null) return byUnderscore;
 
-  // 3) space fallback (لو جاي underscore)
-  final spaces = k.replaceAll('_', ' ');
-  final bySpaces = map[spaces];
-  if (bySpaces != null) return bySpaces;
+    // 3) space fallback (لو جاي underscore)
+    final spaces = k.replaceAll('_', ' ');
+    final bySpaces = map[spaces];
+    if (bySpaces != null) return bySpaces;
 
-  return null;
-}
+    return null;
+  }
 
+  Future<String?> _cityNameFromId(int? cityId) async {
+    if (cityId == null) return null;
+    try {
+      final cities = await LocationsCache.getCities();
+      for (final c in cities) {
+        if (c.id == cityId) return c.name; // مثال: "Amman"
+      }
+    } catch (_) {}
+    return null;
+  }
 
   Future<_PageResult> _fetchPage({
     required int page,
+    int? cityId,
+    int? areaId,
     String? searchTerm,
     String? categoryKey,
     double? minPrice,
@@ -128,14 +151,26 @@ class BrowseServicesViewModel {
         (searchTerm ?? '').trim().isEmpty ? null : searchTerm!.trim();
 
     // ✅ التطبيع هون فقط (UI يظل عربي)
-    final String? q = qRaw == null ? null : SearchNormalizer.normalizeForApi(qRaw);
+    final String? q =
+        qRaw == null ? null : SearchNormalizer.normalizeForApi(qRaw);
 
-    final double? rating =
-        (minRating == null || minRating <= 0) ? null : (minRating > 5 ? 5 : minRating);
+    final double? rating = (minRating == null || minRating <= 0)
+        ? null
+        : (minRating > 5 ? 5 : minRating);
+
+    // ✅ أهم نقطة: city لازم يكون اسم مدينة مش رقم
+    final cityName = await _cityNameFromId(cityId);
 
     final qp = <String, dynamic>{
       'page': page,
       'limit': _limit,
+
+      // ✅ send city as name (مثل "Amman")
+      if (cityName != null && cityName.trim().isNotEmpty)
+        'city': cityName.trim(),
+
+      // (اختياري) إذا طلع لاحقاً إن السيرفر بده city_id، بنفع نرجعه،
+      // بس حالياً واضح إنه يستخدم city فقط من filters_applied.
 
       if (q != null) 'query': q,
       if (categoryId != null) 'category': categoryId,

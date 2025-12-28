@@ -1,8 +1,8 @@
-import 'package:beitak_app/features/provider/home/domain/entities/marketplace_page_entity.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/entities/marketplace_page_entity.dart';
 import 'package:dio/dio.dart';
 
-import '../../domain/entities/marketplace_request_entity.dart';
-import '../../presentation/views/marketplace/models/marketplace_filters.dart';
+import '../domain/entities/marketplace_request_entity.dart';
+import '../models/marketplace_filters.dart';
 import 'marketplace_remote_data_source.dart';
 
 class MarketplaceApiException implements Exception {
@@ -19,7 +19,7 @@ class MarketplaceApiException implements Exception {
   final String? existingBookingNumber;
   final String? existingBookingStatus;
 
-  /// (اختياري) كود HTTP لو حبيت
+  /// ✅ HTTP status
   final int? httpStatus;
 
   const MarketplaceApiException({
@@ -35,8 +35,7 @@ class MarketplaceApiException implements Exception {
   });
 
   @override
-  String toString() =>
-      'MarketplaceApiException(code: $code, message: $message)';
+  String toString() => 'MarketplaceApiException(code: $code, message: $message)';
 }
 
 class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
@@ -74,7 +73,8 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
     int? httpStatus,
   }) {
     final msg = _safeStr(data['message']);
-    final code = _safeStr(data['code']);
+    final codeRaw = _safeStr(data['code']);
+    final code = codeRaw.isNotEmpty ? codeRaw : null;
 
     final requestCategory = data['request_category'];
     final yourCategories = (data['your_categories'] is List)
@@ -82,33 +82,42 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
         : null;
 
     // ✅ DATE_CONFLICT extras
-    final conflictingDate = _safeStr(data['conflicting_date']);
+    final conflictingDateRaw = _safeStr(data['conflicting_date']);
+    final conflictingDate =
+        conflictingDateRaw.isEmpty ? null : conflictingDateRaw;
+
     final existing = _asMap(data['existing_booking']);
     final existingIdRaw = existing['id'];
     final existingId = (existingIdRaw is num)
         ? existingIdRaw.toInt()
         : int.tryParse('$existingIdRaw');
-    final existingNumber = _safeStr(existing['booking_number']);
-    final existingStatus = _safeStr(existing['status']);
+
+    final existingNumberRaw = _safeStr(existing['booking_number']);
+    final existingNumber =
+        existingNumberRaw.isEmpty ? null : existingNumberRaw;
+
+    final existingStatusRaw = _safeStr(existing['status']);
+    final existingStatus =
+        existingStatusRaw.isEmpty ? null : existingStatusRaw;
 
     return MarketplaceApiException(
       message: msg.isNotEmpty ? msg : fallbackMessage,
-      code: code.isNotEmpty ? code : null,
+      code: code,
       requestCategory: requestCategory,
       yourCategories: yourCategories,
-      conflictingDate: conflictingDate.isEmpty ? null : conflictingDate,
+      conflictingDate: conflictingDate,
       existingBookingId: existingId,
-      existingBookingNumber: existingNumber.isEmpty ? null : existingNumber,
-      existingBookingStatus: existingStatus.isEmpty ? null : existingStatus,
+      existingBookingNumber: existingNumber,
+      existingBookingStatus: existingStatus,
       httpStatus: httpStatus,
     );
   }
 
   MarketplaceApiException _apiExceptionFromDio(DioException e) {
-    final data = _asMap(e.response?.data);
     final status = e.response?.statusCode;
+    final data = _asMap(e.response?.data);
 
-    // إذا الباك رجّع JSON واضح (مثل success/message/code) نستعمله
+    // ✅ إذا الباك رجّع JSON واضح (مثل message/code) نستعمله
     if (data.isNotEmpty) {
       return _apiExceptionFromMap(
         data,
@@ -117,18 +126,29 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
       );
     }
 
-    // fallback حسب نوع الخطأ
+    // ✅ fallback حسب نوع الخطأ
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
         e.type == DioExceptionType.sendTimeout) {
-      return const MarketplaceApiException(
+      return MarketplaceApiException(
         message: 'انتهت مهلة الاتصال بالخادم. حاول مرة أخرى.',
+        httpStatus: status,
       );
     }
 
     if (e.type == DioExceptionType.connectionError) {
-      return const MarketplaceApiException(
+      return MarketplaceApiException(
         message: 'تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى.',
+        httpStatus: status,
+      );
+    }
+
+    // ✅ لو في 401 بدون body واضح، خليها واضحة للـ controller
+    if (status == 401) {
+      return const MarketplaceApiException(
+        message: 'انتهت الجلسة. الرجاء تسجيل الدخول مرة أخرى.',
+        httpStatus: 401,
+        code: 'SESSION_EXPIRED',
       );
     }
 
@@ -149,7 +169,7 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
       'limit': limit,
       'date_sort': filters.sort.apiValue,
       if (filters.cityId != null) 'city_id': filters.cityId,
-      if (filters.categoryId != null) 'category_id': filters.categoryId, // ✅
+      if (filters.categoryId != null) 'category_id': filters.categoryId,
     };
 
     try {
@@ -157,8 +177,10 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
 
       final data = _asMap(res.data);
       if (data.isEmpty) {
-        throw const MarketplaceApiException(
-            message: 'استجابة غير صالحة من الخادم');
+        throw MarketplaceApiException(
+          message: 'استجابة غير صالحة من الخادم',
+          httpStatus: res.statusCode,
+        );
       }
 
       if (data['success'] != true) {
@@ -209,6 +231,11 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
         final createdAt =
             DateTime.tryParse(_safeStr(m['created_at'])) ?? DateTime.now();
 
+        final categoryId = (m['category_id'] as num?)?.toInt() ??
+            ((m['category'] is Map)
+                ? ((m['category']['id'] as num?)?.toInt())
+                : null);
+
         return MarketplaceRequestEntity(
           id: (m['id'] as num).toInt(),
           cityId: (m['city_id'] as num?)?.toInt(),
@@ -220,10 +247,7 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
           title: 'طلب خدمة',
           description: description,
           categoryLabel: categoryNameAr.isEmpty ? null : categoryNameAr,
-          categoryId: (m['category_id'] as num?)?.toInt() ??
-              ((m['category'] is Map)
-                  ? ((m['category']['id'] as num?)?.toInt())
-                  : null),
+          categoryId: categoryId,
           dateLabel: date,
           timeLabel: timeLabel,
           budgetMin: budget,
@@ -251,8 +275,10 @@ class MarketplaceRemoteDataSourceImpl implements MarketplaceRemoteDataSource {
 
       final data = _asMap(res.data);
       if (data.isEmpty) {
-        throw const MarketplaceApiException(
-            message: 'استجابة غير صالحة من الخادم');
+        throw MarketplaceApiException(
+          message: 'استجابة غير صالحة من الخادم',
+          httpStatus: res.statusCode,
+        );
       }
 
       if (data['success'] != true) {

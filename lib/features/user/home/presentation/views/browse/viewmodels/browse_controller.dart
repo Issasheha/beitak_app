@@ -51,7 +51,6 @@ class BrowseController extends StateNotifier<BrowseState> {
     final x = _norm(q);
     if (x.isEmpty) return false;
 
-    // كلمات "بحث فئة" (إنجليزي + عربي)
     const exact = <String>{
       'house cleaning',
       'cleaning',
@@ -66,7 +65,7 @@ class BrowseController extends StateNotifier<BrowseState> {
       'design',
       'painting',
 
-      // عربي (لو مرّ أحياناً)
+      // عربي
       'تنظيف المنازل',
       'تنظيف',
       'سباكة',
@@ -83,7 +82,6 @@ class BrowseController extends StateNotifier<BrowseState> {
 
     if (exact.contains(x)) return true;
 
-    // أو يحتوي كلمة قوية دالة على فئة
     const containsAny = <String>[
       'clean',
       'plumb',
@@ -120,6 +118,10 @@ class BrowseController extends StateNotifier<BrowseState> {
       final q = state.searchTerm.trim();
 
       await _viewModel.loadInitialServices(
+        // ✅ أهم تعديل: مرر المدينة/المنطقة
+        cityId: state.userCityId,
+        areaId: state.userAreaId,
+
         searchTerm: q.isEmpty ? null : q,
         categoryKey: state.categoryKey,
         minPrice: state.minPrice,
@@ -154,38 +156,42 @@ class BrowseController extends StateNotifier<BrowseState> {
   }
 
   Future<void> loadMore() async {
-  if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
 
-  final rid = _requestId; // ✅ خذ نفس requestId الحالي
-  state = state.copyWith(isLoadingMore: true, clearError: true);
+    final rid = _requestId; // ✅ خذ نفس requestId الحالي
+    state = state.copyWith(isLoadingMore: true, clearError: true);
 
-  try {
-    final q = state.searchTerm.trim();
+    try {
+      final q = state.searchTerm.trim();
 
-    await _viewModel.loadMoreServices(
-      searchTerm: q.isEmpty ? null : q,
-      categoryKey: state.categoryKey,
-      minPrice: state.minPrice,
-      maxPrice: state.maxPrice,
-      minRating: state.minRating,
-      sortBy: state.sortBy,
-    );
+      await _viewModel.loadMoreServices(
+        // ✅ أهم تعديل: مرر المدينة/المنطقة
+        cityId: state.userCityId,
+        areaId: state.userAreaId,
 
-    // ✅ إذا تغيرت الفلاتر أثناء التحميل، تجاهل النتيجة
-    if (rid != _requestId) return;
+        searchTerm: q.isEmpty ? null : q,
+        categoryKey: state.categoryKey,
+        minPrice: state.minPrice,
+        maxPrice: state.maxPrice,
+        minRating: state.minRating,
+        sortBy: state.sortBy,
+      );
 
-    final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
-    state = state.copyWith(
-      isLoadingMore: false,
-      hasMore: _viewModel.hasMore,
-      services: all,
-      visible: all,
-    );
-  } catch (_) {
-    if (rid != _requestId) return;
-    state = state.copyWith(isLoadingMore: false);
+      // ✅ إذا تغيرت الفلاتر أثناء التحميل، تجاهل النتيجة
+      if (rid != _requestId) return;
+
+      final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
+      state = state.copyWith(
+        isLoadingMore: false,
+        hasMore: _viewModel.hasMore,
+        services: all,
+        visible: all,
+      );
+    } catch (_) {
+      if (rid != _requestId) return;
+      state = state.copyWith(isLoadingMore: false);
+    }
   }
-}
 
   Future<void> refresh() => loadInitial();
 
@@ -201,36 +207,28 @@ class BrowseController extends StateNotifier<BrowseState> {
   }
 
   void applyFilters({
-  required String? categoryKey,
-  required double? minPrice,
-  required double? maxPrice,
-  required double minRating,
-}) {
-  final prevKey = state.categoryKey;
+    required String? categoryKey,
+    required double? minPrice,
+    required double? maxPrice,
+    required double minRating,
+  }) {
+    final prevKey = state.categoryKey;
 
-  // normalize: '' => null
-  final newKey = (categoryKey == null || categoryKey.trim().isEmpty)
-      ? null
-      : categoryKey.trim();
+    final newKey = (categoryKey == null || categoryKey.trim().isEmpty)
+        ? null
+        : categoryKey.trim();
 
-  // ✅ هذا هو الفرق:
-  // امسح البحث إذا:
-  // 1) الفئة تغيرت وكان البحث يبدو بحث فئة
-  // أو
-  // 2) المستخدم اختار "الكل" وكان البحث يبدو بحث فئة
-  final shouldClearQuery =
-      _looksLikeCategoryQuery(state.searchTerm) &&
-      ((prevKey != newKey) || newKey == null);
+    final shouldClearQuery = _looksLikeCategoryQuery(state.searchTerm) &&
+        ((prevKey != newKey) || newKey == null);
 
-  state = state.copyWith(
-    categoryKey: newKey,
-    minPrice: minPrice,
-    maxPrice: maxPrice,
-    minRating: minRating,
-    searchTerm: shouldClearQuery ? '' : state.searchTerm,
-  );
+    state = state.copyWith(
+      categoryKey: newKey,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      minRating: minRating,
+      searchTerm: shouldClearQuery ? '' : state.searchTerm,
+    );
 
-  unawaited(loadInitial());
-}
-
+    unawaited(loadInitial());
+  }
 }

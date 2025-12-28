@@ -7,10 +7,21 @@ class SearchQueryField extends StatelessWidget {
     super.key,
     required this.controller,
     required this.onSubmitted,
+    this.onMicTap,
+    this.micLoading = false,
+
+    // ✅ NEW
+    this.autofocus = true,
   });
 
   final TextEditingController controller;
   final void Function(String text) onSubmitted;
+
+  final VoidCallback? onMicTap;
+  final bool micLoading;
+
+  // ✅ NEW
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +32,9 @@ class SearchQueryField extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cardBackground.withValues(alpha: 0.90),
         borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
-        border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.85),),
+        border: Border.all(
+          color: AppColors.borderLight.withValues(alpha: 0.85),
+        ),
       ),
       child: Row(
         children: [
@@ -30,7 +43,7 @@ class SearchQueryField extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: controller,
-              autofocus: true,
+              autofocus: autofocus,
               textInputAction: TextInputAction.search,
               onSubmitted: onSubmitted,
               decoration: InputDecoration(
@@ -43,6 +56,26 @@ class SearchQueryField extends StatelessWidget {
               ),
             ),
           ),
+          if (onMicTap != null) ...[
+            IconButton(
+              onPressed: micLoading ? null : onMicTap,
+              tooltip: 'بحث بالصوت',
+              icon: micLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: AppColors.lightGreen,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.mic_none_rounded,
+                      color: AppColors.textSecondary,
+                    ),
+            ),
+            const SizedBox(width: 4),
+          ],
         ],
       ),
     );
@@ -73,7 +106,9 @@ class SearchLocationChip extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.cardBackground.withValues(alpha: 0.75),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.borderLight.withValues(alpha: 0.75),),
+            border: Border.all(
+              color: AppColors.borderLight.withValues(alpha: 0.75),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

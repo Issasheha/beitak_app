@@ -12,6 +12,9 @@ class HomeGreenHeader extends StatelessWidget {
     required this.onProfileTap,
     required this.onNotificationsTap,
     required this.onSearchTap,
+
+    // ✅ NEW
+    required this.onVoiceSearchTap,
   });
 
   final double height;
@@ -19,6 +22,9 @@ class HomeGreenHeader extends StatelessWidget {
   final VoidCallback onProfileTap;
   final VoidCallback onNotificationsTap;
   final VoidCallback onSearchTap;
+
+  // ✅ NEW
+  final VoidCallback onVoiceSearchTap;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +35,6 @@ class HomeGreenHeader extends StatelessWidget {
       height: height,
       child: Stack(
         children: [
-          // ✅ خلفية الهيدر (قصّ أسفل مثل الصورة)
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.only(
@@ -40,7 +45,6 @@ class HomeGreenHeader extends StatelessWidget {
             ),
           ),
 
-          // ✅ Blobs خفيفة مثل الصورة
           const Positioned(
             left: -135,
             top: -105,
@@ -73,7 +77,6 @@ class HomeGreenHeader extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // ✅ Top row: (يمين: شعار) (يسار: بروفايل + جرس)
                   Row(
                     textDirection: TextDirection.rtl,
                     children: [
@@ -83,8 +86,6 @@ class HomeGreenHeader extends StatelessWidget {
                         fit: BoxFit.contain,
                       ),
                       const Spacer(),
-
-                      // ✅ فقط أيقونة البروفايل تفتح صفحة الملف الشخصي
                       _HeaderIconBtn(
                         icon: Icons.person_outline_rounded,
                         onTap: onProfileTap,
@@ -99,7 +100,6 @@ class HomeGreenHeader extends StatelessWidget {
 
                   SizedBox(height: SizeConfig.h(14)),
 
-                  // ✅ Name row: الاسم غير clickable (عرض فقط)
                   Align(
                     alignment: Alignment.centerRight,
                     child: Padding(
@@ -134,7 +134,6 @@ class HomeGreenHeader extends StatelessWidget {
                           ConstrainedBox(
                             constraints: BoxConstraints(maxWidth: SizeConfig.w(220)),
                             child: Text(
-                              // ✅ بدون “ضيف عزيز” — خليها محايدة لحد ما الاسم يوصل
                               displayName.trim().isEmpty ? '...' : displayName.trim(),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -151,7 +150,6 @@ class HomeGreenHeader extends StatelessWidget {
                     ),
                   ),
 
-                  // ✅ الجزء المرن لمنع overflow
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, c) {
@@ -185,7 +183,10 @@ class HomeGreenHeader extends StatelessWidget {
                             const Spacer(),
                             Padding(
                               padding: EdgeInsets.only(bottom: lift),
-                              child: _HeaderSearchBar(onTap: onSearchTap),
+                              child: _HeaderSearchBar(
+                                onTap: onSearchTap,
+                                onMicTap: onVoiceSearchTap, // ✅ NEW
+                              ),
                             ),
                           ],
                         );
@@ -207,7 +208,7 @@ class HomeGreenHeader extends StatelessWidget {
     final first = parts.first;
     if (first.characters.isEmpty) return '؟';
     return first.characters.first;
-  }
+    }
 }
 
 class _HeaderIconBtn extends StatelessWidget {
@@ -244,8 +245,13 @@ class _HeaderIconBtn extends StatelessWidget {
 }
 
 class _HeaderSearchBar extends StatelessWidget {
-  const _HeaderSearchBar({required this.onTap});
+  const _HeaderSearchBar({
+    required this.onTap,
+    required this.onMicTap,
+  });
+
   final VoidCallback onTap;
+  final VoidCallback onMicTap;
 
   @override
   Widget build(BuildContext context) {
@@ -253,41 +259,50 @@ class _HeaderSearchBar extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(SizeConfig.radius(22)),
-        child: Container(
-          padding: SizeConfig.padding(horizontal: 14, vertical: isCompact ? 12 : 14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(SizeConfig.radius(22)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.o(0.14),
-                blurRadius: 18,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.search_rounded,
-                color: const Color(0xFF8A8A8A),
-                size: SizeConfig.w(20),
-              ),
-              SizeConfig.hSpace(10),
-              Expanded(
-                child: Text(
-                  'شو بدك تصلّح اليوم؟',
-                  style: TextStyle(
+      child: Container(
+        padding: SizeConfig.padding(horizontal: 14, vertical: isCompact ? 12 : 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(SizeConfig.radius(22)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.o(0.14),
+              blurRadius: 18,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(999),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
                     color: const Color(0xFF8A8A8A),
-                    fontWeight: FontWeight.w700,
-                    fontSize: SizeConfig.ts(12.5),
+                    size: SizeConfig.w(20),
                   ),
-                ),
+                  SizeConfig.hSpace(10),
+                  Text(
+                    'شو بدك تصلّح اليوم؟',
+                    style: TextStyle(
+                      color: const Color(0xFF8A8A8A),
+                      fontWeight: FontWeight.w700,
+                      fontSize: SizeConfig.ts(12.5),
+                    ),
+                  ),
+                ],
               ),
-              Container(
+            ),
+            const Spacer(),
+
+            // ✅ Mic is clickable and separate
+            InkWell(
+              onTap: onMicTap,
+              borderRadius: BorderRadius.circular(999),
+              child: Container(
                 width: SizeConfig.w(38),
                 height: SizeConfig.w(38),
                 decoration: BoxDecoration(
@@ -301,8 +316,8 @@ class _HeaderSearchBar extends StatelessWidget {
                   size: SizeConfig.w(18),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

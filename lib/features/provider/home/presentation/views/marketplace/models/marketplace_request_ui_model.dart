@@ -1,4 +1,4 @@
-import 'package:beitak_app/features/provider/home/domain/entities/marketplace_request_entity.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/entities/marketplace_request_entity.dart';
 
 class MarketplaceRequestUiModel {
   final int id;
