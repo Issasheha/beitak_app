@@ -1,6 +1,6 @@
-import 'package:beitak_app/features/provider/home/domain/entities/marketplace_page_entity.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/entities/marketplace_page_entity.dart';
 
-import '../../presentation/views/marketplace/models/marketplace_filters.dart';
+import '../models/marketplace_filters.dart';
 
 abstract class MarketplaceRemoteDataSource {
   Future<MarketplacePagedResult> getMarketplaceRequests({

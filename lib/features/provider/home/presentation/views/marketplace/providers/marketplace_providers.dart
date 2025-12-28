@@ -3,10 +3,10 @@ import 'package:dio/dio.dart';
 
 import 'package:beitak_app/core/network/api_client.dart'; // ✅ عدّلها إذا مسارك مختلف
 
-import 'package:beitak_app/features/provider/home/data/datasources/marketplace_remote_data_source.dart';
-import 'package:beitak_app/features/provider/home/data/datasources/marketplace_remote_data_source_impl.dart';
-import 'package:beitak_app/features/provider/home/data/repositories/marketplace_repository_impl.dart';
-import 'package:beitak_app/features/provider/home/domain/repositories/marketplace_repository.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/marketplace_remote_data_source.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/marketplace_remote_data_source_impl.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/repositories/marketplace_repository_impl.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/repositories/marketplace_repository.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/viewmodels/marketplace_controller.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/viewmodels/marketplace_state.dart';
 import 'package:flutter_riverpod/legacy.dart';

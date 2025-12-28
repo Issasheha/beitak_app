@@ -1,8 +1,8 @@
-import 'package:beitak_app/features/provider/home/domain/entities/marketplace_page_entity.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/entities/marketplace_page_entity.dart';
 
 import '../../domain/repositories/marketplace_repository.dart';
-import '../../presentation/views/marketplace/models/marketplace_filters.dart';
-import '../datasources/marketplace_remote_data_source.dart';
+import '../../models/marketplace_filters.dart';
+import '../marketplace_remote_data_source.dart';
 
 class MarketplaceRepositoryImpl implements MarketplaceRepository {
   final MarketplaceRemoteDataSource remote;

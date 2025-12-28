@@ -8,14 +8,15 @@ environment:
   flutter: ">=3.22.0"
 
 dependencies:
-  flutter:
-    sdk: flutter
-
   carousel_slider: ^4.2.1
+  cookie_jar: ^4.0.8
   cupertino_icons: ^1.0.8
   dio: ^5.9.0
+  dio_cookie_manager: ^3.3.0
   dotted_border: ^2.0.0+3
   file_picker: ^10.3.7
+  flutter:
+    sdk: flutter
   flutter_rating_bar: ^4.0.1
   flutter_riverpod: ^3.0.3
   flutter_svg: ^2.2.2
@@ -34,10 +35,10 @@ dependencies:
   url_launcher: ^6.3.2
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^3.0.0
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
 
 # ✅ لازم يكون برا flutter: وبالاسم الجديد
 flutter_launcher_icons:

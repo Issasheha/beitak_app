@@ -10,11 +10,15 @@ class MarketplaceRequestCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onAccept;
 
+  /// ✅ لمنع double-accept + اظهار لودينج
+  final bool isAccepting;
+
   const MarketplaceRequestCard({
     super.key,
     required this.request,
     required this.onTap,
     required this.onAccept,
+    this.isAccepting = false,
   });
 
   @override
@@ -47,7 +51,6 @@ class MarketplaceRequestCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ✅ Header: avatar + name/location
                 Row(
                   children: [
                     CircleAvatar(
@@ -80,6 +83,7 @@ class MarketplaceRequestCard extends StatelessWidget {
                           ),
                           SizedBox(height: SizeConfig.h(4)),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Icon(
                                 Icons.location_on_outlined,
@@ -88,11 +92,13 @@ class MarketplaceRequestCard extends StatelessWidget {
                               ),
                               SizedBox(width: SizeConfig.w(4)),
                               Expanded(
+                                // ✅ Wrap بدل ellipsis (QA-friendly)
                                 child: Text(
                                   _locationLabel(
                                       request.cityName, request.areaName),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.clip,
+                                  softWrap: true,
                                   style: AppTextStyles.body14.copyWith(
                                     fontSize: SizeConfig.ts(12),
                                     fontWeight: FontWeight.w600,
@@ -111,14 +117,17 @@ class MarketplaceRequestCard extends StatelessWidget {
                 SizedBox(height: SizeConfig.h(12)),
 
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('⚡', style: TextStyle(fontSize: SizeConfig.ts(14))),
                     SizedBox(width: SizeConfig.w(8)),
                     Expanded(
+                      // ✅ Wrap بدل truncation القاسي
                       child: Text(
                         request.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 3,
+                        overflow: TextOverflow.clip,
+                        softWrap: true,
                         style: AppTextStyles.body14.copyWith(
                           fontSize: SizeConfig.ts(14),
                           fontWeight: FontWeight.w900,
@@ -135,6 +144,7 @@ class MarketplaceRequestCard extends StatelessWidget {
                   request.description,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: AppTextStyles.body14.copyWith(
                     fontSize: SizeConfig.ts(13),
                     height: 1.4,
@@ -145,28 +155,44 @@ class MarketplaceRequestCard extends StatelessWidget {
 
                 SizedBox(height: SizeConfig.h(12)),
 
-                Row(
-                  children: [
-                    _MetaItem(
-                      icon: Icons.calendar_today_outlined,
-                      text: request.dateLabel,
-                    ),
-                    SizedBox(width: SizeConfig.w(10)),
-                    _MetaItem(
-                      icon: Icons.access_time_rounded,
-                      text: request.timeLabel,
-                    ),
-                    const Spacer(),
-                    _MetaItem(
-                      icon: Icons.attach_money_rounded,
-                      text: _budgetLabel(request.budgetMin, request.budgetMax),
-                    ),
-                  ],
+                // ✅ meta section: no overflow
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final gap = SizeConfig.w(10);
+                    final itemW = (constraints.maxWidth - gap) / 2;
+
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: SizeConfig.h(8),
+                      children: [
+                        SizedBox(
+                          width: itemW,
+                          child: _MetaItem(
+                            icon: Icons.calendar_today_outlined,
+                            text: request.dateLabel,
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemW,
+                          child: _MetaItem(
+                            icon: Icons.access_time_rounded,
+                            text: request.timeLabel,
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemW,
+                          child: _MetaItem(
+                            icon: Icons.payments_outlined,
+                            text: _budgetLabel(request.budgetMin, request.budgetMax),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 SizedBox(height: SizeConfig.h(14)),
 
-                // ✅ زر واحد فقط: قبول
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -179,15 +205,24 @@ class MarketplaceRequestCard extends StatelessWidget {
                       ),
                       elevation: 0,
                     ),
-                    onPressed: onAccept,
-                    child: Text(
-                      'قبول',
-                      style: AppTextStyles.body14.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        fontSize: SizeConfig.ts(13.5),
-                      ),
-                    ),
+                    onPressed: isAccepting ? null : onAccept,
+                    child: isAccepting
+                        ? SizedBox(
+                            height: SizeConfig.ts(18),
+                            width: SizeConfig.ts(18),
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            'قبول',
+                            style: AppTextStyles.body14.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              fontSize: SizeConfig.ts(13.5),
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -210,7 +245,10 @@ class MarketplaceRequestCard extends StatelessWidget {
   String _budgetLabel(double? min, double? max) {
     final a = min == null ? '—' : min.toStringAsFixed(0);
     final b = max == null ? '—' : max.toStringAsFixed(0);
-    return '$a - $b';
+
+    if (a == '—' && b == '—') return '—';
+    if (a == b) return '$a د.أ';
+    return '$a - $b د.أ';
   }
 
   String _initials(String fullName) {
@@ -225,7 +263,7 @@ class MarketplaceRequestCard extends StatelessWidget {
     String firstChar(String s) {
       final t = s.trim();
       if (t.isEmpty) return '';
-      return t.characters.first; // ✅ safe for Arabic/emoji
+      return t.characters.first;
     }
 
     final a = firstChar(parts[0]);
@@ -248,16 +286,21 @@ class _MetaItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
         Icon(icon, size: SizeConfig.ts(16), color: const Color(0xFF6B7280)),
         SizedBox(width: SizeConfig.w(4)),
-        Text(
-          text,
-          style: AppTextStyles.body14.copyWith(
-            fontSize: SizeConfig.ts(12),
-            fontWeight: FontWeight.w700,
-            color: const Color(0xFF111827),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: AppTextStyles.body14.copyWith(
+              fontSize: SizeConfig.ts(12),
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF111827),
+            ),
           ),
         ),
       ],

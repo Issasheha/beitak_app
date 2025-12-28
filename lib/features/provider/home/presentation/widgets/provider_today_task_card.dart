@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/color_x.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/features/provider/home/presentation/widgets/provider_action_buttons.dart';
 import 'package:beitak_app/features/provider/home/presentation/widgets/provider_home_content.dart';
 
-class ProviderTodayTaskCard extends StatelessWidget {
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/constants/fixed_locations.dart';
+import 'package:beitak_app/core/providers/areas_name_map_provider.dart';
+
+class ProviderTodayTaskCard extends ConsumerWidget {
   const ProviderTodayTaskCard({
     super.key,
     required this.item,
@@ -30,9 +36,34 @@ class ProviderTodayTaskCard extends StatelessWidget {
     return r.isEmpty ? 'م' : r;
   }
 
+  String _serviceTitleAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+
+    final key = FixedServiceCategories.keyFromAnyString(s);
+    if (key != null) return FixedServiceCategories.labelArFromKey(key);
+
+    // لو عربي أصلاً خلّيه
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+    return hasArabic ? s : s;
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final initials = _initials(item.customerName);
+
+    // ✅ service بالعربي
+    final serviceAr = _serviceTitleAr(item.serviceName);
+
+    // ✅ location بالعربي (city - area) زي التفاصيل
+    final areasMapAsync = ref.watch(areasNameMapProvider);
+    final locationRaw = item.locationText.trim();
+
+    final locationAr = areasMapAsync.when(
+      data: (m) => FixedLocations.labelArFromAny(locationRaw, map: m),
+      loading: () => FixedLocations.labelArFromAny(locationRaw),
+      error: (_, __) => FixedLocations.labelArFromAny(locationRaw),
+    );
 
     return Container(
       padding: SizeConfig.padding(horizontal: 12, vertical: 10),
@@ -53,16 +84,16 @@ class ProviderTodayTaskCard extends StatelessWidget {
         children: [
           _HeaderRow(
             initials: initials,
-            serviceName: item.serviceName,
+            serviceName: serviceAr, // ✅ بدل item.serviceName
             customerName: item.customerName,
             onDetailsTap: onDetailsTap,
           ),
           SizedBox(height: SizeConfig.h(12)),
 
-          // ✅ Meta row صار Responsive (Wrap على الشاشات الضيقة) لتجنب overflow
+          // ✅ Meta row Responsive
           _MetaResponsiveRow(
             timeText: item.timeText,
-            locationText: item.locationText,
+            locationText: locationAr, // ✅ بدل item.locationText
             durationText: item.durationText,
             priceText: item.priceText,
           ),
@@ -201,7 +232,6 @@ class _MetaResponsiveRow extends StatelessWidget {
         );
 
         if (tight) {
-          // ✅ على الشاشات الضيقة: Wrap + السعر لحاله يمين لتفادي overflow
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -228,7 +258,6 @@ class _MetaResponsiveRow extends StatelessWidget {
           );
         }
 
-        // ✅ الطبيعي: صف واحد
         return Row(
           textDirection: TextDirection.rtl,
           children: [

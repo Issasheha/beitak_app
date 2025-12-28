@@ -9,6 +9,7 @@ import 'package:beitak_app/features/provider/home/data/models/provider_booking_m
 import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/constants/fixed_locations.dart';
 import 'package:beitak_app/core/providers/areas_name_map_provider.dart';
+import 'package:beitak_app/core/utils/time_format.dart';
 
 class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
   const ProviderTodayTaskDetailsSheet({
@@ -47,19 +48,19 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
     final key = FixedServiceCategories.keyFromAnyString(s);
     if (key != null) return FixedServiceCategories.labelArFromKey(key);
 
-    // لو عربي أصلاً خلّيه
     final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
     return hasArabic ? s : s;
   }
 
   String _dateNice(String d) => d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
 
-  String _formatTime(String hhmmss) {
-    final s = hhmmss.trim();
+  // ✅ الوقت موحّد حسب TimeFormat (12-hour عربي)
+  String _formatTimeAr(String raw) {
+    final s = raw.trim();
     if (s.isEmpty) return '—';
-    final parts = s.split(':');
-    if (parts.length < 2) return s;
-    return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+    // إذا أصلاً فيه ص/م خلّيه
+    if (s.contains('ص') || s.contains('م')) return s;
+    return TimeFormat.timeStringToAr12(s);
   }
 
   String _formatDurationHours(double h) {
@@ -68,6 +69,69 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
     if (v == 1) return 'ساعة';
     if (v == 2) return 'ساعتين';
     return '$v ساعات';
+  }
+
+  // ✅ تطبيع عام (عربي/انجليزي) للفصل إلى كلمات
+  String _norm(String s) {
+    var x = s.trim().toLowerCase();
+    if (x.isEmpty) return '';
+
+    x = x
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ة', 'ه');
+
+    x = x.replaceAll(RegExp(r'[^\u0600-\u06FFa-z0-9\s]'), ' ');
+    x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return x;
+  }
+
+  Set<String> _tokens(String s) {
+    final n = _norm(s);
+    if (n.isEmpty) return {};
+    return n.split(' ').where((t) => t.trim().isNotEmpty).toSet();
+  }
+
+  bool _shouldShowAddress({
+    required String address,
+    required String locationAr,
+    required String locationRaw,
+  }) {
+    final addrTokens = _tokens(address);
+    if (addrTokens.isEmpty) return false;
+
+    final locTokens = <String>{
+      ..._tokens(locationRaw), // غالباً إنجليزي
+      ..._tokens(locationAr), // عربي (احتياط)
+    };
+
+    if (locTokens.isEmpty) return true;
+
+    // إذا كل كلمات العنوان موجودة داخل كلمات الموقع => مكرر
+    final addrIsSubset = addrTokens.difference(locTokens).isEmpty;
+    if (addrIsSubset) return false;
+
+    // إذا العنوان قريب جداً من الموقع (overlap عالي) => مكرر
+    final intersection = addrTokens.intersection(locTokens);
+    final overlapRatio = intersection.isEmpty ? 0.0 : (intersection.length / addrTokens.length);
+    if (overlapRatio >= 0.9 && addrTokens.length <= locTokens.length + 1) return false;
+
+    // شيل كلمات الموقع من العنوان، إذا ما ضل شيء "معتبر" نخفيه
+    final remainder = addrTokens.difference(locTokens);
+
+    const generic = {
+      'jordan', 'jo', 'amman', 'abdoun', 'abdun', 'abdoon',
+      'street', 'st', 'road', 'rd', 'building', 'bldg', 'apt', 'apartment',
+      'area', 'near',
+      'الاردن', 'عمان', 'عبدون', 'شارع', 'طريق', 'بنايه', 'عماره', 'شقه', 'منطقه', 'بالقرب'
+    };
+
+    final remainderUseful = remainder.where((t) => t.length >= 3 && !generic.contains(t)).toList();
+    if (remainderUseful.isEmpty) return false;
+
+    return true;
   }
 
   @override
@@ -80,7 +144,7 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
     final b = booking;
 
     final date = _dateNice(_clean(b.bookingDate));
-    final time = _formatTime(_clean(b.bookingTime));
+    final time = _formatTimeAr(_clean(b.bookingTime));
     final duration = _formatDurationHours(b.durationHours);
 
     final address = _clean(b.serviceAddress);
@@ -105,6 +169,10 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
       loading: () => FixedLocations.labelArFromAny(locationRaw),
       error: (_, __) => FixedLocations.labelArFromAny(locationRaw),
     );
+
+    // ✅ إظهار العنوان فقط إذا مش مكرر (حتى لو لغة مختلفة)
+    final showAddress = hasAddress &&
+        _shouldShowAddress(address: address, locationAr: locationAr, locationRaw: locationRaw);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -141,7 +209,6 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                   children: [
                     const _SheetHandle(),
                     SizedBox(height: SizeConfig.h(10)),
-
                     Row(
                       textDirection: TextDirection.rtl,
                       children: [
@@ -162,11 +229,8 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                         ),
                       ],
                     ),
-
                     SizedBox(height: SizeConfig.h(10)),
-
                     _InfoCard(
-                      // ✅ الفئة عربي بدل cleaning
                       title: _serviceTitleAr(_clean(b.serviceName)),
                       subtitle: 'العميل: ${_clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)}',
                       trailing: Text(
@@ -178,9 +242,7 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                         ),
                       ),
                     ),
-
                     SizedBox(height: SizeConfig.h(10)),
-
                     Expanded(
                       child: SingleChildScrollView(
                         physics: const BouncingScrollPhysics(),
@@ -194,11 +256,9 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                             _KeyValue('⏱️', 'المدة', duration),
                             _KeyValue('📍', 'المنطقة', locationAr),
 
-                            // ✅ العنوان لا يظهر إذا N/A / فاضي
-                            if (hasAddress) _KeyValue('🏠', 'العنوان', address, maxLines: 2),
+                            if (showAddress) _KeyValue('🏠', 'العنوان', address, maxLines: 2),
 
                             SizedBox(height: SizeConfig.h(12)),
-
                             const _SectionTitle('معلومات العميل'),
                             SizedBox(height: SizeConfig.h(6)),
                             _KeyValue('👤', 'الاسم', _clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)),
@@ -211,12 +271,8 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                               SizedBox(height: SizeConfig.h(12)),
                               const _SectionTitle('تفاصيل إضافية'),
                               SizedBox(height: SizeConfig.h(6)),
-
                               if (hasDesc) _MultiLineCard(title: 'وصف الخدمة', text: desc),
-
-                              if (hasPackage)
-                                _CompactCard(child: _KeyValue('📦', 'الباقة', packageName)),
-
+                              if (hasPackage) _CompactCard(child: _KeyValue('📦', 'الباقة', packageName)),
                               if (hasAddons)
                                 _CompactCard(
                                   child: Wrap(
@@ -225,10 +281,8 @@ class ProviderTodayTaskDetailsSheet extends ConsumerWidget {
                                     children: addons.map((t) => _ChipPill(label: t)).toList(),
                                   ),
                                 ),
-
                               if (hasNotes) _MultiLineCard(title: 'ملاحظات العميل', text: notes),
                             ],
-
                             SizedBox(height: SizeConfig.h(12)),
                           ],
                         ),

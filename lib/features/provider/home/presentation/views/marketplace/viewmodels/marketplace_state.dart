@@ -5,8 +5,14 @@ class MarketplaceState {
   final bool isLoading;
   final String? errorMessage;
 
-  /// ✅ رسائل خفيفة للـ UI (SnackBar) بدون ما نوقف الشاشة
+  /// ✅ رسائل خفيفة للـ UI (SnackBar)
   final String? uiMessage;
+
+  /// ✅ Top banner (Error UX) — بنعرضه أعلى الشاشة بدل ما نوقف كل الشاشة
+  final String? bannerMessage;
+
+  /// ✅ Session expired flag (401)
+  final bool sessionExpired;
 
   final List<MarketplaceRequestUiModel> allRequests;
   final String searchQuery;
@@ -20,10 +26,15 @@ class MarketplaceState {
   final bool isLoadingMore;
   final bool loadMoreFailed;
 
+  /// ✅ Prevent double-accept (تعطيل زر القبول للكرت اللي عليه طلب)
+  final Set<int> acceptingIds;
+
   const MarketplaceState({
     required this.isLoading,
     required this.errorMessage,
     required this.uiMessage,
+    required this.bannerMessage,
+    required this.sessionExpired,
     required this.allRequests,
     required this.searchQuery,
     required this.filters,
@@ -32,12 +43,15 @@ class MarketplaceState {
     required this.hasMore,
     required this.isLoadingMore,
     required this.loadMoreFailed,
+    required this.acceptingIds,
   });
 
   factory MarketplaceState.initial() => MarketplaceState(
         isLoading: false,
         errorMessage: null,
         uiMessage: null,
+        bannerMessage: null,
+        sessionExpired: false,
         allRequests: const [],
         searchQuery: '',
         filters: MarketplaceFilters.initial(),
@@ -46,6 +60,7 @@ class MarketplaceState {
         hasMore: false,
         isLoadingMore: false,
         loadMoreFailed: false,
+        acceptingIds: <int>{},
       );
 
   MarketplaceState copyWith({
@@ -54,6 +69,9 @@ class MarketplaceState {
     bool clearError = false,
     String? uiMessage,
     bool clearUiMessage = false,
+    String? bannerMessage,
+    bool clearBanner = false,
+    bool? sessionExpired,
     List<MarketplaceRequestUiModel>? allRequests,
     String? searchQuery,
     MarketplaceFilters? filters,
@@ -62,11 +80,14 @@ class MarketplaceState {
     bool? hasMore,
     bool? isLoadingMore,
     bool? loadMoreFailed,
+    Set<int>? acceptingIds,
   }) {
     return MarketplaceState(
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       uiMessage: clearUiMessage ? null : (uiMessage ?? this.uiMessage),
+      bannerMessage: clearBanner ? null : (bannerMessage ?? this.bannerMessage),
+      sessionExpired: sessionExpired ?? this.sessionExpired,
       allRequests: allRequests ?? this.allRequests,
       searchQuery: searchQuery ?? this.searchQuery,
       filters: filters ?? this.filters,
@@ -75,6 +96,7 @@ class MarketplaceState {
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       loadMoreFailed: loadMoreFailed ?? this.loadMoreFailed,
+      acceptingIds: acceptingIds ?? this.acceptingIds,
     );
   }
 
@@ -104,7 +126,6 @@ class MarketplaceState {
   List<MarketplaceRequestUiModel> get visibleRequests {
     Iterable<MarketplaceRequestUiModel> items = allRequests;
 
-    // 🔎 search
     final q = searchQuery.trim().toLowerCase();
     if (q.isNotEmpty) {
       items = items.where((r) {
@@ -116,22 +137,18 @@ class MarketplaceState {
           r.areaName ?? '',
           r.categoryLabel ?? '',
         ].join(' ').toLowerCase();
-
         return hay.contains(q);
       });
     }
 
-    // 🏙️ city (حتى لو السيرفر بفلترها، خليه احتياط)
     if (filters.cityId != null) {
       items = items.where((r) => r.cityId == filters.cityId);
     }
 
-    // ✅ category (مهم: نفلتر بالـ ID مش بالـ label)
     if (filters.categoryId != null) {
       items = items.where((r) => r.categoryId == filters.categoryId);
     }
 
-    // 💰 budget range (overlap)
     if (filters.minBudget != null || filters.maxBudget != null) {
       final fMin = filters.minBudget ?? double.negativeInfinity;
       final fMax = filters.maxBudget ?? double.infinity;
@@ -140,20 +157,17 @@ class MarketplaceState {
         final min = r.budgetMin;
         final max = r.budgetMax ?? min;
 
-        // لو المستخدم فعّل فلتر السعر والطلب ما فيه ميزانية نخفيه
         if (min == null && max == null) return false;
 
         final reqMin = min ?? 0.0;
         final reqMax = max ?? reqMin;
 
-        // overlap range
         return reqMax >= fMin && reqMin <= fMax;
       });
     }
 
     final list = items.toList();
 
-    // ترتيب محلي حسب createdAt (حتى لو السيرفر بيرجع مرتب)
     list.sort(
       (a, b) => filters.sort == MarketplaceSort.newest
           ? b.createdAt.compareTo(a.createdAt)

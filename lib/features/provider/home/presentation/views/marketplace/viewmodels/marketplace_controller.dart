@@ -1,5 +1,10 @@
-import 'package:beitak_app/features/provider/home/data/datasources/marketplace_remote_data_source_impl.dart';
-import 'package:beitak_app/features/provider/home/domain/repositories/marketplace_repository.dart';
+// lib/features/provider/home/presentation/views/marketplace/presentation/controllers/marketplace_controller.dart
+
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+import 'package:beitak_app/core/error/error_text.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/marketplace_remote_data_source_impl.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/domain/repositories/marketplace_repository.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/marketplace_filters.dart';
@@ -14,7 +19,12 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
 
   void clearUiMessage() {
     if (state.uiMessage == null) return;
-    state = state.copyWith(uiMessage: null);
+    state = state.copyWith(clearUiMessage: true);
+  }
+
+  void clearBanner() {
+    if (state.bannerMessage == null) return;
+    state = state.copyWith(clearBanner: true);
   }
 
   void _emitUiMessage(String msg) {
@@ -23,14 +33,27 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
     state = state.copyWith(uiMessage: m);
   }
 
-  String _joinNonNullValues(List<dynamic>? values) {
-    if (values == null || values.isEmpty) return '';
-    final cleaned = values
-        .where((e) => e != null)
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
-        .toList();
-    return cleaned.join('، ');
+  bool _looksArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+
+  bool _isUnauthorized(Object e) {
+    if (e is MarketplaceApiException) {
+      if (e.httpStatus == 401) return true;
+      final code = (e.code ?? '').toUpperCase().trim();
+      if (code == 'UNAUTHORIZED' || code == 'SESSION_EXPIRED') return true;
+    }
+
+    if (e is DioException) {
+      return e.response?.statusCode == 401;
+    }
+
+    return false;
+  }
+
+  void _handleUnauthorized() {
+    state = state.copyWith(
+      sessionExpired: true,
+      bannerMessage: 'انتهت الجلسة. الرجاء تسجيل الدخول مرة أخرى.',
+    );
   }
 
   String _prettyDate(String iso) {
@@ -39,70 +62,146 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
     return '${p[2]}/${p[1]}/${p[0]}';
   }
 
-  bool _looksArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+  ({String? date, String? time}) _extractDateTimeFromEnglish(String msg) {
+    final dateMatch = RegExp(r'(\d{4}-\d{2}-\d{2})').firstMatch(msg);
+    final timeMatch = RegExp(r'(\d{1,2}:\d{2})').firstMatch(msg);
 
-  String _friendlyAcceptMessage(Object e) {
+    final date = dateMatch?.group(1);
+    final time = timeMatch?.group(1);
+
+    return (date: date, time: time);
+  }
+
+  /// ✅ يترجم أي نص (key/slug/English/Arabic) إلى label عربي حسب FixedServiceCategories
+  String _catToAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+
+    // لو أصلاً عربي → رجّعه (وممكن يكون "صيانه للاجهزة" إلخ)
+    if (_looksArabic(s)) return s;
+
+    // حاول تحويله إلى key من أي string (supports server aliases)
+    final key = FixedServiceCategories.keyFromAnyString(s);
+    if (key != null) {
+      return FixedServiceCategories.labelArFromKey(key);
+    }
+
+    // fallback: رجّع النص زي ما هو (أفضل من فراغ)
+    return s;
+  }
+
+  String _friendlyMarketplaceError(
+    Object e, {
+    String fallback = 'حدث خطأ غير متوقع. حاول مرة أخرى.',
+  }) {
     if (e is MarketplaceApiException) {
-      final code = (e.code ?? '').trim();
+      final code = (e.code ?? '').trim().toUpperCase();
       final msg = e.message.trim();
 
-      // لو الباك رجّع عربي (جاهز)
+      // لو الرسالة عربية جاهزة → اعرضها
       if (msg.isNotEmpty && _looksArabic(msg)) return msg;
 
       switch (code) {
+        case 'SESSION_EXPIRED':
+        case 'UNAUTHORIZED':
+          return 'انتهت الجلسة. الرجاء تسجيل الدخول مرة أخرى.';
+
         case 'OUTDATED_REQUEST':
           return 'هذا الطلب قديم: تاريخ الخدمة انتهى ولا يمكن قبوله.';
-
         case 'OUTDATED_REQUEST_TIME':
           return 'هذا الطلب قديم: وقت الخدمة المحدد مرّ بالفعل ولا يمكن قبوله.';
+
+        case 'PROVIDER_UNAVAILABLE':
+          // مثال الباك: Provider is not available on 2025-12-27 at 23:00
+          final dt = _extractDateTimeFromEnglish(msg);
+          final dateTxt = (dt.date == null || dt.date!.trim().isEmpty)
+              ? ''
+              : ' بتاريخ ${_prettyDate(dt.date!)}';
+          final timeTxt = (dt.time == null || dt.time!.trim().isEmpty)
+              ? ''
+              : ' الساعة ${dt.time!}';
+          if (dateTxt.isNotEmpty || timeTxt.isNotEmpty) {
+            return 'لا يمكنك قبول هذا الطلب لأنك غير متاح$dateTxt$timeTxt.';
+          }
+          return 'لا يمكنك قبول هذا الطلب لأنك غير متاح في هذا الموعد.';
 
         case 'DATE_CONFLICT':
           final d = (e.conflictingDate ?? '').trim();
           final bn = (e.existingBookingNumber ?? '').trim();
-
           final dateTxt = d.isEmpty ? '' : ' بتاريخ ${_prettyDate(d)}';
           final bnTxt = bn.isEmpty ? '' : '\nرقم الحجز: $bn';
-
           return 'لا يمكنك قبول هذا الطلب لأن لديك حجزًا مؤكدًا$dateTxt.$bnTxt';
 
         case 'CATEGORY_MISMATCH':
+          // ✅ هنا المطلوب: عرض فئة الطلب وفئاتك بالعربي
           final reqCatRaw = (e.requestCategory == null)
               ? ''
               : e.requestCategory.toString().trim();
-          final yourCats = _joinNonNullValues(e.yourCategories);
+          final reqCatClean = reqCatRaw.toLowerCase() == 'null' ? '' : reqCatRaw;
 
-          final reqCat = reqCatRaw.toLowerCase() == 'null' ? '' : reqCatRaw;
+          final reqCatAr =
+              reqCatClean.isEmpty ? '' : _catToAr(reqCatClean);
 
-          // ✅ الحالة اللي عندك باللوج: الاثنين فاضيين فعلياً
-          if (reqCat.isEmpty && yourCats.isEmpty) {
+          final rawYour = e.yourCategories ?? const [];
+          final yourCatsArList = rawYour
+              .where((x) => x != null)
+              .map((x) => x.toString().trim())
+              .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
+              .map(_catToAr)
+              .toSet() // ✅ إزالة تكرار (عندك Appliance Repair مكررة)
+              .toList();
+
+          final yourCatsAr = yourCatsArList.join('، ');
+
+          if (reqCatAr.isEmpty && yourCatsAr.isEmpty) {
             return 'تعذّر قبول الطلب لأن فئة الطلب أو فئات خدماتك غير محددة حالياً.\n'
                 'جرّب طلبًا أحدث، أو تأكد من إنشاء خدماتك من جديد بعد تحديث التصنيفات.';
           }
 
-          // إذا الطلب بدون فئة
-          if (reqCat.isEmpty) {
+          if (reqCatAr.isEmpty) {
             return 'تعذّر قبول الطلب لأن الطلب الحالي لا يحتوي على فئة خدمة محددة.\n'
                 'جرّب طلبًا آخر أو تواصل مع الدعم.';
           }
 
-          // إذا المزود بدون فئات
-          if (yourCats.isEmpty) {
+          if (yourCatsAr.isEmpty) {
             return 'لا يمكنك قبول هذا الطلب لأن حسابك غير مرتبط بأي فئة خدمات.\n'
                 'اذهب إلى: خدماتي → أنشئ خدمة واحدة على الأقل داخل فئة صحيحة ثم أعد المحاولة.';
           }
 
           return 'لا يمكنك قبول هذا الطلب لأن فئة الطلب لا تطابق فئات خدماتك.\n'
-              'فئة الطلب: $reqCat\n'
-              'فئاتك: $yourCats\n'
+              'فئة الطلب: $reqCatAr\n'
+              'فئاتك: $yourCatsAr\n'
               'عدّل فئات خدماتك أو اختر طلبًا ضمن نفس الفئة.';
 
-        default:
-          // لا نطلع إنجليزي للمستخدم
-          return 'تعذر قبول الطلب حالياً. حاول مرة أخرى.';
+        case 'ALREADY_ACCEPTED':
+          return 'هذا الطلب تم قبوله مسبقاً ولم يعد متاحاً.';
+        case 'NOT_FOUND':
+        case 'REQUEST_NOT_FOUND':
+          return 'هذا الطلب غير موجود أو تم حذفه.';
+        case 'FORBIDDEN':
+          return 'ليس لديك صلاحية لتنفيذ هذا الإجراء.';
       }
+
+      final t = errorText(e).trim();
+      return t.isEmpty ? fallback : t;
     }
 
-    return 'فشل قبول الطلب، حاول مرة أخرى';
+    final t = errorText(e).trim();
+    return t.isEmpty ? fallback : t;
+  }
+
+  String _friendlyAcceptMessage(Object e) {
+    return _friendlyMarketplaceError(
+      e,
+      fallback: 'تعذر قبول الطلب حالياً. حاول مرة أخرى.',
+    );
+  }
+
+  String _friendlyLoadMessage(Object e) {
+    return _friendlyMarketplaceError(
+      e,
+      fallback: 'صار خطأ أثناء تحميل الطلبات. حاول مرة أخرى.',
+    );
   }
 
   Future<void> load({bool refresh = false}) async {
@@ -110,8 +209,10 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
 
     state = state.copyWith(
       isLoading: true,
-      errorMessage: null,
-      uiMessage: null,
+      clearError: true,
+      clearBanner: refresh,
+      clearUiMessage: true,
+      sessionExpired: false,
       page: 1,
       hasMore: false,
       isLoadingMore: false,
@@ -132,20 +233,27 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
 
       state = state.copyWith(
         isLoading: false,
-        errorMessage: null,
+        sessionExpired: false,
+        clearBanner: true,
         allRequests: ui,
         page: result.page,
         limit: result.limit,
         hasMore: hasMore,
+        clearError: true,
       );
     } catch (e) {
-      final msg = (e is MarketplaceApiException)
-          ? (e.message.isNotEmpty ? e.message : 'صار خطأ أثناء تحميل الطلبات')
-          : 'صار خطأ أثناء تحميل الطلبات';
+      if (_isUnauthorized(e)) {
+        _handleUnauthorized();
+        state = state.copyWith(isLoading: false);
+        return;
+      }
+
+      final msg = _friendlyLoadMessage(e);
 
       state = state.copyWith(
         isLoading: false,
         errorMessage: msg,
+        bannerMessage: msg,
       );
     }
   }
@@ -172,15 +280,25 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
       state = state.copyWith(
         isLoadingMore: false,
         loadMoreFailed: false,
+        sessionExpired: false,
         allRequests: merged,
         page: result.page,
         limit: result.limit,
         hasMore: hasMore,
       );
-    } catch (_) {
+    } catch (e) {
+      if (_isUnauthorized(e)) {
+        _handleUnauthorized();
+        state = state.copyWith(isLoadingMore: false);
+        return;
+      }
+
+      final msg = _friendlyLoadMessage(e);
+
       state = state.copyWith(
         isLoadingMore: false,
         loadMoreFailed: true,
+        bannerMessage: msg,
       );
     }
   }
@@ -190,21 +308,20 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
   }
 
   Future<void> applyFilters(MarketplaceFilters filters) async {
-  final old = state.filters;
-  state = state.copyWith(filters: filters);
+    final old = state.filters;
+    state = state.copyWith(filters: filters);
 
-  final serverRelevantChanged =
-      old.sort != filters.sort ||
-      old.cityId != filters.cityId ||
-      old.categoryId != filters.categoryId ||       // ✅ مهم
-      old.minBudget != filters.minBudget ||         // ✅ مهم
-      old.maxBudget != filters.maxBudget;           // ✅ مهم
+    final serverRelevantChanged =
+        old.sort != filters.sort ||
+        old.cityId != filters.cityId ||
+        old.categoryId != filters.categoryId ||
+        old.minBudget != filters.minBudget ||
+        old.maxBudget != filters.maxBudget;
 
-  if (serverRelevantChanged) {
-    await load(refresh: true);
+    if (serverRelevantChanged) {
+      await load(refresh: true);
+    }
   }
-}
-
 
   Future<void> resetFilters() async {
     state = state.copyWith(filters: MarketplaceFilters.initial());
@@ -217,14 +334,39 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
     );
   }
 
+  bool isAccepting(int requestId) => state.acceptingIds.contains(requestId);
+
   Future<void> accept(int requestId) async {
+    if (state.acceptingIds.contains(requestId)) return;
+
+    state = state.copyWith(
+      acceptingIds: {...state.acceptingIds, requestId},
+    );
+
     try {
       await repo.acceptRequest(requestId);
 
       dismiss(requestId);
 
+      state = state.copyWith(
+        acceptingIds: {...state.acceptingIds}..remove(requestId),
+        sessionExpired: false,
+      );
+
       _emitUiMessage('تم قبول الطلب بنجاح ✅ وتم إنشاء حجز لهذا الطلب.');
     } catch (e) {
+      if (_isUnauthorized(e)) {
+        _handleUnauthorized();
+        state = state.copyWith(
+          acceptingIds: {...state.acceptingIds}..remove(requestId),
+        );
+        return;
+      }
+
+      state = state.copyWith(
+        acceptingIds: {...state.acceptingIds}..remove(requestId),
+      );
+
       _emitUiMessage(_friendlyAcceptMessage(e));
     }
   }
