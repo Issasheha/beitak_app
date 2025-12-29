@@ -2,10 +2,10 @@
 
 import 'dart:async';
 
+import 'package:beitak_app/core/error/error_text.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/models/service_summary.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_services_viewmodel.dart';
 import 'package:beitak_app/features/user/home/presentation/views/browse/viewmodels/browse_state.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 class BrowseController extends StateNotifier<BrowseState> {
@@ -25,25 +25,10 @@ class BrowseController extends StateNotifier<BrowseState> {
     await loadInitial();
   }
 
-  String _friendlyError(Object e) {
-    if (e is DioException) {
-      final msg = e.message?.trim();
-      if (msg != null && msg.isNotEmpty) return msg;
-      return 'تعذر الاتصال بالشبكة. حاول مرة أخرى.';
-    }
-    if (e is Exception) {
-      return 'حدث خطأ أثناء تحميل الخدمات. حاول مرة أخرى.';
-    }
-    return 'حدث خطأ غير متوقع.';
-  }
-
   String _norm(String s) {
     var x = s.trim().toLowerCase();
-
-    // house+cleaning / house_cleaning / house-cleaning => house cleaning
     x = x.replaceAll(RegExp(r'[\+_\-]+'), ' ');
     x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
-
     return x;
   }
 
@@ -64,8 +49,6 @@ class BrowseController extends StateNotifier<BrowseState> {
       'repair',
       'design',
       'painting',
-
-      // عربي
       'تنظيف المنازل',
       'تنظيف',
       'سباكة',
@@ -147,7 +130,7 @@ class BrowseController extends StateNotifier<BrowseState> {
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
-        errorMessage: _friendlyError(e),
+        errorMessage: errorText(e),
         services: const [],
         visible: const [],
         hasMore: false,
@@ -158,14 +141,13 @@ class BrowseController extends StateNotifier<BrowseState> {
   Future<void> loadMore() async {
     if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
 
-    final rid = _requestId; // ✅ خذ نفس requestId الحالي
+    final rid = _requestId;
     state = state.copyWith(isLoadingMore: true, clearError: true);
 
     try {
       final q = state.searchTerm.trim();
 
       await _viewModel.loadMoreServices(
-        // ✅ أهم تعديل: مرر المدينة/المنطقة
         cityId: state.userCityId,
         areaId: state.userAreaId,
 
@@ -177,7 +159,6 @@ class BrowseController extends StateNotifier<BrowseState> {
         sortBy: state.sortBy,
       );
 
-      // ✅ إذا تغيرت الفلاتر أثناء التحميل، تجاهل النتيجة
       if (rid != _requestId) return;
 
       final all = List<ServiceSummary>.unmodifiable(_viewModel.services);
@@ -187,9 +168,12 @@ class BrowseController extends StateNotifier<BrowseState> {
         services: all,
         visible: all,
       );
-    } catch (_) {
+    } catch (e) {
       if (rid != _requestId) return;
-      state = state.copyWith(isLoadingMore: false);
+      state = state.copyWith(
+        isLoadingMore: false,
+        errorMessage: errorText(e),
+      );
     }
   }
 
@@ -213,7 +197,6 @@ class BrowseController extends StateNotifier<BrowseState> {
     required double minRating,
   }) {
     final prevKey = state.categoryKey;
-
     final newKey = (categoryKey == null || categoryKey.trim().isEmpty)
         ? null
         : categoryKey.trim();
