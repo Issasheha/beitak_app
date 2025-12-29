@@ -22,10 +22,14 @@ class BookingHistoryItem {
   final String? cancellationReason;
   final String? providerNotes;
 
-  /// ✅ NEW: هل المزود قيّم هذا الحجز (من الباك)
+  /// ✅ هل المزود قيّم هذا الحجز (من الباك)
   final bool providerRated;
 
-  /// ✅ precomputed (performance)
+  /// ✅ NEW: تقييم العميل (من /ratings/my-reviews) مربوط على booking_id
+  final int? userRating; // 1..5
+  final String? userReview;
+
+  /// ✅ precomputed
   final DateTime dateTime;
   final String dateLabel; // dd/mm/yyyy
   final String timeLabel; // HH:mm
@@ -44,6 +48,8 @@ class BookingHistoryItem {
     required this.cancellationReason,
     required this.providerNotes,
     required this.providerRated,
+    required this.userRating,
+    required this.userReview,
     required this.dateTime,
     required this.dateLabel,
     required this.timeLabel,
@@ -52,6 +58,32 @@ class BookingHistoryItem {
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled' || status == 'refunded';
   bool get isIncomplete => status == 'incomplete';
+
+  BookingHistoryItem copyWith({
+    int? userRating,
+    String? userReview,
+  }) {
+    return BookingHistoryItem(
+      id: id,
+      bookingNumber: bookingNumber,
+      status: status,
+      serviceTitle: serviceTitle,
+      customerName: customerName,
+      bookingDate: bookingDate,
+      bookingTime: bookingTime,
+      totalPrice: totalPrice,
+      city: city,
+      area: area,
+      cancellationReason: cancellationReason,
+      providerNotes: providerNotes,
+      providerRated: providerRated,
+      userRating: userRating ?? this.userRating,
+      userReview: userReview ?? this.userReview,
+      dateTime: dateTime,
+      dateLabel: dateLabel,
+      timeLabel: timeLabel,
+    );
+  }
 }
 
 @immutable
@@ -61,7 +93,7 @@ class ProviderHistoryState {
   /// ✅ always sorted latest-first
   final List<BookingHistoryItem> bookings;
 
-  /// ✅ pre-split lists (no filtering in UI each rebuild)
+  /// ✅ pre-split lists
   final List<BookingHistoryItem> completed;
   final List<BookingHistoryItem> cancelled;
   final List<BookingHistoryItem> incomplete;
@@ -70,7 +102,7 @@ class ProviderHistoryState {
   final bool hasNext;
   final bool isLoadingMore;
 
-  /// ✅ تتبع إرسال التقييم (حتى نعطّل الزر ونغير النص/نخفيه)
+  /// ✅ تتبع إرسال التقييم (provider->user)
   final Set<int> ratedBookingIds;
   final Set<int> submittingRatingIds;
 

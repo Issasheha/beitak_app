@@ -11,10 +11,13 @@ import 'provider_history_state.dart';
 class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
   static final RegExp _arabicRegex = RegExp(r'[\u0600-\u06FF]');
 
-  /// ✅ قاموس مبني من /areas اللي أعطيتني ياها
-  /// يدعم slug + name_en + name
+  /// ✅ TTL للكاش (حتى لو refresh ما نعمل ضغط على السيرفر كثير)
+  static const Duration _reviewsCacheTtl = Duration(minutes: 2);
+
+  Map<int, _MyReviewLite>? _myReviewsCache;
+  DateTime? _myReviewsLastFetch;
+
   static const Map<String, String> _areasArMap = {
-    // Amman
     'abdoun': 'عبدون',
     'abdoun ': 'عبدون',
     'downtown': 'البلدة القديمة',
@@ -32,8 +35,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     'tla\'a al-ali': 'تلاع العلي',
     'tlaa al-ali': 'تلاع العلي',
     'tlaa-al-ali': 'تلاع العلي',
-
-    // Aqaba
     'aqaba port': 'ميناء العقبة',
     'aqaba-port': 'ميناء العقبة',
     'city center': 'وسط المدينة',
@@ -59,6 +60,7 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       keepTab: HistoryTab.completed,
       ratedBookingIds: const <int>{},
       submittingRatingIds: const <int>{},
+      forceRefreshReviewsCache: true, // أول مرة نجيبها أكيد
     );
   }
 
@@ -71,7 +73,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final prev = state.asData?.value;
     final currentTab = prev?.activeTab ?? HistoryTab.completed;
 
-    // ✅ مهم جداً: خزنهم قبل AsyncLoading حتى ما يصفّروا
     final rated = prev?.ratedBookingIds ?? <int>{};
     final submitting = prev?.submittingRatingIds ?? <int>{};
 
@@ -82,15 +83,93 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       keepTab: currentTab,
       ratedBookingIds: rated,
       submittingRatingIds: submitting,
+      // ✅ refresh: لا نعمل fetch إذا الكاش لسه جديد
+      forceRefreshReviewsCache: false,
     ));
   }
+
+  // =================== Reviews Cache ===================
+
+  bool _isReviewsCacheValid() {
+    if (_myReviewsCache == null) return false;
+    if (_myReviewsLastFetch == null) return false;
+    return DateTime.now().difference(_myReviewsLastFetch!) <= _reviewsCacheTtl;
+  }
+
+  Future<Map<int, _MyReviewLite>> _getMyReviewsMapCached({
+    required bool forceRefresh,
+  }) async {
+    if (!forceRefresh && _isReviewsCacheValid()) {
+      return _myReviewsCache!;
+    }
+
+    final fresh = await _fetchMyReviewsMap();
+    _myReviewsCache = fresh;
+    _myReviewsLastFetch = DateTime.now();
+    return fresh;
+  }
+
+  // ✅ NEW: جلب مراجعاتي وربطها بـ booking_id (pagination)
+  Future<Map<int, _MyReviewLite>> _fetchMyReviewsMap() async {
+    final out = <int, _MyReviewLite>{};
+
+    int page = 1;
+    bool hasNext = true;
+
+    while (hasNext) {
+      final res = await ApiClient.dio.get(
+        ApiConstants.providerMyReviews,
+        queryParameters: {'page': page, 'limit': 50},
+      );
+
+      final root = res.data ?? {};
+      final success = root['success'] == true;
+      if (!success) break;
+
+      final data = root['data'];
+      if (data is List) {
+        for (final e in data) {
+          if (e is Map) {
+            final bid = int.tryParse('${e['booking_id']}') ?? 0;
+            if (bid <= 0) continue;
+
+            final ratingNum = e['rating'];
+            final rating = (ratingNum is num) ? ratingNum.toInt() : int.tryParse('$ratingNum');
+
+            final review = (e['review'] ?? '').toString().trim();
+
+            // نخزن حتى لو review لحاله
+            if ((rating != null && rating > 0) || review.isNotEmpty) {
+              out[bid] = _MyReviewLite(rating: rating ?? 0, review: review);
+            }
+          }
+        }
+      }
+
+      final pag = root['pagination'];
+      if (pag is Map) {
+        hasNext = pag['has_next'] == true;
+      } else {
+        hasNext = false;
+      }
+
+      page++;
+      if (page > 20) break; // safety
+    }
+
+    return out;
+  }
+
+  // =================== Load bookings ===================
 
   Future<ProviderHistoryState> _loadPage({
     required int page,
     required HistoryTab keepTab,
     required Set<int> ratedBookingIds,
     required Set<int> submittingRatingIds,
+    required bool forceRefreshReviewsCache,
   }) async {
+    // 1) bookings
     final res = await ApiClient.dio.get(
       ApiConstants.bookingsMy,
       queryParameters: {'page': page, 'limit': 20},
@@ -102,12 +181,28 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final List list = (data['bookings'] as List?) ?? const [];
     final pagination = data['pagination'] ?? const {};
 
-    final items = list.map((e) => _mapBooking(e)).toList(growable: false);
+    var items = list.map((e) => _mapBooking(e)).toList(growable: false);
 
-    // ✅ rated من الباك (providerRated = true)
+    // 2) my reviews (cached)
+    Map<int, _MyReviewLite> myReviews = {};
+    try {
+      myReviews = await _getMyReviewsMapCached(forceRefresh: forceRefreshReviewsCache);
+    } catch (_) {
+      myReviews = {};
+    }
+
+    // 3) inject into items
+    items = items.map((b) {
+      final r = myReviews[b.id];
+      if (r == null) return b;
+      return b.copyWith(
+        userRating: (r.rating > 0) ? r.rating : null,
+        userReview: r.review.isEmpty ? null : r.review,
+      );
+    }).toList(growable: false);
+
+    // rated من الباك (providerRated = true)
     final serverRated = items.where((b) => b.providerRated).map((b) => b.id).toSet();
-
-    // ✅ دمج الباك + المحلي
     final mergedRated = {...ratedBookingIds, ...serverRated};
 
     final sorted = items.toList(growable: false)
@@ -148,12 +243,28 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       final List list = (data['bookings'] as List?) ?? const [];
       final pagination = data['pagination'] ?? const {};
 
-      final newItems = list.map((e) => _mapBooking(e)).toList(growable: false)
+      var newItems = list.map((e) => _mapBooking(e)).toList(growable: false)
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+
+      // ✅ هنا ما بنعيد fetch — بنستخدم الكاش
+      Map<int, _MyReviewLite> myReviews = {};
+      try {
+        myReviews = await _getMyReviewsMapCached(forceRefresh: false);
+      } catch (_) {
+        myReviews = {};
+      }
+
+      newItems = newItems.map((b) {
+        final r = myReviews[b.id];
+        if (r == null) return b;
+        return b.copyWith(
+          userRating: (r.rating > 0) ? r.rating : null,
+          userReview: r.review.isEmpty ? null : r.review,
+        );
+      }).toList(growable: false);
 
       final merged = _mergeSortedDesc(current.bookings, newItems);
 
-      // ✅ rated من الباك بالصفحة الجديدة
       final serverRated2 = newItems.where((b) => b.providerRated).map((b) => b.id).toSet();
       final mergedRated = {...current.ratedBookingIds, ...serverRated2};
 
@@ -172,25 +283,22 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     }
   }
 
-  /// ✅ إرسال تقييم مزود الخدمة (نجوم + مبلغ + رسالة اختيارية)
+  /// ✅ إرسال تقييم مزود الخدمة (provider->user)
   Future<void> submitProviderRating({
     required int bookingId,
-    required int providerRating, // 1..5
+    required int providerRating,
     required double amountPaid,
-    String? providerResponse, // optional
+    String? providerResponse,
   }) async {
     final current = state.asData?.value;
     if (current == null) return;
 
-    // ✅ ممنوع تقييم مرتين
     if (current.isRated(bookingId)) {
       throw Exception('تم تقييم هذه الخدمة مسبقاً.');
     }
 
-    // ✅ منع ضغطتين بنفس الوقت
     if (current.submittingRatingIds.contains(bookingId)) return;
 
-    // optimistic
     final submitting = {...current.submittingRatingIds, bookingId};
     state = AsyncData(current.copyWith(submittingRatingIds: submitting));
 
@@ -230,7 +338,7 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     }
   }
 
-  // ===================== internal helpers =====================
+  // ===================== helpers =====================
 
   List<BookingHistoryItem> _mergeSortedDesc(
     List<BookingHistoryItem> a,
@@ -249,7 +357,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     }
     if (i < a.length) out.addAll(a.sublist(i));
     if (j < b.length) out.addAll(b.sublist(j));
-
     return out;
   }
 
@@ -262,7 +369,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final statusRaw = _s(m['status']).trim();
     final status = statusRaw.isEmpty ? '—' : statusRaw;
 
-    // --- service title ---
     final service = m['service'];
     String serviceName = _s(
       service is Map
@@ -293,7 +399,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       );
     }
 
-    // customer
     final user = m['user'] ?? m['customer'] ?? m['client'];
     final customerName = _buildName(user);
 
@@ -309,7 +414,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final cityRaw = _s(m['service_city'] ?? m['city'] ?? '');
     final city = _normalizeCityAr(cityRaw);
 
-    // ✅ area عربي (من القاموس)
     final areaRaw = _nullableS(m['service_area'] ?? m['area']);
     final area = _normalizeAreaAr(areaRaw);
 
@@ -327,7 +431,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
             ? providerNotesRaw.trim()
             : null;
 
-    // ✅ rated من الباك: rating.provider_rating أو provider_rating
     final providerRated = _extractProviderRated(m);
 
     return BookingHistoryItem(
@@ -344,6 +447,11 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       cancellationReason: cancellationReason,
       providerNotes: providerNotes,
       providerRated: providerRated,
+
+      // inject لاحقاً
+      userRating: null,
+      userReview: null,
+
       dateTime: dt,
       dateLabel: dateLabel,
       timeLabel: timeLabel,
@@ -351,9 +459,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
   }
 
   bool _extractProviderRated(Map m) {
-    // الاحتمالات:
-    // 1) rating: { provider_rating: 5 }
-    // 2) provider_rating: 5
     final ratingObj = m['rating'];
     if (ratingObj is Map) {
       final pr = _toInt(ratingObj['provider_rating'] ?? ratingObj['providerRating']);
@@ -471,16 +576,12 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final r0 = raw.trim();
     if (r0.isEmpty) return null;
 
-    // إذا أصلاً عربي
     if (_hasArabic(r0)) return r0;
 
     final k0 = r0.toLowerCase().trim();
-
-    // جرّب slug مباشرة
     final direct = _areasArMap[k0];
     if (direct != null) return direct;
 
-    // جرّب استبدالات شائعة
     final k1 = k0.replaceAll('_', ' ').replaceAll(RegExp(r'\s+'), ' ');
     final v1 = _areasArMap[k1];
     if (v1 != null) return v1;
@@ -489,7 +590,6 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     final v2 = _areasArMap[k2];
     if (v2 != null) return v2;
 
-    // fallback: نخليه زي ما هو (أفضل من فاضي)
     return r0;
   }
 
@@ -519,4 +619,10 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
     if (v is int) return v.toDouble();
     return double.tryParse(v.toString()) ?? 0.0;
   }
+}
+
+class _MyReviewLite {
+  final int rating;
+  final String review;
+  const _MyReviewLite({required this.rating, required this.review});
 }

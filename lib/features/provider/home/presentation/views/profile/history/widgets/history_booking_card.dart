@@ -73,19 +73,10 @@ class HistoryBookingCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     SizeConfig.init(context);
 
-    Color statusColor;
-    String statusLabel;
+    final _StatusInfo st = _statusInfo(item);
 
-    if (item.isCancelled) {
-      statusColor = Colors.redAccent;
-      statusLabel = 'ملغي';
-    } else if (item.isCompleted) {
-      statusColor = AppColors.lightGreen;
-      statusLabel = 'مكتمل';
-    } else {
-      statusColor = const Color(0xFF6B7280);
-      statusLabel = 'غير مكتملة';
-    }
+    final hasUserReview = (item.userRating != null && item.userRating! > 0) ||
+        (item.userReview != null && item.userReview!.trim().isNotEmpty);
 
     return Material(
       color: Colors.transparent,
@@ -94,8 +85,8 @@ class HistoryBookingCard extends ConsumerWidget {
         onTap: () => showBookingDetailsSheet(
           context: context,
           item: item,
-          statusColor: statusColor,
-          statusLabel: statusLabel,
+          statusColor: st.color,
+          statusLabel: st.label,
         ),
         child: Container(
           decoration: BoxDecoration(
@@ -110,30 +101,12 @@ class HistoryBookingCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ====== Top row: status + title ======
                 Row(
                   children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: SizeConfig.w(10),
-                        vertical: SizeConfig.h(4),
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: AppTextStyles.caption11.copyWith(
-                          fontSize: SizeConfig.ts(11.5),
-                          fontWeight: FontWeight.w800,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
+                    _StatusPill(label: st.label, color: st.color),
                     SizeConfig.hSpace(8),
+
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,6 +124,8 @@ class HistoryBookingCard extends ConsumerWidget {
                           SizeConfig.v(2),
                           Text(
                             item.customerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.body14.copyWith(
                               fontSize: SizeConfig.ts(12),
                               color: AppColors.textSecondary,
@@ -160,13 +135,17 @@ class HistoryBookingCard extends ConsumerWidget {
                         ],
                       ),
                     ),
+
                     Icon(
                       Icons.chevron_left,
                       color: AppColors.textSecondary.withValues(alpha: 0.75),
                     ),
                   ],
                 ),
+
                 SizeConfig.v(8),
+
+                // ====== Middle row: date/address + price ======
                 Row(
                   children: [
                     Expanded(
@@ -184,6 +163,8 @@ class HistoryBookingCard extends ConsumerWidget {
                           SizeConfig.v(2),
                           Text(
                             buildAddress(item),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.caption11.copyWith(
                               fontSize: SizeConfig.ts(11.5),
                               color: AppColors.textSecondary,
@@ -203,56 +184,197 @@ class HistoryBookingCard extends ConsumerWidget {
                     ),
                   ],
                 ),
+
+                // ====== User review block (stars + message) ======
+                if (hasUserReview) ...[
+                  SizeConfig.v(10),
+                  _UserReviewMiniBox(
+                    rating: item.userRating,
+                    review: item.userReview,
+                  ),
+                ],
+
+                // ====== Cancel reason ======
                 if (item.isCancelled &&
                     item.cancellationReason != null &&
-                    item.cancellationReason!.trim().isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(top: SizeConfig.h(8)),
-                    child: Container(
-                      padding: SizeConfig.padding(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-                        border: Border.all(
-                          color: Colors.redAccent.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Text(
-                        'سبب الإلغاء: ${item.cancellationReason}',
-                        style: AppTextStyles.caption11.copyWith(
-                          fontSize: SizeConfig.ts(11.5),
-                          color: Colors.redAccent,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    item.cancellationReason!.trim().isNotEmpty) ...[
+                  SizeConfig.v(8),
+                  _InfoBox(
+                    bg: Colors.redAccent.withValues(alpha: 0.08),
+                    border: Colors.redAccent.withValues(alpha: 0.25),
+                    textColor: Colors.redAccent,
+                    text: 'سبب الإلغاء: ${item.cancellationReason}',
+                    fontWeight: FontWeight.w600,
                   ),
-                if (item.isIncomplete && item.providerNotes != null)
-                  Padding(
-                    padding: EdgeInsets.only(top: SizeConfig.h(8)),
-                    child: Container(
-                      padding: SizeConfig.padding(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6B7280).withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
-                        border: Border.all(
-                          color: const Color(0xFF6B7280).withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: Text(
-                        incompleteNoteArabic(item.providerNotes!),
-                        style: AppTextStyles.caption11.copyWith(
-                          fontSize: SizeConfig.ts(11.5),
-                          color: const Color(0xFF374151),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                ],
+
+                // ====== Incomplete note ======
+                if (item.isIncomplete && item.providerNotes != null) ...[
+                  SizeConfig.v(8),
+                  _InfoBox(
+                    bg: const Color(0xFF6B7280).withValues(alpha: 0.08),
+                    border: const Color(0xFF6B7280).withValues(alpha: 0.25),
+                    textColor: const Color(0xFF374151),
+                    text: incompleteNoteArabic(item.providerNotes!),
+                    fontWeight: FontWeight.w700,
                   ),
+                ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  static _StatusInfo _statusInfo(BookingHistoryItem item) {
+    if (item.isCancelled) {
+      return const _StatusInfo(label: 'ملغي', color: Colors.redAccent);
+    }
+    if (item.isCompleted) {
+      return const _StatusInfo(label: 'مكتمل', color: AppColors.lightGreen);
+    }
+    return const _StatusInfo(label: 'غير مكتملة', color: Color(0xFF6B7280));
+  }
+}
+
+class _StatusInfo {
+  final String label;
+  final Color color;
+  const _StatusInfo({required this.label, required this.color});
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.w(10),
+        vertical: SizeConfig.h(4),
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
+        border: Border.all(
+          color: color.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption11.copyWith(
+          fontSize: SizeConfig.ts(11.5),
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoBox extends StatelessWidget {
+  final Color bg;
+  final Color border;
+  final Color textColor;
+  final String text;
+  final FontWeight fontWeight;
+
+  const _InfoBox({
+    required this.bg,
+    required this.border,
+    required this.textColor,
+    required this.text,
+    required this.fontWeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: SizeConfig.padding(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        text,
+        style: AppTextStyles.caption11.copyWith(
+          fontSize: SizeConfig.ts(11.5),
+          color: textColor,
+          fontWeight: fontWeight,
+          height: 1.25,
+        ),
+      ),
+    );
+  }
+}
+
+class _UserReviewMiniBox extends StatelessWidget {
+  final int? rating;
+  final String? review;
+
+  const _UserReviewMiniBox({
+    required this.rating,
+    required this.review,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = (rating ?? 0).clamp(0, 5);
+    final msg = (review ?? '').trim();
+
+    return Container(
+      padding: SizeConfig.padding(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.lightGreen.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+        border: Border.all(
+          color: AppColors.lightGreen.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'تقييم العميل',
+                style: AppTextStyles.caption11.copyWith(
+                  fontSize: SizeConfig.ts(11.5),
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              ...List.generate(5, (i) {
+                final filled = (i + 1) <= r;
+                return Icon(
+                  filled ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: SizeConfig.ts(18),
+                  color: filled ? const Color(0xFFFFC107) : AppColors.textSecondary,
+                );
+              }),
+            ],
+          ),
+          if (msg.isNotEmpty) ...[
+            SizeConfig.v(6),
+            Text(
+              msg,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption11.copyWith(
+                fontSize: SizeConfig.ts(11.5),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

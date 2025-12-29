@@ -59,13 +59,15 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     if (rating is Map<String, dynamic>) {
       final pr = rating['provider_rating'];
       final msg = rating['provider_response'];
-      if ((pr is num && pr.toInt() > 0) || (msg != null && msg.toString().trim().isNotEmpty)) {
+      if ((pr is num && pr.toInt() > 0) ||
+          (msg != null && msg.toString().trim().isNotEmpty)) {
         return true;
       }
     }
     final pr2 = booking['provider_rating'];
     final msg2 = booking['provider_response'];
-    if ((pr2 is num && pr2.toInt() > 0) || (msg2 != null && msg2.toString().trim().isNotEmpty)) {
+    if ((pr2 is num && pr2.toInt() > 0) ||
+        (msg2 != null && msg2.toString().trim().isNotEmpty)) {
       return true;
     }
     return false;
@@ -153,22 +155,23 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         );
       }
 
-      // ✅ fallback: إذا /bookings/:id ما رجّع rating
+      // ✅ fallback: إذا /bookings/:id ما رجّع rating provider->user
       if (!_hasProviderRatingData(booking)) {
-        final fromMy = await _fetchBookingFromMy(bookingId: bookingId, token: token);
+        final fromMy =
+            await _fetchBookingFromMy(bookingId: bookingId, token: token);
         if (fromMy != null) {
-          // خذ rating إذا موجود
           if (fromMy['rating'] is Map<String, dynamic>) {
             booking['rating'] = fromMy['rating'];
           }
-          // أو خذ provider_rating مباشرة إذا موجودة
           if (fromMy.containsKey('provider_rating')) {
             booking['provider_rating'] = fromMy['provider_rating'];
           }
           if (fromMy.containsKey('provider_response')) {
             booking['provider_response'] = fromMy['provider_response'];
           }
-          if (fromMy.containsKey('amount_paid') && (booking['amount_paid'] == null || '${booking['amount_paid']}'.trim().isEmpty)) {
+          if (fromMy.containsKey('amount_paid') &&
+              (booking['amount_paid'] == null ||
+                  '${booking['amount_paid']}'.trim().isEmpty)) {
             booking['amount_paid'] = fromMy['amount_paid'];
           }
         }
@@ -178,7 +181,9 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     } on DioException catch (e) {
       if (e.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']?.toString() ?? 'Server error',
+          error: (e.response!.data as Map<String, dynamic>)['message']
+                  ?.toString() ??
+              'Server error',
         );
       } else {
         state = state.copyWith(error: 'Network error');
@@ -190,6 +195,54 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     } finally {
       state = state.copyWith(isLoading: false);
     }
+  }
+
+  // ==========================
+  // ✅ NEW: USER -> PROVIDER rating
+  // POST /ratings/submit
+  // body: { booking_id, rating, review, amount_paid }
+  // ==========================
+  Future<Map<String, dynamic>> submitUserRating({
+    required int bookingId,
+    required int rating,
+    required double amountPaid,
+    String? review,
+  }) async {
+    final token = await _getToken();
+    if (token == null || token.isEmpty) {
+      throw const ServerException(message: 'Access token required');
+    }
+
+    final res = await _dio.post(
+      '/ratings/submit',
+      data: {
+        'booking_id': bookingId,
+        'rating': rating,
+        'review': (review ?? '').trim().isEmpty ? null : review!.trim(),
+        'amount_paid': amountPaid,
+      },
+      options: _opts(token),
+    );
+
+    final code = res.statusCode ?? 0;
+    final body = _ensureMap(res.data, code);
+    _ensureSuccess(body, code);
+
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ServerException(message: 'Invalid rating response format');
+    }
+
+    // ✅ حدّث state.data مباشرة عشان الواجهة تبين التقييم فوراً
+    final current = state.data;
+    if (current != null) {
+      final next = Map<String, dynamic>.from(current);
+      // كثير APIs برجع rating object ضمن data مباشرة (مثل اللي عندك)
+      next['rating'] = data;
+      state = state.copyWith(data: next);
+    }
+
+    return data;
   }
 
   // ======== باقي كود الإلغاء كما هو ========
@@ -215,7 +268,8 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
 
     try {
-      if (currentStatus == 'pending_provider_accept' || currentStatus == 'pending') {
+      if (currentStatus == 'pending_provider_accept' ||
+          currentStatus == 'pending') {
         await _updateStatus(
           token: token,
           bookingId: bookingId,
@@ -250,7 +304,9 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     } on DioException catch (e) {
       if (e.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']?.toString() ?? 'Server error',
+          error: (e.response!.data as Map<String, dynamic>)['message']
+                  ?.toString() ??
+              'Server error',
         );
       } else {
         state = state.copyWith(error: 'Network error');

@@ -1,5 +1,5 @@
 class ApiConstants {
-  static const String baseUrl ='https://night-ink-gaps-activation.trycloudflare.com';
+  static const String baseUrl ='https://previews-par-immigration-undo.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
 
   // Auth
@@ -29,7 +29,7 @@ class ApiConstants {
       '/providers/profile/phone/verify-otp';
 
   static String providerById(int id) => '/providers/$id';
-static String providerBookingRating(int bookingId) =>
+  static String providerBookingRating(int bookingId) =>
     '/providers/bookings/$bookingId/provider-rating';
 
   // Bookings
@@ -40,8 +40,8 @@ static String providerBookingRating(int bookingId) =>
   static String bookingProviderComplete(int id) =>
       '/bookings/$id/provider-complete';
   static String bookingProviderCancel(int id) => '/bookings/$id/provider-cancel';
- static const String providerActivate = '/providers/activate';
-static const String providerDeactivate = '/providers/deactivate';
+  static const String providerActivate = '/providers/activate';
+  static const String providerDeactivate = '/providers/deactivate';
   // Services
   static const String services = '/services';
   static String serviceDetails(int id) => '/services/$id';

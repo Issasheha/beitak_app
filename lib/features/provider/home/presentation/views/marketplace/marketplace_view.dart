@@ -23,7 +23,7 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
   late final TextEditingController _searchController;
   late final ScrollController _scrollController;
 
-  /// ✅ فقط الشيب اللي بكبس عليه بصير أخضر
+  /// ✅ فقط الشيب اللي بكبس عليه بصير "Active" (آخر تفاعل)
   _ChipKey _activeChip = _ChipKey.sort;
 
   @override
@@ -114,15 +114,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                 onBack: () => _handleBack(context),
               ),
               const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _SearchRow(
-                  controller: _searchController,
-                  onChanged: (v) => ref
-                      .read(marketplaceControllerProvider.notifier)
-                      .setSearchQuery(v),
-                ),
-              ),
               const SizedBox(height: 10),
 
               // ✅ صف الـ Chips فقط
@@ -239,7 +230,7 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
   final ValueChanged<_ChipKey> onActiveChanged;
 
   static const List<String> _categories = <String>[
-    'مواسرجي',
+    'سباكة',
     'تنظيف',
     'صيانة المنازل',
     'صيانة للأجهزة',
@@ -249,11 +240,29 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
   /// ✅ fallback ثابت لو FixedServiceCategories ما غطّى النص العربي
   static const Map<String, String> _labelToKeyFallback = {
     'تنظيف': 'cleaning',
-    'مواسرجي': 'plumbing',
+    'سباكة': 'plumbing',
     'كهرباء': 'electricity',
     'صيانة المنازل': 'home_maintenance',
     'صيانة للأجهزة': 'appliance_maintenance',
   };
+
+  static const Map<int, String> _cityIdToLabel = {
+    1: 'عمّان',
+    4: 'العقبة',
+  };
+
+  String _priceLabel(double? min, double? max) {
+    final hasMin = min != null;
+    final hasMax = max != null;
+
+    if (!hasMin && !hasMax) return 'الكل';
+
+    String fmt(double v) => v.toStringAsFixed(0);
+
+    if (hasMin && hasMax) return '${fmt(min!)}-${fmt(max!)} د.أ';
+    if (hasMin) return 'من ${fmt(min!)} د.أ';
+    return 'إلى ${fmt(max!)} د.أ';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -261,8 +270,11 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
     final notifier = ref.read(marketplaceControllerProvider.notifier);
 
     Future<void> setCategory(String? label) async {
+      onActiveChanged(_ChipKey.category);
+
       if (label == null) {
-        await notifier.applyFilters(state.filters.copyWith(clearCategory: true));
+        await notifier
+            .applyFilters(state.filters.copyWith(clearCategory: true));
         return;
       }
 
@@ -284,14 +296,25 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
     }
 
     Future<void> setCity(int? id) async {
-      await notifier.applyFilters(state.filters.copyWith(cityId: id));
-    }
+  onActiveChanged(_ChipKey.city);
+
+  if (id == null) {
+    await notifier.applyFilters(state.filters.copyWith(clearCity: true));
+    return;
+  }
+
+  await notifier.applyFilters(state.filters.copyWith(cityId: id));
+}
+
 
     Future<void> setSort(MarketplaceSort s) async {
+      onActiveChanged(_ChipKey.sort);
       await notifier.applyFilters(state.filters.copyWith(sort: s));
     }
 
     Future<void> openPrice() async {
+      onActiveChanged(_ChipKey.price);
+
       final result = await showModalBottomSheet<_PriceRangeResult?>(
         context: context,
         isScrollControlled: true,
@@ -313,6 +336,27 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
       }
     }
 
+    // ✅ هل الفلتر مطبّق؟ (حتى لو مش Active)
+    final isCategoryApplied = (state.filters.categoryId != null) ||
+        (state.filters.categoryLabel != null &&
+            state.filters.categoryLabel!.trim().isNotEmpty);
+
+    final isCityApplied = state.filters.cityId != null;
+
+    final isPriceApplied =
+        state.filters.minBudget != null || state.filters.maxBudget != null;
+
+    final categoryValue = isCategoryApplied
+        ? (state.filters.categoryLabel ?? 'محددة')
+        : 'الكل';
+
+    final cityValue = state.filters.cityId == null
+        ? 'الكل'
+        : (_cityIdToLabel[state.filters.cityId!] ?? 'محددة');
+
+    final priceValue =
+        _priceLabel(state.filters.minBudget, state.filters.maxBudget);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -322,7 +366,6 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
             value: state.filters.sort.label,
             selected: active == _ChipKey.sort,
             onTap: () {
-              onActiveChanged(_ChipKey.sort);
               final next = state.filters.sort == MarketplaceSort.newest
                   ? MarketplaceSort.oldest
                   : MarketplaceSort.newest;
@@ -330,9 +373,12 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
             },
           ),
           const SizedBox(width: 10),
+
+          // ✅ الفئة: تظهر القيمة المختارة + تضل خِضرا لو مطبّقة
           _MenuChip(
             label: 'الفئة',
-            selected: active == _ChipKey.category,
+            value: categoryValue,
+            selected: (active == _ChipKey.category) || isCategoryApplied,
             onOpened: () => onActiveChanged(_ChipKey.category),
             items: <_MenuItem>[
               _MenuItem(label: 'جميع الفئات', onTap: () => setCategory(null)),
@@ -340,10 +386,14 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
                   .map((c) => _MenuItem(label: c, onTap: () => setCategory(c))),
             ],
           ),
+
           const SizedBox(width: 10),
+
+          // ✅ المنطقة: تظهر المدينة المختارة + تضل خِضرا لو مطبّقة
           _MenuChip(
             label: 'المنطقة',
-            selected: active == _ChipKey.city,
+            value: cityValue,
+            selected: (active == _ChipKey.city) || isCityApplied,
             onOpened: () => onActiveChanged(_ChipKey.city),
             items: <_MenuItem>[
               _MenuItem(label: 'كل المدن', onTap: () => setCity(null)),
@@ -351,14 +401,15 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
               _MenuItem(label: 'العقبة', onTap: () => setCity(4)),
             ],
           ),
+
           const SizedBox(width: 10),
+
+          // ✅ السعر: يظهر الرينج المختار + يضل خِضرا لو مطبّق
           _ActionChip(
             label: 'السعر',
-            selected: active == _ChipKey.price,
-            onTap: () {
-              onActiveChanged(_ChipKey.price);
-              openPrice();
-            },
+            value: priceValue,
+            selected: (active == _ChipKey.price) || isPriceApplied,
+            onTap: openPrice,
           ),
         ],
       ),
@@ -374,6 +425,7 @@ class _MenuItem {
 
 class _MenuChip extends StatelessWidget {
   final String label;
+  final String? value; // ✅ القيمة المختارة (للعرض داخل الشيب)
   final bool selected;
   final List<_MenuItem> items;
   final VoidCallback onOpened;
@@ -383,6 +435,7 @@ class _MenuChip extends StatelessWidget {
     required this.selected,
     required this.items,
     required this.onOpened,
+    this.value,
   });
 
   @override
@@ -390,6 +443,8 @@ class _MenuChip extends StatelessWidget {
     final bg = selected ? AppColors.lightGreen : Colors.white;
     final fg = selected ? Colors.white : const Color(0xFF111827);
     final border = selected ? AppColors.lightGreen : const Color(0xFFE5E7EB);
+
+    final v = (value == null || value!.trim().isEmpty) ? null : value!.trim();
 
     return PopupMenuButton<String>(
       tooltip: '',
@@ -422,6 +477,17 @@ class _MenuChip extends StatelessWidget {
                 color: fg,
               ),
             ),
+            if (v != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                v,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: fg,
+                ),
+              ),
+            ],
             const SizedBox(width: 8),
             Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: fg),
           ],
@@ -433,6 +499,7 @@ class _MenuChip extends StatelessWidget {
 
 class _ActionChip extends StatelessWidget {
   final String label;
+  final String? value; // ✅ قيمة للعرض (مثل السعر)
   final bool selected;
   final VoidCallback onTap;
 
@@ -440,6 +507,7 @@ class _ActionChip extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.value,
   });
 
   @override
@@ -447,6 +515,8 @@ class _ActionChip extends StatelessWidget {
     final bg = selected ? AppColors.lightGreen : Colors.white;
     final fg = selected ? Colors.white : const Color(0xFF111827);
     final border = selected ? AppColors.lightGreen : const Color(0xFFE5E7EB);
+
+    final v = (value == null || value!.trim().isEmpty) ? null : value!.trim();
 
     return InkWell(
       borderRadius: BorderRadius.circular(999),
@@ -469,6 +539,17 @@ class _ActionChip extends StatelessWidget {
                 color: fg,
               ),
             ),
+            if (v != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                v,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: fg,
+                ),
+              ),
+            ],
             const SizedBox(width: 8),
             Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: fg),
           ],
@@ -754,43 +835,6 @@ class _TopHeader extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchRow extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-
-  const _SearchRow({
-    required this.controller,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        textInputAction: TextInputAction.search,
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          hintText: 'ابحث عن طلب...',
-          hintStyle: TextStyle(
-            color: Color(0xFF9CA3AF),
-            fontWeight: FontWeight.w600,
-          ),
-          prefixIcon: Icon(Icons.search_rounded, size: 20),
         ),
       ),
     );

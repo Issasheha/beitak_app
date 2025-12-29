@@ -3,6 +3,9 @@ import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/color_x.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 
+// ✅ NEW: ترجمة الخدمة من key/slug إلى عربي ثابت
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
+
 class ProviderNewRequestCard extends StatefulWidget {
   const ProviderNewRequestCard({
     super.key,
@@ -27,14 +30,31 @@ class _ProviderNewRequestCardState extends State<ProviderNewRequestCard> {
     setState(() => _pressed = v);
   }
 
+  // ✅ NEW: ترجمة اسم الخدمة للعرض بالعربي (يدعم key/slug/English/Arabic variants)
+  String _serviceNameAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '—';
+
+    // جرّب من أي سترينغ (key/slug/arabic label)
+    final k = FixedServiceCategories.keyFromAnyString(s);
+    if (k != null) return FixedServiceCategories.labelArFromKey(k);
+
+    // لو السيرفر باعث name_ar أحياناً أو نص عربي عام
+    // نخليه كما هو بدل ما نظهر English
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+    if (hasArabic) return s;
+
+    // fallback
+    return s;
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = SizeConfig.radius(18);
 
     // ✅ Border: واضح حتى بدون ضغط
-    final borderColor = _pressed
-        ? AppColors.lightGreen.o(0.65)
-        : AppColors.lightGreen.o(0.28);
+    final borderColor =
+        _pressed ? AppColors.lightGreen.o(0.65) : AppColors.lightGreen.o(0.28);
 
     final borderWidth = _pressed ? 1.6 : 1.2;
 
@@ -44,6 +64,9 @@ class _ProviderNewRequestCardState extends State<ProviderNewRequestCard> {
     // ✅ press feedback
     final double lift = _pressed ? 0 : 1.0;
     final double blur = _pressed ? 12 : 16;
+
+    // ✅ translated label
+    final serviceLabel = _serviceNameAr(widget.serviceName);
 
     return Container(
       margin: EdgeInsets.only(bottom: SizeConfig.h(8)),
@@ -114,7 +137,7 @@ class _ProviderNewRequestCardState extends State<ProviderNewRequestCard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.serviceName,
+                          serviceLabel, // ✅ بدل widget.serviceName
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -173,8 +196,7 @@ class _ProviderNewRequestCardState extends State<ProviderNewRequestCard> {
                     height: SizeConfig.w(34),
                     decoration: BoxDecoration(
                       color: AppColors.lightGreen.o(_pressed ? 0.18 : 0.10),
-                      borderRadius:
-                          BorderRadius.circular(SizeConfig.radius(12)),
+                      borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
                       border: Border.all(
                         color: AppColors.lightGreen.o(_pressed ? 0.34 : 0.22),
                         width: _pressed ? 1.2 : 1.0,

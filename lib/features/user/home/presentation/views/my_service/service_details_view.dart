@@ -15,6 +15,9 @@ import 'widgets_details/status_footer_box.dart';
 import 'widgets_details/cancel_button.dart';
 import 'widgets_details/provider_rating_box.dart';
 
+// ✅ NEW
+import 'widgets_details/user_rating_sheet.dart';
+
 class ServiceDetailsView extends ConsumerStatefulWidget {
   final BookingListItem initialItem;
 
@@ -238,7 +241,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         color: Colors.grey.shade700,
         bg: Colors.grey.withValues(alpha: 0.10),
         border: Colors.grey.withValues(alpha: 0.35),
-        footerText: 'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
+        footerText:
+            'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
       );
     }
 
@@ -258,18 +262,44 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final k = r.toLowerCase();
     if (k.contains('provider')) return 'تم الإلغاء من قبل المزود';
-    if (k.contains('customer') || k.contains('user')) return 'تم الإلغاء من قبل العميل';
+    if (k.contains('customer') || k.contains('user')) {
+      return 'تم الإلغاء من قبل العميل';
+    }
     if (k.contains('system')) return 'تم الإلغاء تلقائياً';
     return 'سبب الإلغاء غير محدد';
   }
 
-  // ✅ NEW: قراءة تقييم المزود من حالتين:
-  // 1) rating.provider_rating / rating.amount_paid / rating.provider_response
-  // 2) provider_rating / amount_paid / provider_response مباشرة داخل booking
+  // ✅ provider->user rating map (موجود عندك)
   Map<String, dynamic>? _readRatingMap(Map<String, dynamic> booking) {
     final r = booking['rating'];
     if (r is Map<String, dynamic>) return r;
     return null;
+  }
+
+  // ✅ NEW: user->provider rating موجود بنفس key "rating" لكن حقوله (rating/review/user_amount_paid)
+  Map<String, dynamic>? _readUserRatingMap(Map<String, dynamic> booking) {
+    final r = booking['rating'];
+    if (r is Map<String, dynamic>) {
+      // نتحقق إنه فعلاً فيه حقول user rating
+      final ur = r['rating'];
+      final review = r['review'];
+      if ((ur is num && ur.toInt() > 0) ||
+          (review != null && review.toString().trim().isNotEmpty)) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  bool _hasUserRated(Map<String, dynamic>? userRatingMap) {
+    if (userRatingMap == null) return false;
+    final r = userRatingMap['rating'];
+    final review = userRatingMap['review'];
+    final amount = userRatingMap['user_amount_paid'] ?? userRatingMap['amount_paid'];
+    final rated = (r is num && r.toInt() > 0);
+    final hasText = review != null && review.toString().trim().isNotEmpty;
+    final hasAmount = amount != null && '${amount}'.trim().isNotEmpty;
+    return rated || hasText || hasAmount;
   }
 
   @override
@@ -289,7 +319,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
     final isIncomplete = status == 'incomplete';
-    final isPending = status == 'pending_provider_accept' || status == 'pending';
+    final isPending =
+        status == 'pending_provider_accept' || status == 'pending';
 
     final isUpcoming = const {
       'confirmed',
@@ -327,15 +358,16 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     String city = details != null ? _readString(details, ['service_city']) : '';
     city = _onlyArabicCity(city);
     final loc = city.isEmpty ? '' : city;
-const currency = 'د.أ';
+
+    const currency = 'د.أ';
 
     final price = details != null
         ? (_readNum(details, ['total_price', 'base_price']) ?? base.price)
         : base.price;
-        
+
     final priceText = price == null
-    ? 'غير محدد'
-    : '${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))} $currency';
+        ? 'غير محدد'
+        : '${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))} $currency';
 
     String? providerName = base.providerName;
     String? providerPhone = base.providerPhone;
@@ -368,21 +400,25 @@ const currency = 'د.أ';
           ]);
     final cancelReason = _cancelReasonArabic(rawCancelReason);
 
-    final rawProviderNotes = details == null ? '' : _readString(details, ['provider_notes']);
-    final incompleteNote = isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
+    final rawProviderNotes =
+        details == null ? '' : _readString(details, ['provider_notes']);
+    final incompleteNote =
+        isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
 
     final bookingNumber = _toArabicDigits(
-      base.bookingNumber.startsWith('#') ? base.bookingNumber : '#${base.bookingNumber}',
+      base.bookingNumber.startsWith('#')
+          ? base.bookingNumber
+          : '#${base.bookingNumber}',
     );
 
-    // ✅ NEW: rating data
+    // ✅ موجود عندك: provider->user display (إن كان عندك)
     final ratingMap = details == null ? null : _readRatingMap(details);
 
     final providerRating = details == null
         ? null
         : (_readInt(ratingMap ?? details, ['provider_rating', 'providerRating']));
 
-    final amountPaid = details == null
+    final amountPaidProvider = details == null
         ? null
         : (_readNum(ratingMap ?? details, ['amount_paid', 'amountPaid']));
 
@@ -401,6 +437,42 @@ const currency = 'د.أ';
             ['provider_response_at', 'providerResponseAt'],
             fallback: '',
           ).trim();
+
+    // ✅ NEW: user->provider rating data
+    final userRatingMap = details == null ? null : _readUserRatingMap(details);
+    final userHasRated = _hasUserRated(userRatingMap);
+
+    final userRatingValue =
+        userRatingMap == null ? null : _readInt(userRatingMap, ['rating']);
+    final userReview = userRatingMap == null
+        ? ''
+        : _readString(userRatingMap, ['review'], fallback: '');
+    final userAmountPaid = userRatingMap == null
+        ? null
+        : (_readNum(userRatingMap, ['user_amount_paid', 'amount_paid']));
+    final userRatedAt = userRatingMap == null
+        ? ''
+        : _readString(userRatingMap, ['created_at', 'createdAt'], fallback: '');
+
+    Future<void> openUserRatingSheet() async {
+      final ok = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => UserRatingSheet(
+          bookingId: widget.initialItem.bookingId,
+          serviceTitle: serviceName,
+          providerName: providerName ?? 'مزود الخدمة',
+        ),
+      );
+
+      if (ok == true) {
+        // ✅ لو بدك إعادة جلب أكيدة من السيرفر بعد الإرسال:
+        await ref
+            .read(serviceDetailsControllerProvider.notifier)
+            .loadBookingDetails(bookingId: widget.initialItem.bookingId);
+      }
+    }
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -510,7 +582,8 @@ const currency = 'د.أ';
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.20)),
+                    border:
+                        Border.all(color: Colors.red.withValues(alpha: 0.20)),
                   ),
                   child: Text(
                     state.error!,
@@ -533,15 +606,31 @@ const currency = 'د.أ';
                 textColor: ui.color,
               ),
 
-              // ✅ NEW: عرض تقييم مزود الخدمة للمستخدم (ضمن الحجز المكتمل)
+              // ✅ (اختياري) عرض تقييم المزود للمستخدم (provider->user) كما كان
               if (isCompleted) ...[
                 SizeConfig.v(12),
                 ProviderRatingBox(
                   rating: providerRating,
-                  amountPaid: amountPaid,
+                  amountPaid: amountPaidProvider,
                   currency: currency,
                   message: providerResponse,
-                  ratedAt: providerRatedAt!.isEmpty ? null : providerRatedAt,
+                  ratedAt: providerRatedAt == null || providerRatedAt.isEmpty
+                      ? null
+                      : providerRatedAt,
+                ),
+              ],
+
+              // ✅ NEW: تقييم المستخدم للمزود (user->provider)
+              if (isCompleted) ...[
+                SizeConfig.v(12),
+                _UserRatingSummaryCard(
+                  hasRated: userHasRated,
+                  rating: userRatingValue,
+                  review: userReview,
+                  amountPaid: userAmountPaid,
+                  currency: currency,
+                  ratedAt: userRatedAt.isEmpty ? null : userRatedAt,
+                  onRate: userHasRated ? null : openUserRatingSheet,
                 ),
               ],
 
@@ -560,7 +649,8 @@ const currency = 'د.أ';
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded, color: Colors.grey.shade700),
+                      Icon(Icons.info_outline_rounded,
+                          color: Colors.grey.shade700),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -579,9 +669,13 @@ const currency = 'د.أ';
               ],
 
               // ✅ ما بنعرض إلغاء للحالات غير المناسبة
-              if (!isCancelled && !isCompleted && !isIncomplete && (isPending || isUpcoming))
+              if (!isCancelled &&
+                  !isCompleted &&
+                  !isIncomplete &&
+                  (isPending || isUpcoming))
                 CancelButton(
-                  isLoading: ref.watch(serviceDetailsControllerProvider).isCancelling,
+                  isLoading:
+                      ref.watch(serviceDetailsControllerProvider).isCancelling,
                   onPressed: () => _confirmCancel(status),
                 ),
 
@@ -663,7 +757,9 @@ const currency = 'د.أ';
                                 style: TextStyle(
                                   fontSize: SizeConfig.ts(12),
                                   fontWeight: FontWeight.w700,
-                                  color: isSelected ? Colors.red.shade700 : AppColors.textPrimary,
+                                  color: isSelected
+                                      ? Colors.red.shade700
+                                      : AppColors.textPrimary,
                                 ),
                               ),
                             ),
@@ -741,7 +837,8 @@ const currency = 'د.أ';
       bookingId: widget.initialItem.bookingId,
       currentStatus: currentStatus,
       cancellationCategory: selectedCategory,
-      cancellationReason: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+      cancellationReason:
+          noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
     );
 
     noteCtrl.dispose();
@@ -761,5 +858,113 @@ const currency = 'د.أ';
       final msg = latest.error ?? 'تعذّر إلغاء الطلب';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
+  }
+}
+
+// =====================
+// ✅ NEW: بطاقة ملخص تقييم المستخدم للمزود
+// =====================
+class _UserRatingSummaryCard extends StatelessWidget {
+  final bool hasRated;
+  final int? rating;
+  final String review;
+  final double? amountPaid;
+  final String currency;
+  final String? ratedAt;
+  final VoidCallback? onRate;
+
+  const _UserRatingSummaryCard({
+    required this.hasRated,
+    required this.rating,
+    required this.review,
+    required this.amountPaid,
+    required this.currency,
+    required this.ratedAt,
+    required this.onRate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = rating ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.rate_review_rounded, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'تقييمك للمزود',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+              ),
+              const Spacer(),
+              if (!hasRated)
+                TextButton(
+                  onPressed: onRate,
+                  child: const Text(
+                    'قيّم الآن',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (hasRated) ...[
+            Row(
+              children: List.generate(5, (i) {
+                final filled = (i + 1) <= r;
+                return Icon(
+                  filled ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: 20,
+                  color: filled ? const Color(0xFFFFC107) : const Color(0xFF9CA3AF),
+                );
+              }),
+            ),
+            if (amountPaid != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'المبلغ المدفوع: ${amountPaid!.toStringAsFixed(amountPaid == amountPaid!.roundToDouble() ? 0 : 2)} $currency',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+              ),
+            ],
+            if (review.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                review.trim(),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+            ],
+            if (ratedAt != null && ratedAt!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                ratedAt!.trim(),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ] else ...[
+            const Text(
+              'لم تقم بتقييم مزود الخدمة بعد.',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
