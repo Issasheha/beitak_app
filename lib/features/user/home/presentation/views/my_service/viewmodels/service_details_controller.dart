@@ -198,7 +198,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
   }
 
   // ==========================
-  // ✅ NEW: USER -> PROVIDER rating
+  // ✅ USER -> PROVIDER rating
   // POST /ratings/submit
   // body: { booking_id, rating, review, amount_paid }
   // ==========================
@@ -237,7 +237,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     final current = state.data;
     if (current != null) {
       final next = Map<String, dynamic>.from(current);
-      // كثير APIs برجع rating object ضمن data مباشرة (مثل اللي عندك)
       next['rating'] = data;
       state = state.copyWith(data: next);
     }
@@ -245,8 +244,9 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     return data;
   }
 
-  // ======== باقي كود الإلغاء كما هو ========
-
+  // ==========================
+  // ✅ CANCEL (مُعدل)
+  // ==========================
   Future<bool> cancelBooking({
     required int bookingId,
     required String currentStatus,
@@ -267,39 +267,62 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       return false;
     }
 
-    try {
-      if (currentStatus == 'pending_provider_accept' ||
-          currentStatus == 'pending') {
-        await _updateStatus(
-          token: token,
-          bookingId: bookingId,
-          status: 'cancelled',
-        );
-        return true;
-      }
+    final cat = cancellationCategory?.trim();
+    final reason = cancellationReason?.trim();
+    final hasReason = (cat != null && cat.isNotEmpty) ||
+        (reason != null && reason.isNotEmpty);
 
-      if (currentStatus == 'confirmed') {
+    try {
+      // ✅ 1) جرّب cancel endpoint أولاً (حتى لو pending)
+      if (hasReason) {
         final ok = await _cancelWithReason(
           token: token,
           bookingId: bookingId,
-          cancellationCategory: cancellationCategory,
-          cancellationReason: cancellationReason,
+          cancellationCategory: cat,
+          cancellationReason: reason,
         );
-        if (ok) return true;
 
-        await _updateStatus(
-          token: token,
-          bookingId: bookingId,
-          status: 'cancelled',
-        );
-        return true;
+        if (ok) {
+          // ✅ حدّث state.data محلياً (عشان يظهر السبب فوراً)
+          final current = state.data;
+          if (current != null) {
+            final next = Map<String, dynamic>.from(current);
+            next['status'] = 'cancelled';
+            if (reason != null && reason.isNotEmpty) {
+              next['cancellation_reason'] = reason;
+            }
+            if (cat != null && cat.isNotEmpty) {
+              next['cancellation_category'] = cat;
+            }
+            state = state.copyWith(data: next);
+          }
+          return true;
+        }
       }
 
+      // ✅ 2) fallback: updateStatus + ارسال السبب إذا السيرفر بدعمها
       await _updateStatus(
         token: token,
         bookingId: bookingId,
         status: 'cancelled',
+        cancellationCategory: cat,
+        cancellationReason: reason,
       );
+
+      // ✅ تحديث محلي بعد الفallback كمان
+      final current = state.data;
+      if (current != null) {
+        final next = Map<String, dynamic>.from(current);
+        next['status'] = 'cancelled';
+        if (reason != null && reason.isNotEmpty) {
+          next['cancellation_reason'] = reason;
+        }
+        if (cat != null && cat.isNotEmpty) {
+          next['cancellation_category'] = cat;
+        }
+        state = state.copyWith(data: next);
+      }
+
       return true;
     } on DioException catch (e) {
       if (e.response?.data is Map<String, dynamic>) {
@@ -333,8 +356,14 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       final res = await _dio.post(
         '/bookings/$bookingId/cancel',
         data: {
-          'cancellation_category': cancellationCategory ?? 'Other',
-          'cancellation_reason': cancellationReason ?? 'No reason provided',
+          'cancellation_category': (cancellationCategory == null ||
+                  cancellationCategory.trim().isEmpty)
+              ? 'Other'
+              : cancellationCategory.trim(),
+          'cancellation_reason':
+              (cancellationReason == null || cancellationReason.trim().isEmpty)
+                  ? 'No reason provided'
+                  : cancellationReason.trim(),
         },
         options: _opts(token),
       );
@@ -349,22 +378,38 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
+  // ✅ مُعدل: صار يقبل سبب/تصنيف الإلغاء ضمن PATCH كـ fallback
   Future<void> _updateStatus({
     required String token,
     required int bookingId,
     required String status,
+    String? cancellationCategory,
+    String? cancellationReason,
   }) async {
     final candidates = <String>[
       '/bookings/$bookingId/status',
       '/bookings/$bookingId',
     ];
 
+    final data = <String, dynamic>{'status': status};
+
+    if (status == 'cancelled') {
+      if (cancellationCategory != null &&
+          cancellationCategory.trim().isNotEmpty) {
+        data['cancellation_category'] = cancellationCategory.trim();
+      }
+      if (cancellationReason != null &&
+          cancellationReason.trim().isNotEmpty) {
+        data['cancellation_reason'] = cancellationReason.trim();
+      }
+    }
+
     DioException? last;
     for (final path in candidates) {
       try {
         final res = await _dio.patch(
           path,
-          data: {'status': status},
+          data: data,
           options: _opts(token),
         );
 

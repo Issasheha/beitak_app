@@ -190,7 +190,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     final isCancelled = status == 'cancelled' || status == 'refunded';
     final isCompleted = status == 'completed';
     final isIncomplete = status == 'incomplete';
-    final isPending = status == 'pending_provider_accept' || status == 'pending';
+    final isPending =
+        status == 'pending_provider_accept' || status == 'pending';
 
     final isUpcoming = const {
       'confirmed',
@@ -295,7 +296,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     if (userRatingMap == null) return false;
     final r = userRatingMap['rating'];
     final review = userRatingMap['review'];
-    final amount = userRatingMap['user_amount_paid'] ?? userRatingMap['amount_paid'];
+    final amount =
+        userRatingMap['user_amount_paid'] ?? userRatingMap['amount_paid'];
     final rated = (r is num && r.toInt() > 0);
     final hasText = review != null && review.toString().trim().isNotEmpty;
     final hasAmount = amount != null && '${amount}'.trim().isNotEmpty;
@@ -416,7 +418,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
     final providerRating = details == null
         ? null
-        : (_readInt(ratingMap ?? details, ['provider_rating', 'providerRating']));
+        : (_readInt(
+            ratingMap ?? details, ['provider_rating', 'providerRating']));
 
     final amountPaidProvider = details == null
         ? null
@@ -713,7 +716,18 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                   children: [
                     Icon(Icons.cancel_rounded, color: Colors.red.shade700),
                     const SizedBox(width: 10),
-                    const Text('تأكيد إلغاء الطلب'),
+                    const Expanded(
+                      child: Text(
+                        'تأكيد إلغاء الطلب',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'إغلاق',
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                    ),
                   ],
                 ),
                 content: SingleChildScrollView(
@@ -883,9 +897,42 @@ class _UserRatingSummaryCard extends StatelessWidget {
     required this.onRate,
   });
 
+  String _toArabicDigits(String input) {
+    const map = {
+      '0': '٠',
+      '1': '١',
+      '2': '٢',
+      '3': '٣',
+      '4': '٤',
+      '5': '٥',
+      '6': '٦',
+      '7': '٧',
+      '8': '٨',
+      '9': '٩',
+    };
+    final b = StringBuffer();
+    for (final ch in input.runes) {
+      final c = String.fromCharCode(ch);
+      b.write(map[c] ?? c);
+    }
+    return b.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = rating ?? 0;
+
+    final String? amountText = amountPaid == null
+        ? null
+        : _toArabicDigits(
+            amountPaid!.toStringAsFixed(
+              amountPaid == amountPaid!.roundToDouble() ? 0 : 2,
+            ),
+          );
+
+    final String? ratedAtText = (ratedAt == null || ratedAt!.trim().isEmpty)
+        ? null
+        : _toArabicDigits(ratedAt!.trim());
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -901,9 +948,9 @@ class _UserRatingSummaryCard extends StatelessWidget {
             children: [
               const Icon(Icons.rate_review_rounded, size: 18),
               const SizedBox(width: 8),
-              Text(
+              const Text(
                 'تقييمك للمزود',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
               ),
               const Spacer(),
               if (!hasRated)
@@ -924,28 +971,31 @@ class _UserRatingSummaryCard extends StatelessWidget {
                 return Icon(
                   filled ? Icons.star_rounded : Icons.star_border_rounded,
                   size: 20,
-                  color: filled ? const Color(0xFFFFC107) : const Color(0xFF9CA3AF),
+                  color:
+                      filled ? const Color(0xFFFFC107) : const Color(0xFF9CA3AF),
                 );
               }),
             ),
-            if (amountPaid != null) ...[
+            if (amountText != null) ...[
               const SizedBox(height: 8),
               Text(
-                'المبلغ المدفوع: ${amountPaid!.toStringAsFixed(amountPaid == amountPaid!.roundToDouble() ? 0 : 2)} $currency',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                'المبلغ المدفوع: $amountText $currency',
+                style:
+                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
               ),
             ],
             if (review.trim().isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 review.trim(),
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
               ),
             ],
-            if (ratedAt != null && ratedAt!.trim().isNotEmpty) ...[
+            if (ratedAtText != null) ...[
               const SizedBox(height: 8),
               Text(
-                ratedAt!.trim(),
+                ratedAtText,
                 style: const TextStyle(
                   fontWeight: FontWeight.w600,
                   fontSize: 11,
