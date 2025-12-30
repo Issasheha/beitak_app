@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/number_format.dart';
 
 class DetailsLine extends StatelessWidget {
   final IconData icon;
@@ -18,6 +19,8 @@ class DetailsLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeValue = NumberFormat.smart(value);
+
     return Padding(
       padding: SizeConfig.padding(vertical: 12),
       child: Row(
@@ -44,7 +47,7 @@ class DetailsLine extends StatelessWidget {
                     ),
                   ),
                   TextSpan(
-                    text: value,
+                    text: safeValue,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       color: AppColors.textSecondary,

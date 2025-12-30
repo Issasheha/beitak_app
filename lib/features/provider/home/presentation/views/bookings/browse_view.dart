@@ -112,9 +112,11 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.textPrimary,
                           side: const BorderSide(color: AppColors.borderLight),
-                          padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                          padding:
+                              SizeConfig.padding(horizontal: 16, vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
                           ),
                         ),
                         child: Text(
@@ -134,9 +136,11 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.lightGreen,
                           elevation: 0,
-                          padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                          padding:
+                              SizeConfig.padding(horizontal: 16, vertical: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
                           ),
                         ),
                         child: Text(
@@ -209,7 +213,8 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -258,9 +263,11 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                       ),
                       SizedBox(height: SizeConfig.h(6)),
                       Container(
-                        padding: SizeConfig.padding(horizontal: 12, vertical: 6),
+                        padding:
+                            SizeConfig.padding(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                          borderRadius:
+                              BorderRadius.circular(SizeConfig.radius(14)),
                           border: Border.all(color: AppColors.borderLight),
                           color: AppColors.background,
                         ),
@@ -286,7 +293,8 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setLocal(() => selected = v ?? categories.first),
+                            onChanged: (v) => setLocal(
+                                () => selected = v ?? categories.first),
                           ),
                         ),
                       ),
@@ -307,12 +315,16 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                           filled: true,
                           fillColor: AppColors.background,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide: const BorderSide(color: AppColors.borderLight),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderLight),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-                            borderSide: const BorderSide(color: AppColors.borderLight),
+                            borderRadius:
+                                BorderRadius.circular(SizeConfig.radius(14)),
+                            borderSide:
+                                const BorderSide(color: AppColors.borderLight),
                           ),
                         ),
                       ),
@@ -325,10 +337,13 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                               onPressed: () => Navigator.pop(context, false),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.textPrimary,
-                                side: const BorderSide(color: AppColors.borderLight),
-                                padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                                side: const BorderSide(
+                                    color: AppColors.borderLight),
+                                padding: SizeConfig.padding(
+                                    horizontal: 16, vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                                  borderRadius: BorderRadius.circular(
+                                      SizeConfig.radius(14)),
                                 ),
                               ),
                               child: Text(
@@ -348,9 +363,11 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.lightGreen,
                                 elevation: 0,
-                                padding: SizeConfig.padding(horizontal: 16, vertical: 12),
+                                padding: SizeConfig.padding(
+                                    horizontal: 16, vertical: 12),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                                  borderRadius: BorderRadius.circular(
+                                      SizeConfig.radius(14)),
                                 ),
                               ),
                               child: Text(
@@ -436,7 +453,8 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                       padding: SizeConfig.padding(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+                        borderRadius:
+                            BorderRadius.circular(SizeConfig.radius(16)),
                         border: Border.all(color: AppColors.borderLight),
                       ),
                       child: Text(
@@ -539,16 +557,18 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                 }
               : null,
 
-          onReject: isPending
+          // ✅ ما في رفض — نفس الإلغاء المستخدم بالخدمات القادمة
+          onCancel: (isPending || isUpcoming)
               ? () async {
                   if (busy) return;
-                  final ok = await _confirmSimple(
-                    title: 'رفض الطلب',
-                    desc: 'هل أنت متأكد أنك تريد رفض هذا الطلب؟',
-                    confirmText: 'تأكيد الرفض',
-                  );
-                  if (!ok) return;
-                  await _vm.reject(b.id);
+
+                  // إذا عندك Dialog خاص للإلغاء (مثل القادمات) استخدمه
+                  await _openCancelDialog(context, b);
+
+                  // ملاحظة:
+                  // _openCancelDialog غالبًا هو اللي بستدعي _vm.cancel(...) من جواته
+                  // فإذا كان عندك cancel مباشر بدون dialog:
+                  // await _vm.cancel(b.id);
                 }
               : null,
 
@@ -564,8 +584,6 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                   await _vm.complete(b.id);
                 }
               : null,
-
-          onCancel: isUpcoming ? () => _openCancelDialog(context, b) : null,
         );
       },
     );

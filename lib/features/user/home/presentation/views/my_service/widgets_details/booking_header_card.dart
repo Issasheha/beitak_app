@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/number_format.dart';
 
 class BookingHeaderCard extends StatelessWidget {
   final String bookingNumber;
@@ -42,7 +43,8 @@ class BookingHeaderCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                bookingNumber,
+                NumberFormat.smart(bookingNumber),
+                textDirection: TextDirection.ltr,
                 style: TextStyle(
                   fontSize: SizeConfig.ts(14),
                   color: AppColors.textPrimary,

@@ -14,6 +14,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
+// ✅ NEW: use your unified error mapper
+import 'package:beitak_app/core/error/error_text.dart';
+
 class AddPackageView extends ConsumerStatefulWidget {
   const AddPackageView({super.key});
 
@@ -80,13 +83,25 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     if (n.isEmpty) return '';
 
     final standardAliases = <String>[
-      'standard', 'ستاندرد', 'ستاندر', 'عادي', 'أساسي', 'اساسي',
+      'standard',
+      'ستاندرد',
+      'ستاندر',
+      'عادي',
+      'أساسي',
+      'اساسي',
     ];
     final premiumAliases = <String>[
-      'premium', 'بريميوم', 'مميز', 'مميّز',
+      'premium',
+      'بريميوم',
+      'مميز',
+      'مميّز',
     ];
     final emergencyAliases = <String>[
-      'emergency', 'طوارئ', 'عاجل', 'طارئة', 'طارئ',
+      'emergency',
+      'طوارئ',
+      'عاجل',
+      'طارئة',
+      'طارئ',
     ];
 
     if (standardAliases.any((a) => _normalize(a) == n)) return _tStandard;
@@ -99,11 +114,11 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   String _typeTitleAr(String t) {
     switch (t) {
       case _tStandard:
-        return 'ستاندرد';
+        return 'عادي';
       case _tPremium:
-        return 'بريميوم';
+        return 'مميز';
       case _tEmergency:
-        return 'طوارئ';
+        return 'مستعجل';
       default:
         return t;
     }
@@ -139,7 +154,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     return _price.text.trim().isNotEmpty ||
         _desc.text.trim().isNotEmpty ||
         _featuresNow.isNotEmpty ||
-        (_selectedCategoryKey != null && _selectedCategoryKey != _initialCategoryKey) ||
+        (_selectedCategoryKey != null &&
+            _selectedCategoryKey != _initialCategoryKey) ||
         _selectedType != _initialType;
   }
 
@@ -160,8 +176,13 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.lightGreen),
-              child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.lightGreen,
+              ),
+              child: const Text(
+                'تجاهل',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -232,7 +253,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     return null;
   }
 
-  ProviderServiceModel? _serviceForKey(List<ProviderServiceModel> services, String key) {
+  ProviderServiceModel? _serviceForKey(
+      List<ProviderServiceModel> services, String key) {
     for (final s in services) {
       final k = _serviceKeyOf(s);
       if (k == key) return s;
@@ -265,7 +287,10 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     if (featuresError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(featuresError, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            featuresError,
+            style: const TextStyle(color: Colors.white),
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -369,11 +394,18 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
       );
 
       _doExit();
-    } catch (_) {
+    } catch (err) {
       if (!mounted) return;
+
+      // ✅ Use your unified translator
+      final msg = errorText(err);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر إضافة الباقة. حاول مرة أخرى.'),
+        SnackBar(
+          content: Text(
+            msg,
+            style: AppTextStyles.body14.copyWith(color: Colors.white),
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -422,7 +454,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
               error: (_, __) => Center(
                 child: Text(
                   'تعذر تحميل الخدمات حالياً.',
-                  style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
+                  style: AppTextStyles.body14
+                      .copyWith(color: AppColors.textSecondary),
                 ),
               ),
               data: (services) {
@@ -430,19 +463,22 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.design_services_outlined, size: 56, color: AppColors.textSecondary),
+                      const Icon(Icons.design_services_outlined,
+                          size: 56, color: AppColors.textSecondary),
                       SizeConfig.v(12),
                       Text(
                         'لا يمكنك إضافة باقة قبل إنشاء خدمة واحدة على الأقل.',
                         textAlign: TextAlign.center,
-                        style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
+                        style: AppTextStyles.body14
+                            .copyWith(color: AppColors.textSecondary),
                       ),
                       SizeConfig.v(16),
                       ElevatedButton(
                         onPressed: () => context.push(AppRoutes.providerAddService),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.lightGreen,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
                           padding: SizeConfig.padding(horizontal: 18, vertical: 12),
                         ),
                         child: Text(
@@ -454,7 +490,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                   );
                 }
 
-                final matchedService = _serviceForKey(services, _selectedCategoryKey!);
+                final matchedService =
+                    _serviceForKey(services, _selectedCategoryKey!);
                 final hasService = matchedService != null;
 
                 return SingleChildScrollView(
@@ -468,7 +505,6 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                           _label('اختر الفئة *'),
                           SizeConfig.v(6),
                           _categoryDropdown(),
-
                           SizeConfig.v(10),
                           Container(
                             width: double.infinity,
@@ -485,8 +521,11 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                             child: Row(
                               children: [
                                 Icon(
-                                  hasService ? Icons.check_circle : Icons.info_outline,
-                                  color: hasService ? AppColors.lightGreen : Colors.red,
+                                  hasService
+                                      ? Icons.check_circle
+                                      : Icons.info_outline,
+                                  color:
+                                      hasService ? AppColors.lightGreen : Colors.red,
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
@@ -495,7 +534,9 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                         ? 'تم العثور على خدمة لهذه الفئة ✅'
                                         : 'لا توجد خدمة لهذه الفئة. أنشئ خدمة أولاً.',
                                     style: AppTextStyles.body14.copyWith(
-                                      color: hasService ? AppColors.textPrimary : Colors.red,
+                                      color: hasService
+                                          ? AppColors.textPrimary
+                                          : Colors.red,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
@@ -503,43 +544,51 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                               ],
                             ),
                           ),
-
                           SizeConfig.v(18),
                           _label('نوع الباقة *'),
                           SizeConfig.v(8),
                           _typeSelector(matchedService),
-
                           SizeConfig.v(18),
                           _label('السعر (د.أ) *'),
-                          _input(_price, 'مثال: 150',
-                              keyboardType: TextInputType.number, validator: _validatePrice),
-
+                          _input(
+                            _price,
+                            'مثال: 150',
+                            keyboardType: TextInputType.number,
+                            validator: _validatePrice,
+                          ),
                           SizeConfig.v(18),
                           _label('وصف الباقة *'),
-                          _input(_desc, 'صف ما تتضمنه الباقة...',
-                              maxLines: 3, validator: _validateDesc),
-
+                          _input(
+                            _desc,
+                            'صف ما تتضمنه الباقة...',
+                            maxLines: 3,
+                            validator: _validateDesc,
+                          ),
                           SizeConfig.v(16),
                           _featuresSection(),
-
                           SizeConfig.v(26),
                           Row(
                             children: [
-                               Expanded(
+                              Expanded(
                                 child: ElevatedButton(
                                   onPressed: hasService ? () => _save(services) : null,
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.lightGreen,
                                     disabledBackgroundColor:
                                         AppColors.lightGreen.withValues(alpha: 0.25),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                     padding: SizeConfig.padding(vertical: 14),
                                   ),
                                   child: _submitting
                                       ? const SizedBox(
                                           width: 20,
                                           height: 20,
-                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
                                         )
                                       : Text(
                                           'حفظ الباقة',
@@ -551,12 +600,16 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                 ),
                               ),
                               SizeConfig.hSpace(12),
-                             Expanded(
+                              Expanded(
                                 child: OutlinedButton(
                                   onPressed: _exit,
                                   style: OutlinedButton.styleFrom(
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    side: const BorderSide(color: AppColors.buttonBackground),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    side: const BorderSide(
+                                      color: AppColors.buttonBackground,
+                                    ),
                                     padding: SizeConfig.padding(vertical: 14),
                                   ),
                                   child: Text(
@@ -603,7 +656,9 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: selected ? AppColors.lightGreen : Colors.black.withValues(alpha: 0.08),
+                color: selected
+                    ? AppColors.lightGreen
+                    : Colors.black.withValues(alpha: 0.08),
                 width: selected ? 2 : 1,
               ),
               boxShadow: [

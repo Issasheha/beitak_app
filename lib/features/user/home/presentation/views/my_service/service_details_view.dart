@@ -4,19 +4,26 @@ import 'package:go_router/go_router.dart';
 
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
+import 'package:beitak_app/core/utils/number_format.dart';
 
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/viewmodels/service_details_providers.dart';
 
 import 'widgets_details/status_ui.dart';
 import 'widgets_details/booking_header_card.dart';
-import 'widgets_details/details_line.dart';
 import 'widgets_details/status_footer_box.dart';
 import 'widgets_details/cancel_button.dart';
 import 'widgets_details/provider_rating_box.dart';
-
-// ✅ NEW
 import 'widgets_details/user_rating_sheet.dart';
+
+// ✅ NEW (Refactor)
+import 'widgets_details/service_details_mapper.dart';
+import 'widgets_details/service_status_mapper.dart';
+import 'widgets_details/service_details_info_section.dart';
+import 'widgets_details/service_details_error_box.dart';
+import 'widgets_details/service_details_incomplete_note_box.dart';
+import 'widgets_details/user_rating_summary_card.dart';
+import 'widgets_details/cancel_booking_dialog.dart';
 
 class ServiceDetailsView extends ConsumerStatefulWidget {
   final BookingListItem initialItem;
@@ -41,421 +48,20 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
     });
   }
 
-  String _readString(
-    Map<String, dynamic> j,
-    List<String> keys, {
-    String fallback = '',
-  }) {
-    for (final k in keys) {
-      final v = j[k];
-      if (v == null) continue;
-      final s = v.toString().trim();
-      if (s.isNotEmpty) return s;
-    }
-    return fallback;
-  }
-
-  double? _readNum(Map<String, dynamic> j, List<String> keys) {
-    for (final k in keys) {
-      final v = j[k];
-      if (v is num) return v.toDouble();
-      final parsed = double.tryParse('$v');
-      if (parsed != null) return parsed;
-    }
-    return null;
-  }
-
-  int? _readInt(Map<String, dynamic> j, List<String> keys) {
-    for (final k in keys) {
-      final v = j[k];
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      final parsed = int.tryParse('$v');
-      if (parsed != null) return parsed;
-    }
-    return null;
-  }
-
-  bool _hasArabic(String s) => RegExp(r'[\u0600-\u06FF]').hasMatch(s);
-
-  String _toArabicDigits(String input) {
-    const map = {
-      '0': '٠',
-      '1': '١',
-      '2': '٢',
-      '3': '٣',
-      '4': '٤',
-      '5': '٥',
-      '6': '٦',
-      '7': '٧',
-      '8': '٨',
-      '9': '٩',
-    };
-    final b = StringBuffer();
-    for (final ch in input.runes) {
-      final c = String.fromCharCode(ch);
-      b.write(map[c] ?? c);
-    }
-    return b.toString();
-  }
-
-  String _onlyArabicCity(String raw) {
-    var r = raw.trim();
-    if (r.isEmpty) return '';
-
-    r = r.split(',').first.trim();
-    r = r.split('،').first.trim();
-
-    if (_hasArabic(r)) return r;
-
-    final k = r.toLowerCase().trim();
-    const map = <String, String>{
-      'amman': 'عمان',
-      'zarqa': 'الزرقاء',
-      'irbid': 'إربد',
-      'aqaba': 'العقبة',
-      'salt': 'السلط',
-      'madaba': 'مادبا',
-      'jerash': 'جرش',
-      'mafraq': 'المفرق',
-      'karak': 'الكرك',
-      'tafileh': 'الطفيلة',
-      'maan': 'معان',
-      'ajloun': 'عجلون',
-      'dubai': 'دبي',
-    };
-
-    return map[k] ?? '';
-  }
-
-  String _formatTimeArabic(String raw) {
-    final r = raw.trim();
-    if (r.isEmpty) return '';
-
-    if (r.contains('ص')) return _toArabicDigits(r.replaceAll('ص', 'صباحاً'));
-    if (r.contains('م')) return _toArabicDigits(r.replaceAll('م', 'مساءً'));
-
-    final parts = r.split(':');
-    if (parts.length >= 2) {
-      int h = int.tryParse(parts[0]) ?? 0;
-      final m = parts[1];
-
-      final suffix = h >= 12 ? 'مساءً' : 'صباحاً';
-      if (h == 0) h = 12;
-      if (h > 12) h -= 12;
-
-      return _toArabicDigits('$h:$m $suffix');
-    }
-
-    return _toArabicDigits(r);
-  }
-
-  String _incompleteNoteArabic(String raw) {
-    final r = raw.trim();
-    if (r.isEmpty) return '';
-    if (_hasArabic(r)) return r;
-
-    final lower = r.toLowerCase();
-
-    if (lower.contains('automatically marked as incomplete')) {
-      final isoMatch = RegExp(r'on\s+([0-9T:\.\-Z]+)').firstMatch(r);
-      final hoursMatch = RegExp(r'\(([\d\.]+)\s*hours').firstMatch(r);
-
-      final iso = isoMatch?.group(1) ?? '';
-      final hours = hoursMatch?.group(1) ?? '';
-
-      String when = '';
-      if (iso.isNotEmpty && iso.contains('T')) {
-        final parts = iso.split('T');
-        final date = parts[0];
-        final time = parts[1].replaceAll('Z', '');
-        final hhmm = time.length >= 5 ? time.substring(0, 5) : time;
-        when = '${_toArabicDigits(date)} ${_toArabicDigits(hhmm)}';
-      } else if (iso.isNotEmpty) {
-        when = _toArabicDigits(iso);
-      }
-
-      final hoursText = hours.isEmpty ? '' : _toArabicDigits(hours);
-
-      final w = when.isEmpty ? '' : ' بتاريخ $when';
-      final h = hoursText.isEmpty ? '' : ' بعد تأخر $hoursText ساعة عن الموعد';
-
-      return 'تم تحويل الحجز إلى "غير مكتمل"$w$h.';
-    }
-
-    return 'ملاحظة: $r';
-  }
-
-  StatusUi _statusUi(String status) {
-    final isCancelled = status == 'cancelled' || status == 'refunded';
-    final isCompleted = status == 'completed';
-    final isIncomplete = status == 'incomplete';
-    final isPending =
-        status == 'pending_provider_accept' || status == 'pending';
-
-    final isUpcoming = const {
-      'confirmed',
-      'provider_on_way',
-      'provider_arrived',
-      'in_progress',
-    }.contains(status);
-
-    if (isCancelled) {
-      return StatusUi(
-        label: 'ملغاة',
-        color: Colors.red.shade700,
-        bg: Colors.red.withValues(alpha: 0.10),
-        border: Colors.red.withValues(alpha: 0.35),
-        footerText: 'تم إلغاء هذا الحجز ولن يتم تنفيذه.',
-      );
-    }
-    if (isCompleted) {
-      return StatusUi(
-        label: 'مكتمل',
-        color: Colors.blue.shade700,
-        bg: Colors.blue.withValues(alpha: 0.10),
-        border: Colors.blue.withValues(alpha: 0.35),
-        footerText: 'تم تنفيذ الخدمة بنجاح.',
-      );
-    }
-    if (isPending) {
-      return StatusUi(
-        label: 'قيد الانتظار',
-        color: Colors.orange.shade800,
-        bg: Colors.orange.withValues(alpha: 0.10),
-        border: Colors.orange.withValues(alpha: 0.35),
-        footerText: 'بانتظار موافقة مزود الخدمة على طلبك.',
-      );
-    }
-    if (isUpcoming) {
-      return StatusUi(
-        label: 'قادمة',
-        color: AppColors.lightGreen,
-        bg: AppColors.lightGreen.withValues(alpha: 0.12),
-        border: AppColors.lightGreen.withValues(alpha: 0.35),
-        footerText: 'تمت الموافقة على طلبك وسيتم تنفيذ الخدمة حسب الموعد.',
-      );
-    }
-    if (isIncomplete) {
-      return StatusUi(
-        label: 'غير مكتملة',
-        color: Colors.grey.shade700,
-        bg: Colors.grey.withValues(alpha: 0.10),
-        border: Colors.grey.withValues(alpha: 0.35),
-        footerText:
-            'لم يتم تنفيذ الخدمة ضمن الوقت المحدد وتم تحويلها إلى "غير مكتملة".',
-      );
-    }
-
-    return StatusUi(
-      label: 'حالة الطلب',
-      color: Colors.orange.shade800,
-      bg: Colors.orange.withValues(alpha: 0.10),
-      border: Colors.orange.withValues(alpha: 0.35),
-      footerText: 'بانتظار تحديث حالة الطلب.',
-    );
-  }
-
-  String _cancelReasonArabic(String raw) {
-    final r = raw.trim();
-    if (r.isEmpty) return '';
-    if (_hasArabic(r)) return r;
-
-    final k = r.toLowerCase();
-    if (k.contains('provider')) return 'تم الإلغاء من قبل المزود';
-    if (k.contains('customer') || k.contains('user')) {
-      return 'تم الإلغاء من قبل العميل';
-    }
-    if (k.contains('system')) return 'تم الإلغاء تلقائياً';
-    return 'سبب الإلغاء غير محدد';
-  }
-
-  // ✅ provider->user rating map (موجود عندك)
-  Map<String, dynamic>? _readRatingMap(Map<String, dynamic> booking) {
-    final r = booking['rating'];
-    if (r is Map<String, dynamic>) return r;
-    return null;
-  }
-
-  // ✅ NEW: user->provider rating موجود بنفس key "rating" لكن حقوله (rating/review/user_amount_paid)
-  Map<String, dynamic>? _readUserRatingMap(Map<String, dynamic> booking) {
-    final r = booking['rating'];
-    if (r is Map<String, dynamic>) {
-      // نتحقق إنه فعلاً فيه حقول user rating
-      final ur = r['rating'];
-      final review = r['review'];
-      if ((ur is num && ur.toInt() > 0) ||
-          (review != null && review.toString().trim().isNotEmpty)) {
-        return r;
-      }
-    }
-    return null;
-  }
-
-  bool _hasUserRated(Map<String, dynamic>? userRatingMap) {
-    if (userRatingMap == null) return false;
-    final r = userRatingMap['rating'];
-    final review = userRatingMap['review'];
-    final amount =
-        userRatingMap['user_amount_paid'] ?? userRatingMap['amount_paid'];
-    final rated = (r is num && r.toInt() > 0);
-    final hasText = review != null && review.toString().trim().isNotEmpty;
-    final hasAmount = amount != null && '${amount}'.trim().isNotEmpty;
-    return rated || hasText || hasAmount;
-  }
-
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
 
     final state = ref.watch(serviceDetailsControllerProvider);
     final details = state.data;
-    final base = widget.initialItem;
 
-    final status = details != null
-        ? _readString(details, ['status'], fallback: base.status)
-        : base.status;
-
-    final ui = _statusUi(status);
-
-    final isCancelled = status == 'cancelled' || status == 'refunded';
-    final isCompleted = status == 'completed';
-    final isIncomplete = status == 'incomplete';
-    final isPending =
-        status == 'pending_provider_accept' || status == 'pending';
-
-    final isUpcoming = const {
-      'confirmed',
-      'provider_on_way',
-      'provider_arrived',
-      'in_progress',
-    }.contains(status);
-
-    String serviceName = base.serviceName;
-    if (details != null) {
-      final service = details['service'];
-      if (service is Map<String, dynamic>) {
-        final ar = _readString(
-          service,
-          ['name_ar', 'nameAr', 'name_localized', 'nameLocalized'],
-          fallback: '',
-        );
-
-        if (ar.isNotEmpty && _hasArabic(ar)) {
-          serviceName = ar;
-        }
-      }
-    }
-
-    String date = details != null
-        ? _readString(details, ['booking_date'], fallback: base.date)
-        : base.date;
-    date = _toArabicDigits(date);
-
-    final timeRaw = details != null
-        ? _readString(details, ['booking_time'], fallback: base.time)
-        : base.time;
-    final time = _formatTimeArabic(timeRaw);
-
-    String city = details != null ? _readString(details, ['service_city']) : '';
-    city = _onlyArabicCity(city);
-    final loc = city.isEmpty ? '' : city;
-
-    const currency = 'د.أ';
-
-    final price = details != null
-        ? (_readNum(details, ['total_price', 'base_price']) ?? base.price)
-        : base.price;
-
-    final priceText = price == null
-        ? 'غير محدد'
-        : '${_toArabicDigits(price.toStringAsFixed(price == price.roundToDouble() ? 0 : 2))} $currency';
-
-    String? providerName = base.providerName;
-    String? providerPhone = base.providerPhone;
-
-    if (details != null) {
-      final provider = details['provider'];
-      if (provider is Map<String, dynamic>) {
-        final user = provider['user'];
-        if (user is Map<String, dynamic>) {
-          final fn = _readString(user, ['first_name'], fallback: '');
-          final ln = _readString(user, ['last_name'], fallback: '');
-          final full = ('$fn $ln').trim();
-          if (full.isNotEmpty) providerName = full;
-
-          final ph = user['phone'];
-          if (ph != null) {
-            final p = ph.toString().trim();
-            if (p.isNotEmpty) providerPhone = p;
-          }
-        }
-      }
-    }
-
-    final rawCancelReason = details == null
-        ? ''
-        : _readString(details, [
-            'cancellation_reason',
-            'cancel_reason',
-            'cancellation_note',
-          ]);
-    final cancelReason = _cancelReasonArabic(rawCancelReason);
-
-    final rawProviderNotes =
-        details == null ? '' : _readString(details, ['provider_notes']);
-    final incompleteNote =
-        isIncomplete ? _incompleteNoteArabic(rawProviderNotes) : '';
-
-    final bookingNumber = _toArabicDigits(
-      base.bookingNumber.startsWith('#')
-          ? base.bookingNumber
-          : '#${base.bookingNumber}',
+    // ✅ Build ViewModel
+    final vm = ServiceDetailsMapper.build(
+      base: widget.initialItem,
+      details: details,
     );
 
-    // ✅ موجود عندك: provider->user display (إن كان عندك)
-    final ratingMap = details == null ? null : _readRatingMap(details);
-
-    final providerRating = details == null
-        ? null
-        : (_readInt(
-            ratingMap ?? details, ['provider_rating', 'providerRating']));
-
-    final amountPaidProvider = details == null
-        ? null
-        : (_readNum(ratingMap ?? details, ['amount_paid', 'amountPaid']));
-
-    final providerResponse = details == null
-        ? ''
-        : _readString(
-            ratingMap ?? details,
-            ['provider_response', 'providerResponse'],
-            fallback: '',
-          );
-
-    final providerRatedAt = details == null
-        ? null
-        : _readString(
-            ratingMap ?? details,
-            ['provider_response_at', 'providerResponseAt'],
-            fallback: '',
-          ).trim();
-
-    // ✅ NEW: user->provider rating data
-    final userRatingMap = details == null ? null : _readUserRatingMap(details);
-    final userHasRated = _hasUserRated(userRatingMap);
-
-    final userRatingValue =
-        userRatingMap == null ? null : _readInt(userRatingMap, ['rating']);
-    final userReview = userRatingMap == null
-        ? ''
-        : _readString(userRatingMap, ['review'], fallback: '');
-    final userAmountPaid = userRatingMap == null
-        ? null
-        : (_readNum(userRatingMap, ['user_amount_paid', 'amount_paid']));
-    final userRatedAt = userRatingMap == null
-        ? ''
-        : _readString(userRatingMap, ['created_at', 'createdAt'], fallback: '');
+    final ui = ServiceStatusMapper.ui(vm.status);
 
     Future<void> openUserRatingSheet() async {
       final ok = await showModalBottomSheet<bool>(
@@ -464,13 +70,12 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
         backgroundColor: Colors.transparent,
         builder: (_) => UserRatingSheet(
           bookingId: widget.initialItem.bookingId,
-          serviceTitle: serviceName,
-          providerName: providerName ?? 'مزود الخدمة',
+          serviceTitle: vm.serviceName,
+          providerName: vm.providerName ?? 'مزود الخدمة',
         ),
       );
 
       if (ok == true) {
-        // ✅ لو بدك إعادة جلب أكيدة من السيرفر بعد الإرسال:
         await ref
             .read(serviceDetailsControllerProvider.notifier)
             .loadBookingDetails(bookingId: widget.initialItem.bookingId);
@@ -506,8 +111,8 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
             padding: SizeConfig.padding(horizontal: 16, bottom: 24),
             children: [
               BookingHeaderCard(
-                bookingNumber: bookingNumber,
-                serviceName: serviceName,
+                bookingNumber: vm.bookingNumber,
+                serviceName: vm.serviceName,
                 statusLabel: ui.label,
                 statusColor: ui.color,
                 background: ui.bg,
@@ -526,52 +131,18 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
               ),
               SizeConfig.v(18),
 
-              DetailsLine(
-                icon: Icons.calendar_today_rounded,
-                iconColor: AppColors.textSecondary,
-                label: 'التاريخ:',
-                value: date.isEmpty ? '—' : date,
+              // ✅ details lines (date/time/location/price/provider/phone/cancel reason)
+              ServiceDetailsInfoSection(
+                date: vm.date,
+                time: vm.time,
+                location: vm.location,
+                priceText: vm.priceText,
+                providerName: vm.providerName,
+                providerPhone: vm.providerPhone,
+                isCancelled: vm.isCancelled,
+                // ✅ حسب طلبك: الاندبوينت ما فيها سبب -> خليه "غير محدد"
+                cancelReason: 'غير محدد',
               ),
-              DetailsLine(
-                icon: Icons.access_time_rounded,
-                iconColor: AppColors.textSecondary,
-                label: 'الوقت:',
-                value: time.isEmpty ? '—' : time,
-              ),
-              if (loc.isNotEmpty)
-                DetailsLine(
-                  icon: Icons.location_on_rounded,
-                  iconColor: Colors.red.shade600,
-                  label: 'الموقع:',
-                  value: loc,
-                ),
-              DetailsLine(
-                icon: Icons.payments_rounded,
-                iconColor: AppColors.textSecondary,
-                label: 'السعر:',
-                value: priceText,
-              ),
-              DetailsLine(
-                icon: Icons.person_rounded,
-                iconColor: AppColors.textSecondary,
-                label: 'المزود:',
-                value: providerName ?? 'غير متاح حالياً',
-              ),
-              if (providerPhone != null && providerPhone.trim().isNotEmpty)
-                DetailsLine(
-                  icon: Icons.phone_rounded,
-                  iconColor: AppColors.textSecondary,
-                  label: 'الهاتف:',
-                  value: _toArabicDigits(providerPhone),
-                ),
-
-              if (isCancelled)
-                DetailsLine(
-                  icon: Icons.info_outline_rounded,
-                  iconColor: Colors.red.shade700,
-                  label: 'سبب الإلغاء:',
-                  value: cancelReason.isEmpty ? 'غير محدد' : cancelReason,
-                ),
 
               if (state.isLoading) ...[
                 SizeConfig.v(14),
@@ -580,24 +151,7 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
 
               if (state.error != null) ...[
                 SizeConfig.v(12),
-                Container(
-                  padding: SizeConfig.padding(all: 14),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border:
-                        Border.all(color: Colors.red.withValues(alpha: 0.20)),
-                  ),
-                  child: Text(
-                    state.error!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: SizeConfig.ts(13),
-                      color: Colors.red.shade700,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
+                ServiceDetailsErrorBox(message: state.error!),
               ],
 
               SizeConfig.v(18),
@@ -609,77 +163,46 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
                 textColor: ui.color,
               ),
 
-              // ✅ (اختياري) عرض تقييم المزود للمستخدم (provider->user) كما كان
-              if (isCompleted) ...[
+              if (vm.isCompleted) ...[
                 SizeConfig.v(12),
                 ProviderRatingBox(
-                  rating: providerRating,
-                  amountPaid: amountPaidProvider,
-                  currency: currency,
-                  message: providerResponse,
-                  ratedAt: providerRatedAt == null || providerRatedAt.isEmpty
+                  rating: vm.providerRating,
+                  amountPaid: vm.amountPaidProvider,
+                  currency: 'د.أ',
+                  message: vm.providerResponse,
+                  ratedAt: (vm.providerRatedAt == null ||
+                          vm.providerRatedAt!.trim().isEmpty)
                       ? null
-                      : providerRatedAt,
+                      : NumberFormat.smart(vm.providerRatedAt!.trim()),
                 ),
               ],
 
-              // ✅ NEW: تقييم المستخدم للمزود (user->provider)
-              if (isCompleted) ...[
+              if (vm.isCompleted) ...[
                 SizeConfig.v(12),
-                _UserRatingSummaryCard(
-                  hasRated: userHasRated,
-                  rating: userRatingValue,
-                  review: userReview,
-                  amountPaid: userAmountPaid,
-                  currency: currency,
-                  ratedAt: userRatedAt.isEmpty ? null : userRatedAt,
-                  onRate: userHasRated ? null : openUserRatingSheet,
+                UserRatingSummaryCard(
+                  hasRated: vm.userHasRated,
+                  rating: vm.userRatingValue,
+                  review: vm.userReview,
+                  amountPaid: vm.userAmountPaid,
+                  currency: 'د.أ',
+                  ratedAt: vm.userRatedAt.isEmpty ? null : vm.userRatedAt,
+                  onRate: vm.userHasRated ? null : openUserRatingSheet,
                 ),
               ],
 
-              // ✅ صندوق ملاحظة incomplete من provider_notes
-              if (isIncomplete && incompleteNote.isNotEmpty) ...[
+              if (vm.isIncomplete && vm.incompleteNote.isNotEmpty) ...[
                 SizeConfig.v(12),
-                Container(
-                  padding: SizeConfig.padding(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: Colors.grey.withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline_rounded,
-                          color: Colors.grey.shade700),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          incompleteNote,
-                          style: TextStyle(
-                            fontSize: SizeConfig.ts(13),
-                            fontWeight: FontWeight.w800,
-                            color: Colors.grey.shade800,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ServiceDetailsIncompleteNoteBox(text: vm.incompleteNote),
               ],
 
-              // ✅ ما بنعرض إلغاء للحالات غير المناسبة
-              if (!isCancelled &&
-                  !isCompleted &&
-                  !isIncomplete &&
-                  (isPending || isUpcoming))
+              if (!vm.isCancelled &&
+                  !vm.isCompleted &&
+                  !vm.isIncomplete &&
+                  (vm.isPending || vm.isUpcoming))
                 CancelButton(
                   isLoading:
                       ref.watch(serviceDetailsControllerProvider).isCancelling,
-                  onPressed: () => _confirmCancel(status),
+                  onPressed: () => _confirmCancel(vm.status),
                 ),
 
               SizeConfig.v(10),
@@ -691,171 +214,17 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
   }
 
   Future<void> _confirmCancel(String currentStatus) async {
-    final noteCtrl = TextEditingController();
-
-    const categories = <String>[
-      'تغيير الموعد',
-      'لم أعد بحاجة للخدمة',
-      'وجدت مزود خدمة آخر',
-      'سعر غير مناسب',
-      'سبب آخر',
-    ];
-
-    String? selectedCategory;
-
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: StatefulBuilder(
-            builder: (ctx, setState) {
-              return AlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.cancel_rounded, color: Colors.red.shade700),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'تأكيد إلغاء الطلب',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'إغلاق',
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                    ),
-                  ],
-                ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'اختر سبب الإلغاء:',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: categories.map((c) {
-                          final isSelected = selectedCategory == c;
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: () => setState(() => selectedCategory = c),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.red.withValues(alpha: 0.12)
-                                    : Colors.grey.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? Colors.red.withValues(alpha: 0.55)
-                                      : Colors.grey.withValues(alpha: 0.20),
-                                  width: 1.2,
-                                ),
-                              ),
-                              child: Text(
-                                c,
-                                style: TextStyle(
-                                  fontSize: SizeConfig.ts(12),
-                                  fontWeight: FontWeight.w700,
-                                  color: isSelected
-                                      ? Colors.red.shade700
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 18),
-                      Text(
-                        'ملاحظات إضافية (اختياري):',
-                        style: TextStyle(
-                          fontSize: SizeConfig.ts(13),
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextField(
-                        controller: noteCtrl,
-                        maxLines: 2,
-                        textDirection: TextDirection.rtl,
-                        decoration: InputDecoration(
-                          hintText: 'مثلاً: أريد تأجيل الموعد إلى يوم آخر...',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(
-                              color: Colors.red.withValues(alpha: 0.55),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(false),
-                    child: const Text(
-                      'رجوع',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(ctx).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text('تأكيد الإلغاء'),
-                  ),
-                ],
-              );
-            },
-          ),
-        );
-      },
-    );
-
-    if (ok != true) {
-      noteCtrl.dispose();
-      return;
-    }
+    final res = await CancelBookingDialog.show(context);
+    if (res == null || res.confirmed != true) return;
 
     final controller = ref.read(serviceDetailsControllerProvider.notifier);
 
     final success = await controller.cancelBooking(
       bookingId: widget.initialItem.bookingId,
       currentStatus: currentStatus,
-      cancellationCategory: selectedCategory,
-      cancellationReason:
-          noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+      cancellationCategory: res.category,
+      cancellationReason: res.note,
     );
-
-    noteCtrl.dispose();
 
     final latest = ref.read(serviceDetailsControllerProvider);
 
@@ -872,149 +241,5 @@ class _ServiceDetailsViewState extends ConsumerState<ServiceDetailsView> {
       final msg = latest.error ?? 'تعذّر إلغاء الطلب';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
-  }
-}
-
-// =====================
-// ✅ NEW: بطاقة ملخص تقييم المستخدم للمزود
-// =====================
-class _UserRatingSummaryCard extends StatelessWidget {
-  final bool hasRated;
-  final int? rating;
-  final String review;
-  final double? amountPaid;
-  final String currency;
-  final String? ratedAt;
-  final VoidCallback? onRate;
-
-  const _UserRatingSummaryCard({
-    required this.hasRated,
-    required this.rating,
-    required this.review,
-    required this.amountPaid,
-    required this.currency,
-    required this.ratedAt,
-    required this.onRate,
-  });
-
-  String _toArabicDigits(String input) {
-    const map = {
-      '0': '٠',
-      '1': '١',
-      '2': '٢',
-      '3': '٣',
-      '4': '٤',
-      '5': '٥',
-      '6': '٦',
-      '7': '٧',
-      '8': '٨',
-      '9': '٩',
-    };
-    final b = StringBuffer();
-    for (final ch in input.runes) {
-      final c = String.fromCharCode(ch);
-      b.write(map[c] ?? c);
-    }
-    return b.toString();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final r = rating ?? 0;
-
-    final String? amountText = amountPaid == null
-        ? null
-        : _toArabicDigits(
-            amountPaid!.toStringAsFixed(
-              amountPaid == amountPaid!.roundToDouble() ? 0 : 2,
-            ),
-          );
-
-    final String? ratedAtText = (ratedAt == null || ratedAt!.trim().isEmpty)
-        ? null
-        : _toArabicDigits(ratedAt!.trim());
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.rate_review_rounded, size: 18),
-              const SizedBox(width: 8),
-              const Text(
-                'تقييمك للمزود',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-              ),
-              const Spacer(),
-              if (!hasRated)
-                TextButton(
-                  onPressed: onRate,
-                  child: const Text(
-                    'قيّم الآن',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (hasRated) ...[
-            Row(
-              children: List.generate(5, (i) {
-                final filled = (i + 1) <= r;
-                return Icon(
-                  filled ? Icons.star_rounded : Icons.star_border_rounded,
-                  size: 20,
-                  color:
-                      filled ? const Color(0xFFFFC107) : const Color(0xFF9CA3AF),
-                );
-              }),
-            ),
-            if (amountText != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'المبلغ المدفوع: $amountText $currency',
-                style:
-                    const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-              ),
-            ],
-            if (review.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                review.trim(),
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-              ),
-            ],
-            if (ratedAtText != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                ratedAtText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 11,
-                  color: Color(0xFF6B7280),
-                ),
-              ),
-            ],
-          ] else ...[
-            const Text(
-              'لم تقم بتقييم مزود الخدمة بعد.',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

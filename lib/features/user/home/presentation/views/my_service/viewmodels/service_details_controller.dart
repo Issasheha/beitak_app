@@ -1,11 +1,12 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:beitak_app/core/error/exceptions.dart';
 import 'package:beitak_app/core/network/api_client.dart';
+import 'package:beitak_app/core/network/api_constants.dart';
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
-import 'package:flutter_riverpod/legacy.dart';
 
 import 'service_details_state.dart';
 
@@ -54,7 +55,6 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
   }
 
   bool _hasProviderRatingData(Map<String, dynamic> booking) {
-    // rating.provider_rating OR booking.provider_rating
     final rating = booking['rating'];
     if (rating is Map<String, dynamic>) {
       final pr = rating['provider_rating'];
@@ -64,12 +64,14 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         return true;
       }
     }
+
     final pr2 = booking['provider_rating'];
     final msg2 = booking['provider_response'];
     if ((pr2 is num && pr2.toInt() > 0) ||
         (msg2 != null && msg2.toString().trim().isNotEmpty)) {
       return true;
     }
+
     return false;
   }
 
@@ -79,7 +81,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
   }) async {
     try {
       final res = await _dio.get(
-        '/bookings/my',
+        ApiConstants.bookingsMy,
         queryParameters: const {
           'page': 1,
           'limit': 20,
@@ -100,10 +102,10 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       final list = data['bookings'];
       if (list is! List) return null;
 
-      for (final e in list) {
-        if (e is Map<String, dynamic>) {
-          final id = int.tryParse('${e['id']}') ?? 0;
-          if (id == bookingId) return e;
+      for (final item in list) {
+        if (item is Map<String, dynamic>) {
+          final id = int.tryParse('${item['id']}') ?? 0;
+          if (id == bookingId) return item;
         }
       }
       return null;
@@ -112,7 +114,9 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
-  /// تحميل تفاصيل حجز معيّن من /bookings/:id
+  /// ==========================
+  /// GET /bookings/:id
+  /// ==========================
   Future<void> loadBookingDetails({required int bookingId}) async {
     state = state.copyWith(
       isLoading: true,
@@ -131,7 +135,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
 
     try {
       final res = await _dio.get(
-        '/bookings/$bookingId',
+        ApiConstants.bookingDetails(bookingId),
         options: _opts(token),
       );
 
@@ -141,6 +145,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
 
       final data = body['data'];
       Map<String, dynamic>? booking;
+
       if (data is Map<String, dynamic>) {
         if (data['booking'] is Map<String, dynamic>) {
           booking = data['booking'] as Map<String, dynamic>;
@@ -178,18 +183,18 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       }
 
       state = state.copyWith(data: booking);
-    } on DioException catch (e) {
-      if (e.response?.data is Map<String, dynamic>) {
+    } on DioException catch (ex) {
+      if (ex.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']
+          error: (ex.response!.data as Map<String, dynamic>)['message']
                   ?.toString() ??
               'Server error',
         );
       } else {
         state = state.copyWith(error: 'Network error');
       }
-    } on ServerException catch (e) {
-      state = state.copyWith(error: e.message);
+    } on ServerException catch (ex) {
+      state = state.copyWith(error: ex.message);
     } catch (_) {
       state = state.copyWith(error: 'حدث خطأ غير متوقع');
     } finally {
@@ -197,11 +202,11 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
-  // ==========================
-  // ✅ USER -> PROVIDER rating
-  // POST /ratings/submit
-  // body: { booking_id, rating, review, amount_paid }
-  // ==========================
+  /// ==========================
+  /// USER -> PROVIDER rating
+  /// POST /ratings/submit
+  /// body: { booking_id, rating, review, amount_paid }
+  /// ==========================
   Future<Map<String, dynamic>> submitUserRating({
     required int bookingId,
     required int rating,
@@ -233,7 +238,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       throw const ServerException(message: 'Invalid rating response format');
     }
 
-    // ✅ حدّث state.data مباشرة عشان الواجهة تبين التقييم فوراً
+    // ✅ تحديث فوري للواجهة
     final current = state.data;
     if (current != null) {
       final next = Map<String, dynamic>.from(current);
@@ -244,9 +249,10 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     return data;
   }
 
-  // ==========================
-  // ✅ CANCEL (مُعدل)
-  // ==========================
+  /// ==========================
+  /// ✅ CANCEL (UPDATED)
+  /// POST /users/bookings/:id/cancel
+  /// ==========================
   Future<bool> cancelBooking({
     required int bookingId,
     required String currentStatus,
@@ -269,65 +275,65 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
 
     final cat = cancellationCategory?.trim();
     final reason = cancellationReason?.trim();
-    final hasReason = (cat != null && cat.isNotEmpty) ||
-        (reason != null && reason.isNotEmpty);
+
+    // لو ما كتب ولا إشي، بنخلي سبب افتراضي نظيف
+    final String safeReason = (reason != null && reason.isNotEmpty)
+        ? reason
+        : (cat != null && cat.isNotEmpty)
+            ? cat
+            : 'Cancelled by user';
 
     try {
-      // ✅ 1) جرّب cancel endpoint أولاً (حتى لو pending)
-      if (hasReason) {
-        final ok = await _cancelWithReason(
-          token: token,
-          bookingId: bookingId,
-          cancellationCategory: cat,
-          cancellationReason: reason,
-        );
+      // ✅ 1) الاندبوينت الصحيح (user cancel)
+      final ok = await _cancelUserBooking(
+        token: token,
+        bookingId: bookingId,
+        cancellationCategory: cat,
+        cancellationReason: safeReason,
+      );
 
-        if (ok) {
-          // ✅ حدّث state.data محلياً (عشان يظهر السبب فوراً)
-          final current = state.data;
-          if (current != null) {
-            final next = Map<String, dynamic>.from(current);
-            next['status'] = 'cancelled';
-            if (reason != null && reason.isNotEmpty) {
-              next['cancellation_reason'] = reason;
-            }
-            if (cat != null && cat.isNotEmpty) {
-              next['cancellation_category'] = cat;
-            }
-            state = state.copyWith(data: next);
-          }
-          return true;
-        }
+      if (ok) {
+        _applyLocalCancelled(
+          cancellationCategory: cat,
+          cancellationReason: safeReason,
+        );
+        return true;
       }
 
-      // ✅ 2) fallback: updateStatus + ارسال السبب إذا السيرفر بدعمها
+      // ✅ 2) fallback: جرّب القديم لو السيرفر ببيئة ثانية
+      final okOld = await _cancelOldEndpoint(
+        token: token,
+        bookingId: bookingId,
+        cancellationCategory: cat,
+        cancellationReason: safeReason,
+      );
+
+      if (okOld) {
+        _applyLocalCancelled(
+          cancellationCategory: cat,
+          cancellationReason: safeReason,
+        );
+        return true;
+      }
+
+      // ✅ 3) fallback نهائي: PATCH status (لو السيرفر بدعمه)
       await _updateStatus(
         token: token,
         bookingId: bookingId,
         status: 'cancelled',
         cancellationCategory: cat,
-        cancellationReason: reason,
+        cancellationReason: safeReason,
       );
 
-      // ✅ تحديث محلي بعد الفallback كمان
-      final current = state.data;
-      if (current != null) {
-        final next = Map<String, dynamic>.from(current);
-        next['status'] = 'cancelled';
-        if (reason != null && reason.isNotEmpty) {
-          next['cancellation_reason'] = reason;
-        }
-        if (cat != null && cat.isNotEmpty) {
-          next['cancellation_category'] = cat;
-        }
-        state = state.copyWith(data: next);
-      }
-
+      _applyLocalCancelled(
+        cancellationCategory: cat,
+        cancellationReason: safeReason,
+      );
       return true;
-    } on DioException catch (e) {
-      if (e.response?.data is Map<String, dynamic>) {
+    } on DioException catch (ex) {
+      if (ex.response?.data is Map<String, dynamic>) {
         state = state.copyWith(
-          error: (e.response!.data as Map<String, dynamic>)['message']
+          error: (ex.response!.data as Map<String, dynamic>)['message']
                   ?.toString() ??
               'Server error',
         );
@@ -335,8 +341,8 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         state = state.copyWith(error: 'Network error');
       }
       return false;
-    } on ServerException catch (e) {
-      state = state.copyWith(error: e.message);
+    } on ServerException catch (ex) {
+      state = state.copyWith(error: ex.message);
       return false;
     } catch (_) {
       state = state.copyWith(error: 'حدث خطأ غير متوقع');
@@ -346,24 +352,42 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
     }
   }
 
-  Future<bool> _cancelWithReason({
+  void _applyLocalCancelled({
+    String? cancellationCategory,
+    String? cancellationReason,
+  }) {
+    final current = state.data;
+    if (current == null) return;
+
+    final next = Map<String, dynamic>.from(current);
+    next['status'] = 'cancelled';
+    next['cancelled_by'] = 'customer';
+
+    if (cancellationReason != null && cancellationReason.trim().isNotEmpty) {
+      next['cancellation_reason'] = cancellationReason.trim();
+    }
+    if (cancellationCategory != null && cancellationCategory.trim().isNotEmpty) {
+      next['cancellation_category'] = cancellationCategory.trim();
+    }
+
+    state = state.copyWith(data: next);
+  }
+
+  /// ✅ NEW: POST /users/bookings/:id/cancel
+  Future<bool> _cancelUserBooking({
     required String token,
     required int bookingId,
     String? cancellationCategory,
-    String? cancellationReason,
+    required String cancellationReason,
   }) async {
     try {
       final res = await _dio.post(
-        '/bookings/$bookingId/cancel',
+        ApiConstants.userBookingCancel(bookingId),
         data: {
-          'cancellation_category': (cancellationCategory == null ||
-                  cancellationCategory.trim().isEmpty)
-              ? 'Other'
-              : cancellationCategory.trim(),
-          'cancellation_reason':
-              (cancellationReason == null || cancellationReason.trim().isEmpty)
-                  ? 'No reason provided'
-                  : cancellationReason.trim(),
+          if (cancellationCategory != null &&
+              cancellationCategory.trim().isNotEmpty)
+            'cancellation_category': cancellationCategory.trim(),
+          'cancellation_reason': cancellationReason.trim(),
         },
         options: _opts(token),
       );
@@ -372,13 +396,43 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       final body = _ensureMap(res.data, code);
       _ensureSuccess(body, code);
       return true;
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 404) return false;
+    } on DioException catch (ex) {
+      // لو 404 معناها الاندبوينت مش موجود ببيئة معينة -> رجّع false عشان fallback
+      if (ex.response?.statusCode == 404) return false;
       rethrow;
     }
   }
 
-  // ✅ مُعدل: صار يقبل سبب/تصنيف الإلغاء ضمن PATCH كـ fallback
+  /// ✅ Old fallback: POST /bookings/:id/cancel
+  Future<bool> _cancelOldEndpoint({
+    required String token,
+    required int bookingId,
+    String? cancellationCategory,
+    required String cancellationReason,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/bookings/$bookingId/cancel',
+        data: {
+          if (cancellationCategory != null &&
+              cancellationCategory.trim().isNotEmpty)
+            'cancellation_category': cancellationCategory.trim(),
+          'cancellation_reason': cancellationReason.trim(),
+        },
+        options: _opts(token),
+      );
+
+      final code = res.statusCode ?? 0;
+      final body = _ensureMap(res.data, code);
+      _ensureSuccess(body, code);
+      return true;
+    } on DioException catch (ex) {
+      if (ex.response?.statusCode == 404) return false;
+      rethrow;
+    }
+  }
+
+  /// ✅ PATCH fallback (لو السيرفر بدعمه)
   Future<void> _updateStatus({
     required String token,
     required int bookingId,
@@ -404,7 +458,8 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
       }
     }
 
-    DioException? last;
+    DioException? lastError;
+
     for (final path in candidates) {
       try {
         final res = await _dio.patch(
@@ -417,12 +472,12 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
         final body = _ensureMap(res.data, code);
         _ensureSuccess(body, code);
         return;
-      } on DioException catch (e) {
-        last = e;
+      } on DioException catch (ex) {
+        lastError = ex;
       }
     }
 
-    if (last != null) throw last;
+    if (lastError != null) throw lastError;
     throw const ServerException(message: 'Failed to update booking status');
   }
 }

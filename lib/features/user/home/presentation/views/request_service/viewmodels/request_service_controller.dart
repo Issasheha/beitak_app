@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:beitak_app/features/user/home/presentation/views/request_service/viewmodels/request_service_draft.dart';
 import 'package:flutter/material.dart';
@@ -196,18 +197,36 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   }
 
   Future<void> _loadCategories() async {
-    if (!mounted) return;
-    state = state.copyWith(categoryError: null);
+  if (!mounted) return;
+  state = state.copyWith(categoryError: null);
 
-    try {
-      final map = await _vm.fetchCategorySlugToId();
-      if (!mounted) return;
-      state = state.copyWith(slugToCategoryId: map);
-    } catch (e) {
-      if (!mounted) return;
-      state = state.copyWith(categoryError: _niceError(e));
+  try {
+    final map = await _vm.fetchCategorySlugToId(); // slug -> id من السيرفر
+    if (!mounted) return;
+
+    // ✅ ابنِ fixedKey -> id من slugs السيرفر
+    final fixedMap = <String, int>{};
+
+    for (final entry in map.entries) {
+      final slug = entry.key;
+      final id = entry.value;
+
+      final fixedKey = FixedServiceCategories.keyFromAnyString(slug);
+      if (fixedKey != null && id > 0) {
+        // إذا تكرر أكثر من slug لنفس key، خذ أول واحد
+        fixedMap.putIfAbsent(fixedKey, () => id);
+      }
     }
+
+    state = state.copyWith(
+      slugToCategoryId: map,
+      fixedKeyToCategoryId: fixedMap, // ✅ NEW
+    );
+  } catch (e) {
+    if (!mounted) return;
+    state = state.copyWith(categoryError: _niceError(e));
   }
+}
 
   void setDateType(ServiceDateType type) {
     if (!mounted) return;
@@ -301,11 +320,21 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       return;
     }
 
-    final rawSlug = state.selectedServiceType!.categorySlug;
-    final normalized = _normSlug(rawSlug);
+ final key = state.selectedServiceType!.categoryKey.trim();
 
-    final categoryId =
-        state.slugToCategoryId[normalized] ?? state.slugToCategoryId[rawSlug.trim()];
+final categoryId = state.fixedKeyToCategoryId[key]
+    // ✅ fallback: لو لسبب ما ما انبنى fixedMap
+    ?? state.slugToCategoryId[key];
+
+if (categoryId == null || categoryId <= 0) {
+  _snack(
+    context,
+    'تعذر تحديد الفئة من السيرفر.\n'
+    'جرّب تحديث الشاشة أو تأكد من slugs في /api/categories.',
+  );
+  return;
+}
+
 
     if (categoryId == null || categoryId <= 0) {
       _snack(

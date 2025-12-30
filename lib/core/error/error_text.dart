@@ -92,7 +92,13 @@ String friendlyDioText(DioException e) {
   if (data is Map) {
     serverMsg = (data['message']?.toString() ?? '').trim();
   }
+if (data is Map) {
+    final apiCode = (data['code']?.toString() ?? '').trim();
 
+    if (apiCode == 'SERVICE_HAS_CONFIRMED_BOOKINGS') {
+      return 'لا يمكن تعديل الباقات لأن هذه الخدمة لديها حجوزات مؤكدة.';
+    }
+  }
   if (serverMsg.isNotEmpty) {
     if (serverMsg == 'account_activated') return 'تم تفعيل الحساب';
     if (serverMsg == 'account_deactivated') return 'تم تعطيل الحساب';

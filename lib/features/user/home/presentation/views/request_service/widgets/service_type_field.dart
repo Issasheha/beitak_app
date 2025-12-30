@@ -16,6 +16,8 @@ class ServiceTypeField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final options = ServiceTypeOptions.all;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -33,7 +35,9 @@ class ServiceTypeField extends StatelessWidget {
           onTap: () async {
             final picked = await showModalBottomSheet<ServiceTypeOption>(
               context: context,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
               builder: (ctx) {
                 return Directionality(
                   textDirection: TextDirection.rtl,
@@ -51,10 +55,13 @@ class ServiceTypeField extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: SizeConfig.h(10)),
-                        ...ServiceTypeOptions.all.map((e) {
-                          final isSel = selected?.categorySlug == e.categorySlug;
+                        ...options.map((e) {
+                          final isSel = selected?.categoryKey == e.categoryKey;
                           return ListTile(
-                            leading: Icon(e.icon, color: isSel ? AppColors.lightGreen : AppColors.textSecondary),
+                            leading: Icon(
+                              e.icon,
+                              color: isSel ? AppColors.lightGreen : AppColors.textSecondary,
+                            ),
                             title: Text(
                               e.labelAr,
                               style: TextStyle(
@@ -62,7 +69,9 @@ class ServiceTypeField extends StatelessWidget {
                                 color: isSel ? AppColors.lightGreen : AppColors.textPrimary,
                               ),
                             ),
-                            trailing: isSel ? const Icon(Icons.check_circle, color: AppColors.lightGreen) : null,
+                            trailing: isSel
+                                ? const Icon(Icons.check_circle, color: AppColors.lightGreen)
+                                : null,
                             onTap: () => Navigator.of(ctx).pop(e),
                           );
                         }),
@@ -94,7 +103,9 @@ class ServiceTypeField extends StatelessWidget {
                     style: TextStyle(
                       fontSize: SizeConfig.ts(13),
                       fontWeight: FontWeight.w800,
-                      color: selected == null ? AppColors.textSecondary.withValues(alpha: 0.7): AppColors.textPrimary,
+                      color: selected == null
+                          ? AppColors.textSecondary.withValues(alpha: 0.7)
+                          : AppColors.textPrimary,
                     ),
                   ),
                 ),

@@ -39,7 +39,6 @@ class _ProviderManageAvailabilityViewState
   void initState() {
     super.initState();
     _vm = ProviderAvailabilityViewModel();
-    // ✅ تحميل البيانات من الباك-إند أول ما تفتح الشاشة
     _vm.loadFromApi();
   }
 
@@ -55,6 +54,37 @@ class _ProviderManageAvailabilityViewState
     );
   }
 
+  Future<void> _showErrorDialog(String msg) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: AlertDialog(
+            title: const Text(
+              'تنبيه',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            content: Text(
+              msg,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'موافق',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   int _minutes(TimeOfDay t) => t.hour * 60 + t.minute;
 
   Future<TimeRange?> _pickRange({
@@ -65,12 +95,12 @@ class _ProviderManageAvailabilityViewState
         await showTimePicker(context: context, initialTime: initialStart);
     if (!mounted || start == null) return null;
 
-    final end =
-        await showTimePicker(context: context, initialTime: initialEnd);
+    final end = await showTimePicker(context: context, initialTime: initialEnd);
     if (!mounted || end == null) return null;
 
+    // ✅ QA: بدل SnackBar — Dialog واضح بعد ما يضغط "موافق"
     if (_minutes(end) <= _minutes(start)) {
-      _snack('وقت النهاية يجب أن يكون بعد وقت البداية.');
+      await _showErrorDialog('وقت النهاية يجب أن يكون بعد وقت البداية.');
       return null;
     }
     return TimeRange(start: start, end: end);
@@ -88,6 +118,11 @@ class _ProviderManageAvailabilityViewState
 
   bool _isToday(DateTime d) =>
       _isSameDate(_dateOnly(d), _dateOnly(DateTime.now()));
+
+  bool _isPastDate(DateTime d) {
+    final today = _dateOnly(DateTime.now());
+    return _dateOnly(d).isBefore(today);
+  }
 
   List<DateTime> _buildCalendarCells(DateTime monthFirstDay) {
     // الأسبوع يبدأ من الأحد
@@ -156,10 +191,7 @@ class _ProviderManageAvailabilityViewState
                 controller: widget.scrollController,
                 padding: SizeConfig.padding(horizontal: 16, vertical: 12),
                 children: [
-                  if (_tabIndex == 0)
-                    _weeklyTemplate()
-                  else
-                    _calendarTab(),
+                  if (_tabIndex == 0) _weeklyTemplate() else _calendarTab(),
                   SizedBox(height: SizeConfig.h(18)),
                 ],
               ),
@@ -196,14 +228,28 @@ class _ProviderManageAvailabilityViewState
             ),
           IconButton(
             onPressed: () async {
+              // ✅ QA: إذا ما في أي تعديل -> سكّر بدون حفظ وبدون رسالة نجاح
+              if (!_vm.hasChanges) {
+                widget.onClose();
+                return;
+              }
+
+              // ✅ QA: إذا في خطأ بالوقت -> Dialog واضح بدل SnackBar
+              final validationMsg = _vm.validateForSave();
+              if (validationMsg != null) {
+                await _showErrorDialog(validationMsg);
+                return;
+              }
+
               final ok = await _vm.saveToApi();
               if (!mounted) return;
+
               if (ok) {
                 _snack('تم حفظ التوفر بنجاح.');
+                widget.onClose();
               } else {
                 _snack('تعذر حفظ التوفر، حاول مرة أخرى.');
               }
-              widget.onClose();
             },
             icon: const Icon(Icons.close_rounded),
           ),
@@ -351,8 +397,7 @@ class _ProviderManageAvailabilityViewState
             },
             borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
                 color: AppColors.lightGreen.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
@@ -407,9 +452,10 @@ class _ProviderManageAvailabilityViewState
     final isSelectedClosed =
         currentException?.type == AvailabilityExceptionType.closedDay;
 
+    final selectedIsPast = _isPastDate(_selectedDate);
+
     return Column(
       children: [
-        // ====== Calendar card ======
         _card(
           child: Column(
             children: [
@@ -478,8 +524,7 @@ class _ProviderManageAvailabilityViewState
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: cells.length,
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 7,
                   mainAxisSpacing: 8,
                   crossAxisSpacing: 8,
@@ -489,22 +534,22 @@ class _ProviderManageAvailabilityViewState
                   final inMonth = _isInFocusedMonth(d);
                   final isSelected = _isSameDate(d, _selectedDate);
                   final isToday = _isToday(d);
+                  final isPast = _isPastDate(d);
 
                   final ex = _vm.exceptionOf(d);
-                  final isClosed = ex?.type ==
-                      AvailabilityExceptionType.closedDay;
+                  final isClosed =
+                      ex?.type == AvailabilityExceptionType.closedDay;
 
                   final bg = inMonth ? Colors.white : AppColors.background;
-                  Color border =
-                      AppColors.borderLight.withValues(alpha: 0.9);
 
-                  if (isSelected) {
-                    border = AppColors.lightGreen;
-                  }
+                  Color border = AppColors.borderLight.withValues(alpha: 0.9);
+                  if (isSelected) border = AppColors.lightGreen;
 
-                  final textColor = inMonth
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary.withValues(alpha: 0.35);
+                  final textColor = (!inMonth)
+                      ? AppColors.textSecondary.withValues(alpha: 0.35)
+                      : isPast
+                          ? AppColors.textSecondary.withValues(alpha: 0.45)
+                          : AppColors.textPrimary;
 
                   Widget dayChild = Text(
                     '${d.day}',
@@ -515,7 +560,6 @@ class _ProviderManageAvailabilityViewState
                     ),
                   );
 
-                  // اليوم المغلق → دائرة حمراء حول الرقم
                   if (inMonth && isClosed) {
                     dayChild = Container(
                       width: 28,
@@ -539,10 +583,11 @@ class _ProviderManageAvailabilityViewState
                     );
                   }
 
+                  final canTap = inMonth && !isPast;
+
                   return InkWell(
-                    onTap: inMonth
-                        ? () =>
-                            setState(() => _selectedDate = _dateOnly(d))
+                    onTap: canTap
+                        ? () => setState(() => _selectedDate = _dateOnly(d))
                         : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
@@ -584,7 +629,7 @@ class _ProviderManageAvailabilityViewState
                 children: [
                   _LegendDot(
                     color: Colors.red,
-                    label: 'اليوم المغلق (دائرة حمراء)',
+                    label: 'اليوم المغلق',
                   ),
                   SizedBox(width: 10),
                   _LegendDot(
@@ -596,34 +641,33 @@ class _ProviderManageAvailabilityViewState
             ],
           ),
         ),
-
         SizedBox(height: SizeConfig.h(12)),
-
-        // ====== Toggle close / open day ======
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () {
-              if (isSelectedClosed) {
-                // فتح اليوم
-                _vm.clearException(_selectedDate);
-              } else {
-                // إغلاق اليوم
-                _vm.setExceptionClosed(_selectedDate);
-              }
-            },
+            onPressed: selectedIsPast
+                ? null
+                : () {
+                    if (isSelectedClosed) {
+                      _vm.clearException(_selectedDate);
+                    } else {
+                      _vm.setExceptionClosed(_selectedDate);
+                    }
+                  },
             style: ElevatedButton.styleFrom(
               backgroundColor:
                   isSelectedClosed ? AppColors.lightGreen : Colors.red,
+              disabledBackgroundColor:
+                  AppColors.borderLight.withValues(alpha: 0.5),
               padding: SizeConfig.padding(vertical: 12),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  SizeConfig.radius(14),
-                ),
+                borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
               ),
             ),
             child: Text(
-              isSelectedClosed ? 'إلغاء الإغلاق' : 'إغلاق اليوم',
+              selectedIsPast
+                  ? 'لا يمكن تعديل أيام بتاريخ قديم'
+                  : (isSelectedClosed ? 'إلغاء الإغلاق' : 'إغلاق اليوم'),
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w900,
@@ -632,10 +676,7 @@ class _ProviderManageAvailabilityViewState
             ),
           ),
         ),
-
         SizedBox(height: SizeConfig.h(12)),
-
-        // ====== Closed days list ======
         _closedDaysCard(closedDays),
       ],
     );
@@ -769,8 +810,7 @@ class _LegendDot extends StatelessWidget {
           Container(
             width: 10,
             height: 10,
-            decoration:
-                BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 6),
           Expanded(

@@ -1,45 +1,44 @@
 // lib/features/user/home/presentation/views/request_service/models/service_type_option.dart
 
 import 'package:flutter/material.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 
 class ServiceTypeOption {
-  final String labelAr;
-  final String categorySlug; // must match backend slug in /api/categories
+  /// ✅ المفتاح الموحد داخل التطبيق
+  /// مثال: plumbing / cleaning / home_maintenance / appliance_maintenance / electricity
+  final String categoryKey;
+
+  /// ✅ الأيقونة
   final IconData icon;
 
   const ServiceTypeOption({
-    required this.labelAr,
-    required this.categorySlug,
+    required this.categoryKey,
     required this.icon,
   });
+
+  /// ✅ الاسم العربي دائماً من FixedServiceCategories
+  String get labelAr => FixedServiceCategories.labelArFromKey(categoryKey);
 }
 
 class ServiceTypeOptions {
-  static const List<ServiceTypeOption> all = [
-    ServiceTypeOption(
-      labelAr: 'مواسرجي',
-      categorySlug: 'plumbing',
-      icon: Icons.plumbing,
-    ),
-    ServiceTypeOption(
-      labelAr: 'تنظيف',
-      categorySlug: 'cleaning',
-      icon: Icons.cleaning_services,
-    ),
-    ServiceTypeOption(
-      labelAr: 'صيانة المنازل',
-      categorySlug: 'general maintenance',
-      icon: Icons.home_repair_service,
-    ),
-    ServiceTypeOption(
-      labelAr: 'صيانة الأجهزة',
-      categorySlug: 'appliance repair',
-      icon: Icons.handyman,
-    ),
-    ServiceTypeOption(
-      labelAr: 'كهرباء',
-      categorySlug: 'electrical',
-      icon: Icons.electrical_services,
-    ),
-  ];
+  ServiceTypeOptions._();
+
+  /// ✅ اربط كل key بأيقونة مناسبة
+  static const Map<String, IconData> _icons = {
+    'plumbing': Icons.plumbing,
+    'cleaning': Icons.cleaning_services,
+    'home_maintenance': Icons.home_repair_service,
+    'appliance_maintenance': Icons.handyman,
+    'electricity': Icons.electrical_services,
+  };
+
+  /// ✅ المصدر الوحيد للخيارات: FixedServiceCategories
+  static List<ServiceTypeOption> get all {
+    return FixedServiceCategories.all.map((c) {
+      return ServiceTypeOption(
+        categoryKey: c.key,
+        icon: _icons[c.key] ?? Icons.miscellaneous_services,
+      );
+    }).toList(growable: false);
+  }
 }

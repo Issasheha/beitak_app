@@ -21,7 +21,13 @@ class RequestServiceState {
 
   // Service type
   final ServiceTypeOption? selectedServiceType;
+
+  /// ✅ (قديم) mapping من slug -> id (خليه موجود كـ fallback)
   final Map<String, int> slugToCategoryId;
+
+  /// ✅ (جديد) mapping موحّد من Fixed key -> id
+  final Map<String, int> fixedKeyToCategoryId;
+
   final String? categoryError;
 
   // Date & time
@@ -52,6 +58,7 @@ class RequestServiceState {
     this.submitting = false,
     this.selectedServiceType,
     this.slugToCategoryId = const {},
+    this.fixedKeyToCategoryId = const {}, // ✅ NEW
     this.categoryError,
     this.dateType = ServiceDateType.today,
     this.otherDate,
@@ -75,6 +82,7 @@ class RequestServiceState {
     bool? submitting,
     Object? selectedServiceType = _sentinel,
     Map<String, int>? slugToCategoryId,
+    Map<String, int>? fixedKeyToCategoryId, // ✅ NEW
     Object? categoryError = _sentinel,
     ServiceDateType? dateType,
     Object? otherDate = _sentinel,
@@ -101,6 +109,7 @@ class RequestServiceState {
           ? this.selectedServiceType
           : selectedServiceType as ServiceTypeOption?,
       slugToCategoryId: slugToCategoryId ?? this.slugToCategoryId,
+      fixedKeyToCategoryId: fixedKeyToCategoryId ?? this.fixedKeyToCategoryId, // ✅ NEW
       categoryError: categoryError == _sentinel
           ? this.categoryError
           : categoryError as String?,

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
-import 'package:beitak_app/core/network/api_client.dart'; // ✅ عدّلها إذا مسارك مختلف
+import 'package:beitak_app/core/network/api_client.dart';
 
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/marketplace_remote_data_source.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/data/marketplace_remote_data_source_impl.dart';
@@ -12,18 +12,29 @@ import 'package:beitak_app/features/provider/home/presentation/views/marketplace
 import 'package:flutter_riverpod/legacy.dart';
 
 final marketplaceDioProvider = Provider<Dio>((ref) {
-  return ApiClient.dio; // ✅ هذا لازم يكون dio اللي عندك فيه baseUrl + token interceptor
+  return ApiClient.dio;
 });
 
-final marketplaceRemoteDataSourceProvider = Provider<MarketplaceRemoteDataSource>((ref) {
-  return MarketplaceRemoteDataSourceImpl(dio: ref.read(marketplaceDioProvider));
+final marketplaceRemoteDataSourceProvider =
+    Provider<MarketplaceRemoteDataSource>((ref) {
+  return MarketplaceRemoteDataSourceImpl(
+    dio: ref.read(marketplaceDioProvider),
+  );
 });
 
 final marketplaceRepositoryProvider = Provider<MarketplaceRepository>((ref) {
-  return MarketplaceRepositoryImpl(remote: ref.read(marketplaceRemoteDataSourceProvider));
+  return MarketplaceRepositoryImpl(
+    remote: ref.read(marketplaceRemoteDataSourceProvider),
+  );
 });
 
 final marketplaceControllerProvider =
-    StateNotifierProvider<MarketplaceController, MarketplaceState>((ref) {
-  return MarketplaceController(repo: ref.read(marketplaceRepositoryProvider));
+    StateNotifierProvider.autoDispose<MarketplaceController, MarketplaceState>(
+        (ref) {
+  final controller =
+      MarketplaceController(repo: ref.read(marketplaceRepositoryProvider));
+
+  ref.onDispose(() {});
+
+  return controller;
 });

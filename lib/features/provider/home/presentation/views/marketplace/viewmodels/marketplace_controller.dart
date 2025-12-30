@@ -77,16 +77,13 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
     final s = raw.trim();
     if (s.isEmpty) return '—';
 
-    // لو أصلاً عربي → رجّعه (وممكن يكون "صيانه للاجهزة" إلخ)
     if (_looksArabic(s)) return s;
 
-    // حاول تحويله إلى key من أي string (supports server aliases)
     final key = FixedServiceCategories.keyFromAnyString(s);
     if (key != null) {
       return FixedServiceCategories.labelArFromKey(key);
     }
 
-    // fallback: رجّع النص زي ما هو (أفضل من فراغ)
     return s;
   }
 
@@ -98,7 +95,6 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
       final code = (e.code ?? '').trim().toUpperCase();
       final msg = e.message.trim();
 
-      // لو الرسالة عربية جاهزة → اعرضها
       if (msg.isNotEmpty && _looksArabic(msg)) return msg;
 
       switch (code) {
@@ -112,7 +108,6 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
           return 'هذا الطلب قديم: وقت الخدمة المحدد مرّ بالفعل ولا يمكن قبوله.';
 
         case 'PROVIDER_UNAVAILABLE':
-          // مثال الباك: Provider is not available on 2025-12-27 at 23:00
           final dt = _extractDateTimeFromEnglish(msg);
           final dateTxt = (dt.date == null || dt.date!.trim().isEmpty)
               ? ''
@@ -133,14 +128,11 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
           return 'لا يمكنك قبول هذا الطلب لأن لديك حجزًا مؤكدًا$dateTxt.$bnTxt';
 
         case 'CATEGORY_MISMATCH':
-          // ✅ هنا المطلوب: عرض فئة الطلب وفئاتك بالعربي
           final reqCatRaw = (e.requestCategory == null)
               ? ''
               : e.requestCategory.toString().trim();
           final reqCatClean = reqCatRaw.toLowerCase() == 'null' ? '' : reqCatRaw;
-
-          final reqCatAr =
-              reqCatClean.isEmpty ? '' : _catToAr(reqCatClean);
+          final reqCatAr = reqCatClean.isEmpty ? '' : _catToAr(reqCatClean);
 
           final rawYour = e.yourCategories ?? const [];
           final yourCatsArList = rawYour
@@ -148,7 +140,7 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
               .map((x) => x.toString().trim())
               .where((s) => s.isNotEmpty && s.toLowerCase() != 'null')
               .map(_catToAr)
-              .toSet() // ✅ إزالة تكرار (عندك Appliance Repair مكررة)
+              .toSet()
               .toList();
 
           final yourCatsAr = yourCatsArList.join('، ');
@@ -204,6 +196,20 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
     );
   }
 
+  /// ✅ ترتيب داخلي ثابت حسب createdAt (الجديد/القديم)
+  List<MarketplaceRequestUiModel> _sortedByCreatedAt(
+    List<MarketplaceRequestUiModel> items,
+    MarketplaceSort sort,
+  ) {
+    final list = [...items];
+    list.sort(
+      (a, b) => sort == MarketplaceSort.newest
+          ? b.createdAt.compareTo(a.createdAt)
+          : a.createdAt.compareTo(b.createdAt),
+    );
+    return list;
+  }
+
   Future<void> load({bool refresh = false}) async {
     if (state.isLoading) return;
 
@@ -229,13 +235,17 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
 
       final ui =
           result.items.map(MarketplaceRequestUiModel.fromEntity).toList();
+
+      // ✅ مهم: حتى لو السيرفر رتّب حسب تاريخ الخدمة
+      final fixedSorted = _sortedByCreatedAt(ui, state.filters.sort);
+
       final hasMore = result.page < result.totalPages;
 
       state = state.copyWith(
         isLoading: false,
         sessionExpired: false,
         clearBanner: true,
-        allRequests: ui,
+        allRequests: fixedSorted,
         page: result.page,
         limit: result.limit,
         hasMore: hasMore,
@@ -274,7 +284,13 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
 
       final newUi =
           result.items.map(MarketplaceRequestUiModel.fromEntity).toList();
-      final merged = [...state.allRequests, ...newUi];
+
+      // ✅ دمج ثم ترتيب حسب createdAt
+      final merged = _sortedByCreatedAt(
+        [...state.allRequests, ...newUi],
+        state.filters.sort,
+      );
+
       final hasMore = result.page < result.totalPages;
 
       state = state.copyWith(
@@ -308,6 +324,14 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
   }
 
   Future<void> applyFilters(MarketplaceFilters filters) async {
+    // ✅ حماية: نطاق سعر غير منطقي (min > max)
+    if (filters.minBudget != null &&
+        filters.maxBudget != null &&
+        filters.minBudget! > filters.maxBudget!) {
+      _emitUiMessage('نطاق السعر غير منطقي: "من" يجب أن تكون أقل أو تساوي "إلى".');
+      return;
+    }
+
     final old = state.filters;
     state = state.copyWith(filters: filters);
 
@@ -324,7 +348,10 @@ class MarketplaceController extends StateNotifier<MarketplaceState> {
   }
 
   Future<void> resetFilters() async {
-    state = state.copyWith(filters: MarketplaceFilters.initial());
+    state = state.copyWith(
+      filters: MarketplaceFilters.initial(),
+      searchQuery: '', // ✅ كمان نرجّع البحث افتراضي
+    );
     await load(refresh: true);
   }
 

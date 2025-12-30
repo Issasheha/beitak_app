@@ -17,11 +17,14 @@ class ProviderBookingCard extends ConsumerWidget {
 
   /// Pending actions
   final VoidCallback? onAccept;
-  final VoidCallback? onReject;
+
+  /// ✅ IMPORTANT:
+  /// نفس عملية الإلغاء المستخدمة عند الخدمات القادمة
+  /// وستُستخدم أيضًا عند الطلبات الجديدة (بدون رفض)
+  final VoidCallback? onCancel;
 
   /// Upcoming actions
   final VoidCallback? onComplete;
-  final VoidCallback? onCancel;
 
   /// Busy state for this booking
   final bool busy;
@@ -31,7 +34,6 @@ class ProviderBookingCard extends ConsumerWidget {
     required this.booking,
     required this.onDetailsTap,
     this.onAccept,
-    this.onReject,
     this.onComplete,
     this.onCancel,
     this.busy = false,
@@ -44,8 +46,21 @@ class ProviderBookingCard extends ConsumerWidget {
     'in_progress',
   };
 
+  // ✅ QA: أي status من الباك معناته إلغاء/رفض => نعرضه "ملغاة"
+  static const _cancelLikeStatuses = {
+    'cancelled',
+    'canceled',
+    'rejected',
+    'declined',
+    'rejected_by_provider',
+    'provider_rejected',
+    'cancelled_by_provider',
+    'provider_cancelled',
+  };
+
   bool get _isPending => booking.status == 'pending_provider_accept';
   bool get _isScheduledLike => _scheduledLikeStatuses.contains(booking.status);
+  bool get _isCancelledLike => _cancelLikeStatuses.contains(booking.status);
 
   Color get _statusColor {
     switch (booking.status) {
@@ -59,10 +74,13 @@ class ProviderBookingCard extends ConsumerWidget {
         return AppColors.lightGreen;
       case 'completed':
         return AppColors.lightGreen;
-      case 'cancelled':
-        return Colors.red;
+
+      // ✅ QA: غير مكتمل
+      case 'incomplete':
+        return Colors.orange;
+
       default:
-        return AppColors.textSecondary;
+        return _isCancelledLike ? Colors.red : AppColors.textSecondary;
     }
   }
 
@@ -80,9 +98,13 @@ class ProviderBookingCard extends ConsumerWidget {
         return 'قيد التنفيذ';
       case 'completed':
         return 'مكتملة';
-      case 'cancelled':
-        return 'ملغاة';
+
+      // ✅ QA: توضيح حالة غير مكتمل
+      case 'incomplete':
+        return 'غير مكتمل';
+
       default:
+        if (_isCancelledLike) return 'ملغاة';
         return booking.status;
     }
   }
@@ -137,7 +159,6 @@ class ProviderBookingCard extends ConsumerWidget {
     if (s.isEmpty) return const [];
 
     var norm = s;
-
     norm = norm.replaceAll('،', ',');
     norm = norm.replaceAll(' - ', '-');
     norm = norm.replaceAll(' — ', '-');
@@ -217,8 +238,10 @@ class ProviderBookingCard extends ConsumerWidget {
     final showNotes = (booking.customerNotes ?? '').trim().isNotEmpty;
     final notes = (booking.customerNotes ?? '').trim();
 
-    final canShowPendingActions =
-        _isPending && (onAccept != null || onReject != null);
+    // ✅ pending actions: قبول + إلغاء (نفس onCancel)
+    final canShowPendingActions = _isPending && (onAccept != null || onCancel != null);
+
+    // ✅ upcoming actions: إنهاء + إلغاء
     final canShowUpcomingActions =
         _isScheduledLike && (onComplete != null || onCancel != null);
 
@@ -246,13 +269,11 @@ class ProviderBookingCard extends ConsumerWidget {
       error: (_, __) => FixedLocations.labelArFromAny(areaRaw),
     );
 
-    final cityShown = (cityRaw.trim().isEmpty)
-        ? ''
-        : (cityAr.trim().isEmpty ? cityRaw : cityAr);
+    final cityShown =
+        (cityRaw.trim().isEmpty) ? '' : (cityAr.trim().isEmpty ? cityRaw : cityAr);
 
-    final areaShown = (areaRaw.trim().isEmpty)
-        ? ''
-        : (areaAr.trim().isEmpty ? areaRaw : areaAr);
+    final areaShown =
+        (areaRaw.trim().isEmpty) ? '' : (areaAr.trim().isEmpty ? areaRaw : areaAr);
 
     final hasCity = cityShown.trim().isNotEmpty && !_isPlaceholder(cityShown);
     final hasArea = areaShown.trim().isNotEmpty && !_isPlaceholder(areaShown);
@@ -291,7 +312,7 @@ class ProviderBookingCard extends ConsumerWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              booking.serviceNameAr, // ✅ عربي
+                              booking.serviceNameAr,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.title18.copyWith(
@@ -302,8 +323,7 @@ class ProviderBookingCard extends ConsumerWidget {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
                               color: _statusColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
@@ -364,7 +384,6 @@ class ProviderBookingCard extends ConsumerWidget {
                         ],
                       ),
 
-                      // ✅ تنبيه بيانات التواصل قبل القبول
                       if (showContactHint) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         const _ContactHiddenHint(),
@@ -373,12 +392,10 @@ class ProviderBookingCard extends ConsumerWidget {
                       if (showNotes) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         Container(
-                          padding:
-                              SizeConfig.padding(horizontal: 10, vertical: 9),
+                          padding: SizeConfig.padding(horizontal: 10, vertical: 9),
                           decoration: BoxDecoration(
                             color: AppColors.background,
-                            borderRadius:
-                                BorderRadius.circular(SizeConfig.radius(14)),
+                            borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
                             border: Border.all(color: AppColors.borderLight),
                           ),
                           child: Row(
@@ -416,23 +433,19 @@ class ProviderBookingCard extends ConsumerWidget {
                           SizedBox(width: SizeConfig.w(12)),
                           _Meta(
                             Icons.access_time,
-                            _time12hAr(booking.bookingTime), // ✅ 12h
+                            _time12hAr(booking.bookingTime),
                           ),
                           const Spacer(),
                           Container(
                             width: SizeConfig.w(44),
                             height: SizeConfig.w(44),
                             decoration: BoxDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(SizeConfig.radius(14)),
-                              color:
-                                  AppColors.lightGreen.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
+                              color: AppColors.lightGreen.withValues(alpha: 0.12),
                             ),
                             alignment: Alignment.center,
                             child: Text(
-                              booking.status == 'pending_provider_accept'
-                                  ? '📩'
-                                  : '🧳',
+                              booking.status == 'pending_provider_accept' ? '📩' : '🧳',
                               style: AppTextStyles.body16.copyWith(
                                 fontSize: SizeConfig.ts(20),
                                 height: 1,
@@ -442,7 +455,6 @@ class ProviderBookingCard extends ConsumerWidget {
                         ],
                       ),
 
-                      // ✅ Chips for City/Area (خفيفة)
                       if (hasCity || hasArea) ...[
                         SizedBox(height: SizeConfig.h(10)),
                         Wrap(
@@ -487,6 +499,7 @@ class ProviderBookingCard extends ConsumerWidget {
   }
 
   Widget _buildActions() {
+    // ✅ Pending: قبول + إلغاء (نفس onCancel)
     if (_isPending) {
       return Row(
         textDirection: TextDirection.rtl,
@@ -500,15 +513,16 @@ class ProviderBookingCard extends ConsumerWidget {
           ),
           SizedBox(width: SizeConfig.w(10)),
           Expanded(
-            child: _OutlineBtn(
-              label: 'رفض',
-              onTap: (busy || onReject == null) ? null : onReject,
+            child: _DangerOutlineBtn(
+              label: 'إلغاء',
+              onTap: (busy || onCancel == null) ? null : onCancel,
             ),
           ),
         ],
       );
     }
 
+    // ✅ Upcoming: إنهاء + إلغاء
     return Row(
       textDirection: TextDirection.rtl,
       children: [
@@ -521,7 +535,7 @@ class ProviderBookingCard extends ConsumerWidget {
         ),
         SizedBox(width: SizeConfig.w(10)),
         Expanded(
-          child: _OutlineBtn(
+          child: _DangerOutlineBtn(
             label: 'إلغاء الخدمة',
             onTap: (busy || onCancel == null) ? null : onCancel,
           ),
@@ -705,11 +719,12 @@ class _PrimaryBtn extends StatelessWidget {
   }
 }
 
-class _OutlineBtn extends StatelessWidget {
+/// ✅ QA: زر إلغاء أحمر (Outline) — كما في التصميم
+class _DangerOutlineBtn extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
 
-  const _OutlineBtn({
+  const _DangerOutlineBtn({
     required this.label,
     required this.onTap,
   });
@@ -719,8 +734,8 @@ class _OutlineBtn extends StatelessWidget {
     return OutlinedButton(
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.textPrimary,
-        side: const BorderSide(color: AppColors.borderLight),
+        foregroundColor: Colors.red,
+        side: const BorderSide(color: Colors.red, width: 1.2),
         padding: SizeConfig.padding(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
@@ -731,6 +746,7 @@ class _OutlineBtn extends StatelessWidget {
         style: AppTextStyles.body14.copyWith(
           fontSize: SizeConfig.ts(13),
           fontWeight: FontWeight.w900,
+          color: Colors.red,
         ),
       ),
     );

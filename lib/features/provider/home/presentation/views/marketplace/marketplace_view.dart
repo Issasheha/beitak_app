@@ -1,8 +1,11 @@
+// lib/features/provider/home/presentation/views/marketplace/marketplace_view.dart
+// (اسم الملف عندك ممكن مختلف، بس هذا هو الملف اللي بعرض MarketplaceView)
+
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/marketplace/providers/marketplace_providers.dart';
+import 'package:beitak_app/features/provider/home/presentation/views/marketplace/viewmodels/marketplace_providers.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/widgets/marketplace_request_card.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/widgets/marketplace_request_details_sheet.dart';
 import 'package:flutter/material.dart';
@@ -23,7 +26,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
   late final TextEditingController _searchController;
   late final ScrollController _scrollController;
 
-  /// ✅ فقط الشيب اللي بكبس عليه بصير "Active" (آخر تفاعل)
   _ChipKey _activeChip = _ChipKey.sort;
 
   @override
@@ -32,8 +34,10 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
     _searchController = TextEditingController();
     _scrollController = ScrollController()..addListener(_onScroll);
 
-    Future.microtask(
-        () => ref.read(marketplaceControllerProvider.notifier).load());
+    // ✅ ضمان: كل مرة تدخل السوق يبدأ Default (حتى لو provider ما كان autoDispose)
+    Future.microtask(() async {
+      await ref.read(marketplaceControllerProvider.notifier).resetFilters();
+    });
   }
 
   void _onScroll() {
@@ -49,6 +53,15 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _searchController.dispose();
+
+    // ✅ مطلب QA: الفلاتر تنمسح عند الخروج من صفحة السوق
+    // (ما بنعمل load هون لتجنب أي side-effect؛ بس نرجّع state default)
+    Future.microtask(() {
+      final n = ref.read(marketplaceControllerProvider.notifier);
+      n.setSearchQuery('');
+      n.applyFilters(MarketplaceFilters.initial());
+    });
+
     super.dispose();
   }
 
@@ -74,7 +87,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
   Widget build(BuildContext context) {
     final state = ref.watch(marketplaceControllerProvider);
 
-    // ✅ SnackBar لأي uiMessage
     ref.listen(marketplaceControllerProvider, (prev, next) {
       final msg = next.uiMessage;
       if (msg != null && msg.isNotEmpty && msg != prev?.uiMessage) {
@@ -116,7 +128,6 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
               const SizedBox(height: 12),
               const SizedBox(height: 10),
 
-              // ✅ صف الـ Chips فقط
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _MarketplaceFourFilterChips(
@@ -133,8 +144,7 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    if (state.errorMessage != null &&
-                        state.allRequests.isEmpty) {
+                    if (state.errorMessage != null && state.allRequests.isEmpty) {
                       return _ErrorState(
                         message: state.errorMessage!,
                         onRetry: () => ref
@@ -165,25 +175,21 @@ class _MarketplaceViewState extends ConsumerState<MarketplaceView> {
                             if (state.isLoadingMore) {
                               return const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
-                                child:
-                                    Center(child: CircularProgressIndicator()),
+                                child: Center(child: CircularProgressIndicator()),
                               );
                             }
 
                             if (state.loadMoreFailed) {
                               return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
                                 child: Center(
                                   child: TextButton(
                                     onPressed: () => ref
-                                        .read(marketplaceControllerProvider
-                                            .notifier)
+                                        .read(marketplaceControllerProvider.notifier)
                                         .loadMore(),
                                     child: const Text(
                                       'فشل تحميل المزيد — اضغط لإعادة المحاولة',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w800),
+                                      style: TextStyle(fontWeight: FontWeight.w800),
                                     ),
                                   ),
                                 ),
@@ -237,7 +243,6 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
     'كهرباء',
   ];
 
-  /// ✅ fallback ثابت لو FixedServiceCategories ما غطّى النص العربي
   static const Map<String, String> _labelToKeyFallback = {
     'تنظيف': 'cleaning',
     'سباكة': 'plumbing',
@@ -273,8 +278,7 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
       onActiveChanged(_ChipKey.category);
 
       if (label == null) {
-        await notifier
-            .applyFilters(state.filters.copyWith(clearCategory: true));
+        await notifier.applyFilters(state.filters.copyWith(clearCategory: true));
         return;
       }
 
@@ -296,16 +300,15 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
     }
 
     Future<void> setCity(int? id) async {
-  onActiveChanged(_ChipKey.city);
+      onActiveChanged(_ChipKey.city);
 
-  if (id == null) {
-    await notifier.applyFilters(state.filters.copyWith(clearCity: true));
-    return;
-  }
+      if (id == null) {
+        await notifier.applyFilters(state.filters.copyWith(clearCity: true));
+        return;
+      }
 
-  await notifier.applyFilters(state.filters.copyWith(cityId: id));
-}
-
+      await notifier.applyFilters(state.filters.copyWith(cityId: id));
+    }
 
     Future<void> setSort(MarketplaceSort s) async {
       onActiveChanged(_ChipKey.sort);
@@ -336,7 +339,6 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
       }
     }
 
-    // ✅ هل الفلتر مطبّق؟ (حتى لو مش Active)
     final isCategoryApplied = (state.filters.categoryId != null) ||
         (state.filters.categoryLabel != null &&
             state.filters.categoryLabel!.trim().isNotEmpty);
@@ -354,8 +356,7 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
         ? 'الكل'
         : (_cityIdToLabel[state.filters.cityId!] ?? 'محددة');
 
-    final priceValue =
-        _priceLabel(state.filters.minBudget, state.filters.maxBudget);
+    final priceValue = _priceLabel(state.filters.minBudget, state.filters.maxBudget);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -374,7 +375,6 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
           ),
           const SizedBox(width: 10),
 
-          // ✅ الفئة: تظهر القيمة المختارة + تضل خِضرا لو مطبّقة
           _MenuChip(
             label: 'الفئة',
             value: categoryValue,
@@ -382,14 +382,12 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
             onOpened: () => onActiveChanged(_ChipKey.category),
             items: <_MenuItem>[
               _MenuItem(label: 'جميع الفئات', onTap: () => setCategory(null)),
-              ..._categories
-                  .map((c) => _MenuItem(label: c, onTap: () => setCategory(c))),
+              ..._categories.map((c) => _MenuItem(label: c, onTap: () => setCategory(c))),
             ],
           ),
 
           const SizedBox(width: 10),
 
-          // ✅ المنطقة: تظهر المدينة المختارة + تضل خِضرا لو مطبّقة
           _MenuChip(
             label: 'المنطقة',
             value: cityValue,
@@ -404,7 +402,6 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
 
           const SizedBox(width: 10),
 
-          // ✅ السعر: يظهر الرينج المختار + يضل خِضرا لو مطبّق
           _ActionChip(
             label: 'السعر',
             value: priceValue,
@@ -425,7 +422,7 @@ class _MenuItem {
 
 class _MenuChip extends StatelessWidget {
   final String label;
-  final String? value; // ✅ القيمة المختارة (للعرض داخل الشيب)
+  final String? value;
   final bool selected;
   final List<_MenuItem> items;
   final VoidCallback onOpened;
@@ -499,7 +496,7 @@ class _MenuChip extends StatelessWidget {
 
 class _ActionChip extends StatelessWidget {
   final String label;
-  final String? value; // ✅ قيمة للعرض (مثل السعر)
+  final String? value;
   final bool selected;
   final VoidCallback onTap;
 
@@ -646,6 +643,42 @@ class _PriceRangeSheetState extends State<_PriceRangeSheet> {
   final _minCtrl = TextEditingController();
   final _maxCtrl = TextEditingController();
 
+  String? _error;
+
+  double? _parse(String s) {
+    final t = s.trim();
+    if (t.isEmpty) return null;
+    return double.tryParse(t);
+  }
+
+  void _validateAndApply() {
+    final min = _parse(_minCtrl.text);
+    final max = _parse(_maxCtrl.text);
+
+    // ✅ لا شيء مُدخل → اعتبر reset (أو خليها apply null/null)
+    // هنا نخليها apply عادي (الفلاتر رح تفهمها)
+    if (min != null && min < 0) {
+      setState(() => _error = 'قيمة "من" يجب أن تكون رقمًا موجبًا.');
+      return;
+    }
+    if (max != null && max < 0) {
+      setState(() => _error = 'قيمة "إلى" يجب أن تكون رقمًا موجبًا.');
+      return;
+    }
+
+    if (min != null && max != null && min > max) {
+      setState(() => _error = 'نطاق غير منطقي: "من" يجب أن تكون أقل أو تساوي "إلى".');
+      return;
+    }
+
+    setState(() => _error = null);
+
+    Navigator.pop(
+      context,
+      _PriceRangeResult.apply(min: min, max: max),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -696,35 +729,48 @@ class _PriceRangeSheetState extends State<_PriceRangeSheet> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text('السعر',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900)),
+              const Text(
+                'السعر',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(
-                      child: _NumberField(controller: _minCtrl, hint: 'من')),
+                  Expanded(child: _NumberField(controller: _minCtrl, hint: 'من')),
                   const SizedBox(width: 10),
-                  Expanded(
-                      child: _NumberField(controller: _maxCtrl, hint: 'إلى')),
+                  Expanded(child: _NumberField(controller: _maxCtrl, hint: 'إلى')),
                 ],
               ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Colors.red.shade700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 14),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(
-                            color: AppColors.lightGreen, width: 1.2),
+                        side: const BorderSide(color: AppColors.lightGreen, width: 1.2),
                         foregroundColor: AppColors.lightGreen,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      onPressed: () => Navigator.pop(
-                          context, const _PriceRangeResult.reset()),
-                      child: const Text('إعادة تعيين',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      onPressed: () =>
+                          Navigator.pop(context, const _PriceRangeResult.reset()),
+                      child: const Text(
+                        'إعادة تعيين',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -734,19 +780,13 @@ class _PriceRangeSheetState extends State<_PriceRangeSheet> {
                         backgroundColor: AppColors.lightGreen,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
-                      onPressed: () {
-                        final min = double.tryParse(_minCtrl.text.trim());
-                        final max = double.tryParse(_maxCtrl.text.trim());
-                        Navigator.pop(
-                          context,
-                          _PriceRangeResult.apply(min: min, max: max),
-                        );
-                      },
-                      child: const Text('تطبيق',
-                          style: TextStyle(fontWeight: FontWeight.w900)),
+                      onPressed: _validateAndApply,
+                      child: const Text(
+                        'تطبيق',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ),
                 ],

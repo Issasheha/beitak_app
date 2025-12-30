@@ -85,6 +85,7 @@ class AvailabilityException {
 class ProviderAvailabilityViewModel extends ChangeNotifier {
   ProviderAvailabilityViewModel() {
     _weekly = _buildDefaultWeekly();
+    _originalSignature = _computeSignature(); // baseline
   }
 
   final Dio _dio = ApiClient.dio;
@@ -97,6 +98,63 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
 
   Map<int, WeeklyDayAvailability> get weekly => _weekly;
   Map<DateTime, AvailabilityException> get exceptions => _exceptions;
+
+  // ==== QA: change tracking ====
+  late String _originalSignature;
+
+  bool get hasChanges => _computeSignature() != _originalSignature;
+
+  void _commitSnapshot() {
+    _originalSignature = _computeSignature();
+  }
+
+  String _computeSignature() {
+    // weekly: weekday|available|start-end
+    final weeklyParts = <String>[];
+    final keys = _weekdayIntToApiName.keys.toList()..sort();
+    for (final w in keys) {
+      final day = _weekly[w] ??
+          WeeklyDayAvailability(
+            weekday: w,
+            available: false,
+            range: _defaultRange(),
+          );
+      final r = day.range ?? _defaultRange();
+      final rangePart = '${_formatTime(r.start)}-${_formatTime(r.end)}';
+      weeklyParts.add('$w|${day.available ? 1 : 0}|$rangePart');
+    }
+
+    // exceptions: only closed days (yyyy-mm-dd)
+    final closed = _exceptions.values
+        .where((e) => e.type == AvailabilityExceptionType.closedDay)
+        .map((e) => _formatDate(e.date))
+        .toList()
+      ..sort();
+
+    return 'W:${weeklyParts.join(",")};C:${closed.join(",")}';
+  }
+
+  /// ✅ QA: validate before saving
+  /// يرجّع null إذا تمام، أو رسالة جاهزة للعرض إذا في مشكلة
+  String? validateForSave() {
+    // weekly ranges must be valid if day is enabled
+    for (final entry in _weekdayIntToApiName.entries) {
+      final weekday = entry.key;
+      final label = entry.value; // Sunday/Monday.. (مش مهم للعرض الآن)
+
+      final day = _weekly[weekday];
+      if (day == null) continue;
+
+      if (day.available) {
+        final r = day.range ?? _defaultRange();
+        if (!r.isValid) {
+          // رسالة عربي واضحة للمستخدم
+          return 'وقت النهاية يجب أن يكون بعد وقت البداية.';
+        }
+      }
+    }
+    return null;
+  }
 
   // ---------------- mapping بين أسماء الأيام و int ----------------
 
@@ -207,6 +265,9 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
           }
         }
       }
+
+      // ✅ بعد التحميل: اعتبره baseline (بدون تغييرات)
+      _commitSnapshot();
     } catch (e, st) {
       if (kDebugMode) {
         debugPrint('loadFromApi error: $e\n$st');
@@ -224,16 +285,11 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // نجهّز working_hours بنفس شكل الويب:
-      // {
-      //   "Sunday": { "enabled": true, "start": "...", "end": "..." },
-      //   ...
-      // }
       final Map<String, dynamic> workingHoursJson = {};
 
       for (final entry in _weekdayIntToApiName.entries) {
         final weekday = entry.key;
-        final apiName = entry.value; // Sunday, Monday, ...
+        final apiName = entry.value;
 
         final day = _weekly[weekday] ??
             WeeklyDayAvailability(
@@ -247,11 +303,10 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
         workingHoursJson[apiName] = {
           'start': _formatTime(range.start),
           'end': _formatTime(range.end),
-          'enabled': day.available, // 👈 زي الويب بالضبط
+          'enabled': day.available,
         };
       }
 
-      // unavailable_dates من الـ exceptions (closedDay فقط)
       final closedDates = _exceptions.values
           .where((ex) => ex.type == AvailabilityExceptionType.closedDay)
           .map((ex) => _formatDate(ex.date))
@@ -267,6 +322,9 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
         ApiConstants.providerAvailability,
         data: body,
       );
+
+      // ✅ إذا حفظنا بنجاح: اعتمد snapshot جديد
+      _commitSnapshot();
 
       return true;
     } catch (e, st) {
