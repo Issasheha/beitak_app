@@ -18,8 +18,7 @@ class ProviderBookingCard extends ConsumerWidget {
   /// Pending actions
   final VoidCallback? onAccept;
 
-  /// ✅ IMPORTANT:
-  /// نفس عملية الإلغاء المستخدمة عند الخدمات القادمة
+  /// ✅ نفس عملية الإلغاء المستخدمة عند الخدمات القادمة
   /// وستُستخدم أيضًا عند الطلبات الجديدة (بدون رفض)
   final VoidCallback? onCancel;
 
@@ -75,7 +74,6 @@ class ProviderBookingCard extends ConsumerWidget {
       case 'completed':
         return AppColors.lightGreen;
 
-      // ✅ QA: غير مكتمل
       case 'incomplete':
         return Colors.orange;
 
@@ -99,7 +97,6 @@ class ProviderBookingCard extends ConsumerWidget {
       case 'completed':
         return 'مكتملة';
 
-      // ✅ QA: توضيح حالة غير مكتمل
       case 'incomplete':
         return 'غير مكتمل';
 
@@ -153,7 +150,6 @@ class ProviderBookingCard extends ConsumerWidget {
   }
 
   /// ✅ يفك locationText إلى [city, area]
-  /// يقبل: "amman, abdoun" أو "amman - abdoun" أو "amman، abdoun"
   List<String> _splitCityArea(String raw) {
     final s = raw.trim();
     if (s.isEmpty) return const [];
@@ -174,9 +170,7 @@ class ProviderBookingCard extends ConsumerWidget {
 
     parts = parts.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
 
-    // إذا جزء واحد فقط: اعتبره منطقة
     if (parts.length == 1) return ['', parts[0]];
-
     return [parts[0], parts[1]];
   }
 
@@ -238,17 +232,14 @@ class ProviderBookingCard extends ConsumerWidget {
     final showNotes = (booking.customerNotes ?? '').trim().isNotEmpty;
     final notes = (booking.customerNotes ?? '').trim();
 
-    // ✅ pending actions: قبول + إلغاء (نفس onCancel)
-    final canShowPendingActions = _isPending && (onAccept != null || onCancel != null);
+    final canShowPendingActions =
+        _isPending && (onAccept != null || onCancel != null);
 
-    // ✅ upcoming actions: إنهاء + إلغاء
     final canShowUpcomingActions =
         _isScheduledLike && (onComplete != null || onCancel != null);
 
-    // ✅ فقط قبل القبول + فقط إذا كان فيه رقم/إيميل أصلاً
     final showContactHint = _isPending && _hasContactInfo(booking);
 
-    // ✅ City/Area chips
     final areasMapAsync = ref.watch(areasNameMapProvider);
 
     final locationRaw = _clean(booking.locationText);
@@ -296,7 +287,6 @@ class ProviderBookingCard extends ConsumerWidget {
         ),
         child: Column(
           children: [
-            // ✅ Clickable details area
             Material(
               color: Colors.transparent,
               child: InkWell(
@@ -307,7 +297,6 @@ class ProviderBookingCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Title + status
                       Row(
                         children: [
                           Expanded(
@@ -342,7 +331,6 @@ class ProviderBookingCard extends ConsumerWidget {
 
                       SizedBox(height: SizeConfig.h(10)),
 
-                      // Customer row
                       Row(
                         children: [
                           Container(
@@ -423,7 +411,6 @@ class ProviderBookingCard extends ConsumerWidget {
 
                       SizedBox(height: SizeConfig.h(12)),
 
-                      // Date + time
                       Row(
                         children: [
                           _Meta(
@@ -481,7 +468,6 @@ class ProviderBookingCard extends ConsumerWidget {
               ),
             ),
 
-            // ✅ Actions area
             if (canShowPendingActions || canShowUpcomingActions) ...[
               Divider(
                 height: 1,
@@ -499,7 +485,6 @@ class ProviderBookingCard extends ConsumerWidget {
   }
 
   Widget _buildActions() {
-    // ✅ Pending: قبول + إلغاء (نفس onCancel)
     if (_isPending) {
       return Row(
         textDirection: TextDirection.rtl,
@@ -522,7 +507,6 @@ class ProviderBookingCard extends ConsumerWidget {
       );
     }
 
-    // ✅ Upcoming: إنهاء + إلغاء
     return Row(
       textDirection: TextDirection.rtl,
       children: [
@@ -719,7 +703,7 @@ class _PrimaryBtn extends StatelessWidget {
   }
 }
 
-/// ✅ QA: زر إلغاء أحمر (Outline) — كما في التصميم
+/// ✅ QA: زر إلغاء أحمر كامل
 class _DangerOutlineBtn extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
@@ -731,11 +715,12 @@ class _DangerOutlineBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(
+    return ElevatedButton(
       onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.red,
-        side: const BorderSide(color: Colors.red, width: 1.2),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+        elevation: 0,
         padding: SizeConfig.padding(horizontal: 16, vertical: 12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
@@ -746,7 +731,7 @@ class _DangerOutlineBtn extends StatelessWidget {
         style: AppTextStyles.body14.copyWith(
           fontSize: SizeConfig.ts(13),
           fontWeight: FontWeight.w900,
-          color: Colors.red,
+          color: Colors.white,
         ),
       ),
     );

@@ -85,7 +85,8 @@ class ProviderDashboardRemoteDataSource {
       final data = res.data;
       if (data is! Map<String, dynamic>) return ProviderStatsModel.empty;
 
-      final stats = (data['data']?['statistics'] as Map?)?.cast<String, dynamic>();
+      final stats =
+          (data['data']?['statistics'] as Map?)?.cast<String, dynamic>();
       if (stats == null) return ProviderStatsModel.empty;
 
       return ProviderStatsModel.fromJson(stats);
@@ -95,6 +96,9 @@ class ProviderDashboardRemoteDataSource {
     }
   }
 
+  /// ✅ NEW endpoint للحالة تبعتنا:
+  /// PATCH /bookings/{id}/provider-action
+  /// body: { "action": "accept" | "reject" }
   Future<void> providerAction({
     required int bookingId,
     required String action, // accept | reject
@@ -124,19 +128,27 @@ class ProviderDashboardRemoteDataSource {
     }
   }
 
-  // ✅ Cancel
+  /// ✅ Cancel (للخدمات القادمة)
+  /// ملاحظة QA/400:
+  /// لا نرسل cancellation_reason إذا كانت null أو فاضية
   Future<void> providerCancel({
     required int bookingId,
     required String cancellationCategory,
     String? cancellationReason,
   }) async {
     try {
+      final body = <String, dynamic>{
+        'cancellation_category': cancellationCategory,
+      };
+
+      final reason = (cancellationReason ?? '').trim();
+      if (reason.isNotEmpty) {
+        body['cancellation_reason'] = reason;
+      }
+
       await _dio.patch(
         ApiConstants.bookingProviderCancel(bookingId),
-        data: {
-          'cancellation_category': cancellationCategory,
-          'cancellation_reason': cancellationReason,
-        },
+        data: body,
         options: await _authOptions(),
       );
     } on DioException catch (e) {

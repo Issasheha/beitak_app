@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'https://unified-goal-shower-agree.trycloudflare.com';
+      'https://instrument-earned-police-pure.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
 
   // =========================
@@ -55,11 +55,16 @@ class ApiConstants {
 
   static String bookingDetails(int id) => '/bookings/$id';
 
-  static String bookingProviderAction(int id) => '/bookings/$id/provider-action';
+  static String bookingProviderAction(int id) =>
+      '/bookings/$id/provider-action';
   static String bookingProviderComplete(int id) =>
       '/bookings/$id/provider-complete';
-  static String bookingProviderCancel(int id) => '/bookings/$id/provider-cancel';
+  static String bookingProviderCancel(int id) =>
+      '/bookings/$id/provider-cancel';
 
+  /// Provider pending action (accept / reject)
+  static String providerBookingAction(int bookingId) =>
+      '/bookings/$bookingId/provider-action';
   // Provider Activate/Deactivate
   static const String providerActivate = '/providers/activate';
   static const String providerDeactivate = '/providers/deactivate';

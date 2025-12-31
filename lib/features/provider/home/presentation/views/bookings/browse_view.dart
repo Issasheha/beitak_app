@@ -189,6 +189,8 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
     );
   }
 
+  /// ✅ هذا Dialog خاص بـ (الخدمات القادمة) فقط
+  /// لأنه بيستدعي _vm.cancel(...) => endpoint: /provider-cancel
   Future<void> _openCancelDialog(
     BuildContext context,
     ProviderBookingModel booking,
@@ -251,6 +253,18 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                           ),
                         ),
                       ),
+                      SizedBox(height: SizeConfig.h(6)),
+                      Center(
+                        child: Text(
+                          'اختر سبب الإلغاء (اختياري).',
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.body14.copyWith(
+                            fontSize: SizeConfig.ts(12.4),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
                       SizedBox(height: SizeConfig.h(12)),
                       Text(
                         'تصنيف الإلغاء',
@@ -293,8 +307,8 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setLocal(
-                                () => selected = v ?? categories.first),
+                            onChanged: (v) =>
+                                setLocal(() => selected = v ?? categories.first),
                           ),
                         ),
                       ),
@@ -544,6 +558,7 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
           busy: busy,
           onDetailsTap: () => _openDetails(context, b),
 
+          // ✅ accept -> /provider-action {action: accept}
           onAccept: isPending
               ? () async {
                   if (busy) return;
@@ -557,18 +572,27 @@ class _ProviderBrowseViewState extends State<ProviderBrowseView> {
                 }
               : null,
 
-          // ✅ ما في رفض — نفس الإلغاء المستخدم بالخدمات القادمة
+          // ✅ IMPORTANT:
+          // Pending: إلغاء الطلب = provider-action reject (وليس provider-cancel)
+          // Upcoming: إلغاء الخدمة = provider-cancel (مع dialog)
           onCancel: (isPending || isUpcoming)
               ? () async {
                   if (busy) return;
 
-                  // إذا عندك Dialog خاص للإلغاء (مثل القادمات) استخدمه
-                  await _openCancelDialog(context, b);
+                  if (isPending) {
+                    final ok = await _confirmSimple(
+                      title: 'إلغاء الطلب',
+                      desc: 'هل أنت متأكد أنك تريد إلغاء هذا الطلب؟',
+                      confirmText: 'تأكيد الإلغاء',
+                    );
+                    if (!ok) return;
 
-                  // ملاحظة:
-                  // _openCancelDialog غالبًا هو اللي بستدعي _vm.cancel(...) من جواته
-                  // فإذا كان عندك cancel مباشر بدون dialog:
-                  // await _vm.cancel(b.id);
+                    await _vm.reject(b.id); // ✅ PATCH /provider-action {action: reject}
+                    return;
+                  }
+
+                  // Upcoming only
+                  await _openCancelDialog(context, b); // ✅ PATCH /provider-cancel
                 }
               : null,
 

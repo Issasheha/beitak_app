@@ -93,6 +93,7 @@ class ProviderBrowseViewModel extends ChangeNotifier {
     }
   }
 
+  /// ✅ Pending: قبول عبر provider-action
   Future<void> accept(int bookingId) async {
     await _runAction(
       bookingId,
@@ -100,6 +101,8 @@ class ProviderBrowseViewModel extends ChangeNotifier {
     );
   }
 
+  /// ✅ Pending: "إلغاء" (UI) لكنه فعلياً reject عبر provider-action
+  /// والباك يرجع status=cancelled => بطاقة السجل بتعرضها "ملغاة"
   Future<void> reject(int bookingId) async {
     await _runAction(
       bookingId,
@@ -107,6 +110,7 @@ class ProviderBrowseViewModel extends ChangeNotifier {
     );
   }
 
+  /// ✅ Upcoming: إنهاء
   Future<void> complete(int bookingId) async {
     await _runAction(
       bookingId,
@@ -114,6 +118,7 @@ class ProviderBrowseViewModel extends ChangeNotifier {
     );
   }
 
+  /// ✅ Upcoming: إلغاء (provider-cancel القديم + الأسباب)
   Future<void> cancel({
     required int bookingId,
     required String cancellationCategory,
