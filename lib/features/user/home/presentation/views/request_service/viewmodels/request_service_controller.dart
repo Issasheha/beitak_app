@@ -24,15 +24,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   RequestServiceController(this._vm, this._authLocal)
       : super(const RequestServiceState());
 
-  String _normSlug(String s) {
-    var x = s.trim().toLowerCase();
-    x = x.replaceAll(RegExp(r'\s+'), ' ');
-    x = x.replaceAll('_', ' ');
-    x = x.replaceAll('-', ' ');
-    x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return x;
-  }
-
   Future<void> bootstrap() async {
     state = state.copyWith(sessionLoading: true);
     try {
@@ -197,36 +188,36 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
   }
 
   Future<void> _loadCategories() async {
-  if (!mounted) return;
-  state = state.copyWith(categoryError: null);
-
-  try {
-    final map = await _vm.fetchCategorySlugToId(); // slug -> id من السيرفر
     if (!mounted) return;
+    state = state.copyWith(categoryError: null);
 
-    // ✅ ابنِ fixedKey -> id من slugs السيرفر
-    final fixedMap = <String, int>{};
+    try {
+      final map = await _vm.fetchCategorySlugToId(); // slug -> id من السيرفر
+      if (!mounted) return;
 
-    for (final entry in map.entries) {
-      final slug = entry.key;
-      final id = entry.value;
+      // ✅ ابنِ fixedKey -> id من slugs السيرفر
+      final fixedMap = <String, int>{};
 
-      final fixedKey = FixedServiceCategories.keyFromAnyString(slug);
-      if (fixedKey != null && id > 0) {
-        // إذا تكرر أكثر من slug لنفس key، خذ أول واحد
-        fixedMap.putIfAbsent(fixedKey, () => id);
+      for (final entry in map.entries) {
+        final slug = entry.key;
+        final id = entry.value;
+
+        final fixedKey = FixedServiceCategories.keyFromAnyString(slug);
+        if (fixedKey != null && id > 0) {
+          // إذا تكرر أكثر من slug لنفس key، خذ أول واحد
+          fixedMap.putIfAbsent(fixedKey, () => id);
+        }
       }
-    }
 
-    state = state.copyWith(
-      slugToCategoryId: map,
-      fixedKeyToCategoryId: fixedMap, // ✅ NEW
-    );
-  } catch (e) {
-    if (!mounted) return;
-    state = state.copyWith(categoryError: _niceError(e));
+      state = state.copyWith(
+        slugToCategoryId: map,
+        fixedKeyToCategoryId: fixedMap,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(categoryError: _niceError(e));
+    }
   }
-}
 
   void setDateType(ServiceDateType type) {
     if (!mounted) return;
@@ -300,7 +291,6 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
 
     FocusScope.of(context).unfocus();
 
-    // ✅ كل أخطاء الحقول المطلوبة صارت داخل الفورم (تحت كل حقل)
     final ok = formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
@@ -320,21 +310,17 @@ class RequestServiceController extends StateNotifier<RequestServiceState> {
       return;
     }
 
- final key = state.selectedServiceType!.categoryKey.trim();
+    final selectedType = state.selectedServiceType;
+    if (selectedType == null) {
+      _snack(context, 'الرجاء اختيار نوع الخدمة');
+      return;
+    }
 
-final categoryId = state.fixedKeyToCategoryId[key]
-    // ✅ fallback: لو لسبب ما ما انبنى fixedMap
-    ?? state.slugToCategoryId[key];
+    final key = selectedType.categoryKey.trim();
 
-if (categoryId == null || categoryId <= 0) {
-  _snack(
-    context,
-    'تعذر تحديد الفئة من السيرفر.\n'
-    'جرّب تحديث الشاشة أو تأكد من slugs في /api/categories.',
-  );
-  return;
-}
-
+    final categoryId = state.fixedKeyToCategoryId[key]
+        // ✅ fallback: لو لسبب ما ما انبنى fixedMap
+        ?? state.slugToCategoryId[key];
 
     if (categoryId == null || categoryId <= 0) {
       _snack(
@@ -383,14 +369,14 @@ if (categoryId == null || categoryId <= 0) {
         guestOtp = guestOtp.trim();
       }
 
-      final serviceDateIso = _resolveSelectedDateIso(state.dateType, state.otherDate);
+      final serviceDateIso =
+          _resolveSelectedDateIso(state.dateType, state.otherDate);
       if (serviceDateIso == null) {
         if (context.mounted) _snack(context, 'تعذر تحديد التاريخ. حاول مجدداً.');
         return;
       }
 
       final budget = _budgetValue(budgetCtrl.text);
-      // ✅ Safety (مع أنه المفروض الفورم يمنعها)
       if (budget != null && (budget < 10 || budget > 10000)) {
         _snack(context, 'الميزانية يجب أن تكون بين 10 و 10000 دينار');
         return;
@@ -408,7 +394,7 @@ if (categoryId == null || categoryId <= 0) {
         budget: budget,
         serviceDateIso: serviceDateIso,
         serviceDateType: dateTypeApi,
-        serviceTimeHour: state.selectedHour!, // still "HH:00"
+        serviceTimeHour: state.selectedHour!,
         sharePhoneWithProvider: share,
         files: List<File>.from(state.files),
         isGuest: state.isGuest,
@@ -427,7 +413,6 @@ if (categoryId == null || categoryId <= 0) {
       if (!context.mounted) return;
       if (!mounted) return;
 
-      // reset
       nameCtrl.clear();
       phoneCtrl.clear();
       descCtrl.clear();
@@ -445,7 +430,6 @@ if (categoryId == null || categoryId <= 0) {
         files: const [],
       );
 
-      // ✅ QA: بعد النجاح رجّع المستخدم للهوم
       if (context.mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
@@ -463,7 +447,8 @@ if (categoryId == null || categoryId <= 0) {
     final txt = text.trim();
     if (txt.isEmpty) return null;
 
-    final normalized = txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
+    final normalized =
+        txt.replaceAll(',', '').replaceAll('٬', '').replaceAll('٫', '.');
     return double.tryParse(normalized);
   }
 

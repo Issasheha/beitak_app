@@ -31,8 +31,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   final _desc = TextEditingController();
   final List<TextEditingController> _featuresCtrls = [];
 
-  String? _selectedCategoryKey;
-  late final String _initialCategoryKey;
+  // ✅ NEW: Service selection (Service Name)
+  int? _selectedServiceId;
 
   bool _submitting = false;
 
@@ -53,16 +53,17 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   String _selectedType = _tEmergency;
   late final String _initialType;
 
+  // ✅ NEW: to show error under features section
+  FormFieldState<List<String>>? _featuresFieldState;
+
   @override
   void initState() {
     super.initState();
-    _initialCategoryKey = FixedServiceCategories.all.first.key;
-    _selectedCategoryKey = _initialCategoryKey;
-
     _initialType = _selectedType;
 
     _featuresCtrls.add(TextEditingController());
 
+    // (اختياري) تجهيز id map لو حبيت تستخدمه لاحقاً
     Future.microtask(() => ref.read(categoriesIdMapProvider.future));
   }
 
@@ -154,8 +155,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     return _price.text.trim().isNotEmpty ||
         _desc.text.trim().isNotEmpty ||
         _featuresNow.isNotEmpty ||
-        (_selectedCategoryKey != null &&
-            _selectedCategoryKey != _initialCategoryKey) ||
+        _selectedServiceId != null ||
         _selectedType != _initialType;
   }
 
@@ -177,12 +177,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.lightGreen,
-              ),
-              child: const Text(
-                'تجاهل',
-                style: TextStyle(color: Colors.white),
-              ),
+                  backgroundColor: AppColors.lightGreen),
+              child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -211,6 +207,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     if (canLeave) _doExit();
   }
 
+  // ===== Validators =====
+
   String? _validatePrice(String? v) {
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'السعر مطلوب';
@@ -227,81 +225,76 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   String? _validateDesc(String? v) {
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'وصف الباقة مطلوب';
-    if (s.length < _descMin) return 'وصف الباقة لازم يكون على الأقل $_descMin أحرف';
+    if (s.length < _descMin) {
+      return 'وصف الباقة لازم يكون على الأقل $_descMin أحرف';
+    }
     if (s.length > _descMax) return 'وصف الباقة لازم يكون أقل من $_descMax حرف';
     return null;
   }
 
-  String? _validateFeatures() {
+  String? _validateFeaturesInline() {
     final list = _featuresNow;
     if (list.isEmpty) return 'أضف ميزة واحدة على الأقل';
 
     for (final f in list) {
-      if (f.length < _featureMin) return 'كل ميزة لازم تكون على الأقل $_featureMin أحرف';
-      if (f.length > _featureMax) return 'كل ميزة لازم تكون أقل من $_featureMax حرف';
+      if (f.length < _featureMin) {
+        return 'كل ميزة لازم تكون على الأقل $_featureMin أحرف';
+      }
+      if (f.length > _featureMax) {
+        return 'كل ميزة لازم تكون أقل من $_featureMax حرف';
+      }
     }
     return null;
   }
 
-  String? _serviceKeyOf(ProviderServiceModel s) {
-    final k1 = FixedServiceCategories.keyFromAnyString(s.name);
-    if (k1 != null) return k1;
+  // ✅ Arabic service name (priority: categoryOther -> fixed map -> fallback)
+  String _serviceDisplayName(ProviderServiceModel s) {
+    final ar = (s.categoryOther ?? '').trim();
+    if (ar.isNotEmpty) return ar;
 
-    final k2 = FixedServiceCategories.keyFromAnyString(s.categoryOther ?? '');
-    if (k2 != null) return k2;
-
-    return null;
-  }
-
-  ProviderServiceModel? _serviceForKey(
-      List<ProviderServiceModel> services, String key) {
-    for (final s in services) {
-      final k = _serviceKeyOf(s);
-      if (k == key) return s;
+    final key = FixedServiceCategories.keyFromAnyString(s.name) ??
+        FixedServiceCategories.keyFromAnyString(s.categoryOther ?? '');
+    if (key != null) {
+      final labelAr = FixedServiceCategories.labelArFromKey(key);
+      if (labelAr.trim().isNotEmpty) return labelAr.trim();
     }
-    return null;
+
+    final n = s.name.trim();
+    if (n.isNotEmpty) return n;
+
+    return 'خدمة #${s.id}';
   }
 
   void _addFeature() {
     setState(() => _featuresCtrls.add(TextEditingController()));
+    _featuresFieldState?.validate(); // ✅ لو في error، ينشال/يتحدث مباشرة
   }
 
   void _removeFeature(int index) {
     if (_featuresCtrls.length <= 1) {
       _featuresCtrls.first.clear();
       setState(() {});
+      _featuresFieldState?.validate();
       return;
     }
     final c = _featuresCtrls.removeAt(index);
     c.dispose();
     setState(() {});
+    _featuresFieldState?.validate();
   }
 
   Future<void> _save(List<ProviderServiceModel> services) async {
     if (_submitting) return;
 
     final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) return;
+    final featuresOk = _featuresFieldState?.validate() ?? true;
+    if (!valid || !featuresOk) return;
 
-    final featuresError = _validateFeatures();
-    if (featuresError != null) {
+    if (_selectedServiceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            featuresError,
-            style: const TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (_selectedCategoryKey == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'اختر الفئة أولاً',
+            'اختر الخدمة أولاً',
             style: AppTextStyles.body14.copyWith(color: Colors.white),
           ),
           backgroundColor: Colors.red,
@@ -310,22 +303,12 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
       return;
     }
 
-    final key = _selectedCategoryKey!;
-    final service = _serviceForKey(services, key);
-    if (service == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'لا توجد خدمة لهذه الفئة. أنشئ خدمة أولاً.',
-            style: AppTextStyles.body14.copyWith(color: Colors.white),
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    final service = services.firstWhere(
+      (s) => s.id == _selectedServiceId,
+      orElse: () => services.first,
+    );
 
-    // منع تكرار النوع
+    // منع تكرار النوع داخل نفس الخدمة
     if (_typeExistsInService(service, _selectedType)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -353,7 +336,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     final newPackages = [
       for (final p in service.packages) p.toJson(),
       {
-        'name': _typeTitleAr(_selectedType), // ✅ نخزنها عربي
+        'name': _typeTitleAr(_selectedType),
         'price': price,
         'description': _desc.text.trim(),
         'features': _featuresNow,
@@ -363,18 +346,9 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     setState(() => _submitting = true);
 
     try {
-      final idMap = await ref.read(categoriesIdMapProvider.future);
-      final categoryId = idMap[key];
-
       final payload = <String, dynamic>{
         'packages': newPackages,
       };
-
-      if (categoryId != null) {
-        payload['category_id'] = categoryId;
-        payload['category_other'] = FixedServiceCategories.labelArFromKey(key);
-        payload['name'] = key;
-      }
 
       await ApiClient.dio.put(
         ApiConstants.serviceDetails(service.id),
@@ -387,8 +361,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('تمت إضافة الباقة بنجاح'),
+        const SnackBar(
+          content: Text('تمت إضافة الباقة بنجاح'),
           backgroundColor: AppColors.lightGreen,
         ),
       );
@@ -397,9 +371,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     } catch (err) {
       if (!mounted) return;
 
-      // ✅ Use your unified translator
       final msg = errorText(err);
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -418,11 +390,10 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
   Widget build(BuildContext context) {
     SizeConfig.init(context);
     final servicesAsync = ref.watch(providerMyServicesProvider);
-    _selectedCategoryKey ??= FixedServiceCategories.all.first.key;
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         await _exit();
       },
@@ -474,25 +445,32 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                       ),
                       SizeConfig.v(16),
                       ElevatedButton(
-                        onPressed: () => context.push(AppRoutes.providerAddService),
+                        onPressed: () =>
+                            context.push(AppRoutes.providerAddService),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.lightGreen,
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14)),
-                          padding: SizeConfig.padding(horizontal: 18, vertical: 12),
+                          padding:
+                              SizeConfig.padding(horizontal: 18, vertical: 12),
                         ),
                         child: Text(
                           'إنشاء خدمة أولاً',
-                          style: AppTextStyles.body14.copyWith(color: Colors.white),
+                          style: AppTextStyles.body14
+                              .copyWith(color: Colors.white),
                         ),
                       ),
                     ],
                   );
                 }
 
-                final matchedService =
-                    _serviceForKey(services, _selectedCategoryKey!);
-                final hasService = matchedService != null;
+                // ✅ init default selection once
+                _selectedServiceId ??= services.first.id;
+
+                final selectedService = services.firstWhere(
+                  (s) => s.id == _selectedServiceId,
+                  orElse: () => services.first,
+                );
 
                 return SingleChildScrollView(
                   child: AbsorbPointer(
@@ -502,10 +480,12 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _label('اختر الفئة *'),
+                          // ✅ Service Name (Arabic)
+                          _label('اسم الخدمة *'),
                           SizeConfig.v(6),
-                          _categoryDropdown(),
-                          SizeConfig.v(10),
+                          _serviceDropdown(services),
+
+                          SizeConfig.v(12),
                           Container(
                             width: double.infinity,
                             padding: SizeConfig.padding(all: 14),
@@ -513,41 +493,33 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: hasService
-                                    ? AppColors.lightGreen.withValues(alpha: 0.35)
-                                    : Colors.red.withValues(alpha: 0.25),
+                                color: AppColors.lightGreen
+                                    .withValues(alpha: 0.35),
                               ),
                             ),
                             child: Row(
                               children: [
-                                Icon(
-                                  hasService
-                                      ? Icons.check_circle
-                                      : Icons.info_outline,
-                                  color:
-                                      hasService ? AppColors.lightGreen : Colors.red,
-                                ),
+                                const Icon(Icons.check_circle,
+                                    color: AppColors.lightGreen),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
-                                    hasService
-                                        ? 'تم العثور على خدمة لهذه الفئة ✅'
-                                        : 'لا توجد خدمة لهذه الفئة. أنشئ خدمة أولاً.',
+                                    'سيتم إضافة الباقة داخل: ${_serviceDisplayName(selectedService)}',
                                     style: AppTextStyles.body14.copyWith(
-                                      color: hasService
-                                          ? AppColors.textPrimary
-                                          : Colors.red,
-                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
+
                           SizeConfig.v(18),
                           _label('نوع الباقة *'),
                           SizeConfig.v(8),
-                          _typeSelector(matchedService),
+                          _typeSelector(selectedService),
+
                           SizeConfig.v(18),
                           _label('السعر (د.أ) *'),
                           _input(
@@ -556,6 +528,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                             keyboardType: TextInputType.number,
                             validator: _validatePrice,
                           ),
+
                           SizeConfig.v(18),
                           _label('وصف الباقة *'),
                           _input(
@@ -564,21 +537,56 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                             maxLines: 3,
                             validator: _validateDesc,
                           ),
-                          SizeConfig.v(16),
-                          _featuresSection(),
+
+                          // ✅ Features with inline error under section
+                          FormField<List<String>>(
+                            initialValue: _featuresNow,
+                            autovalidateMode:
+                                AutovalidateMode.onUserInteraction,
+                            validator: (_) => _validateFeaturesInline(),
+                            builder: (state) {
+                              _featuresFieldState = state;
+
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  SizeConfig.v(10),
+                                  _featuresSection(
+                                    onChanged: () {
+                                      state.didChange(_featuresNow);
+                                      state.validate();
+                                    },
+                                  ),
+                                  if (state.hasError) ...[
+                                    const SizedBox(height: 6),
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: Text(
+                                        state.errorText ?? '',
+                                        style: TextStyle(
+                                          color: Colors.red,
+                                          fontSize: SizeConfig.ts(12.5),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+
                           SizeConfig.v(26),
                           Row(
                             children: [
                               Expanded(
                                 child: ElevatedButton(
-                                  onPressed: hasService ? () => _save(services) : null,
+                                  onPressed: () => _save(services),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.lightGreen,
-                                    disabledBackgroundColor:
-                                        AppColors.lightGreen.withValues(alpha: 0.25),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
                                     padding: SizeConfig.padding(vertical: 14),
                                   ),
                                   child: _submitting
@@ -586,9 +594,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                           width: 20,
                                           height: 20,
                                           child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white,
-                                          ),
+                                              strokeWidth: 2,
+                                              color: Colors.white),
                                         )
                                       : Text(
                                           'حفظ الباقة',
@@ -605,11 +612,10 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                                   onPressed: _exit,
                                   style: OutlinedButton.styleFrom(
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
                                     side: const BorderSide(
-                                      color: AppColors.buttonBackground,
-                                    ),
+                                        color: AppColors.buttonBackground),
                                     padding: SizeConfig.padding(vertical: 14),
                                   ),
                                   child: Text(
@@ -631,6 +637,37 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
               },
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _serviceDropdown(List<ProviderServiceModel> services) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _selectedServiceId,
+          isExpanded: true,
+          items: services
+              .map(
+                (s) => DropdownMenuItem<int>(
+                  value: s.id,
+                  child: Text(
+                    _serviceDisplayName(s), // ✅ Arabic
+                    style: AppTextStyles.body14.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedServiceId = v),
         ),
       ),
     );
@@ -675,7 +712,9 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                   _typeTitleAr(type),
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: already ? AppColors.textSecondary : AppColors.textPrimary,
+                    color: already
+                        ? AppColors.textSecondary
+                        : AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -693,7 +732,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                   const SizedBox(height: 8),
                   const Text(
                     'موجودة مسبقاً',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w800),
+                    style: TextStyle(
+                        color: Colors.red, fontWeight: FontWeight.w800),
                   ),
                 ],
               ],
@@ -714,7 +754,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     );
   }
 
-  Widget _featuresSection() {
+  Widget _featuresSection({required VoidCallback onChanged}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -726,7 +766,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
               icon: const Icon(Icons.add, color: AppColors.lightGreen),
               label: const Text(
                 'إضافة ميزة',
-                style: TextStyle(color: AppColors.lightGreen, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                    color: AppColors.lightGreen, fontWeight: FontWeight.w800),
               ),
             ),
           ],
@@ -760,6 +801,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
                       if (s.length > _featureMax) return 'طويلة جداً';
                       return null;
                     },
+                    onChanged: (_) => onChanged(),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -772,34 +814,6 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
           },
         ),
       ],
-    );
-  }
-
-  Widget _categoryDropdown() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedCategoryKey,
-          isExpanded: true,
-          items: FixedServiceCategories.all
-              .map(
-                (c) => DropdownMenuItem<String>(
-                  value: c.key,
-                  child: Text(
-                    c.labelAr,
-                    style: AppTextStyles.body14.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (v) => setState(() => _selectedCategoryKey = v),
-        ),
-      ),
     );
   }
 
@@ -818,6 +832,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    void Function(String)? onChanged,
   }) {
     return Padding(
       padding: const EdgeInsets.only(top: 6, bottom: 12),
@@ -825,6 +840,7 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
         controller: c,
         maxLines: maxLines,
         keyboardType: keyboardType,
+        onChanged: onChanged,
         style: AppTextStyles.body14.copyWith(
           fontSize: SizeConfig.ts(13.5),
           color: AppColors.textPrimary,
@@ -843,7 +859,8 @@ class _AddPackageViewState extends ConsumerState<AddPackageView> {
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
         validator: validator,
       ),

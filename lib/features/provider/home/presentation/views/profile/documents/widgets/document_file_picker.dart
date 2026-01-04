@@ -1,12 +1,16 @@
 // lib/features/provider/home/presentation/views/profile/documents/widgets/document_file_picker.dart
-
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 class DocumentFilePicker {
-  static const int maxFilesPerDoc = 2;
+  /// default (ID card)
+  static const int maxFilesForIdCard = 2;
+
+  /// for other documents
+  static const int maxFilesForSingleDoc = 1;
+
   static const int maxFileSizeBytes = 5 * 1024 * 1024; // 5MB
 
   static const List<String> allowedExtensions = [
@@ -17,10 +21,10 @@ class DocumentFilePicker {
     'webp',
   ];
 
-  static Future<List<File>> pickWithFilePicker() async {
+  static Future<List<File>> pickWithFilePicker({required int maxFiles}) async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
+        allowMultiple: maxFiles > 1,
         type: FileType.custom,
         allowedExtensions: allowedExtensions,
       );
@@ -35,19 +39,27 @@ class DocumentFilePicker {
         if (await file.exists()) files.add(file);
       }
 
-      return files.take(maxFilesPerDoc).toList();
+      return files.take(maxFiles).toList();
     } catch (_) {
       return <File>[];
     }
   }
 
-  static Future<List<File>> pickUpToTwoFromGallery(ImagePicker picker) async {
-    try {
-      final list = await picker.pickMultiImage(imageQuality: 85);
-      if (list.isNotEmpty) {
-        return list.map((x) => File(x.path)).take(maxFilesPerDoc).toList();
+  static Future<List<File>> pickFromGallery(
+    ImagePicker picker, {
+    required int maxFiles,
+  }) async {
+    // لو أكثر من 1 نستخدم multi إن أمكن
+    if (maxFiles > 1) {
+      try {
+        final list = await picker.pickMultiImage(imageQuality: 85);
+        if (list.isNotEmpty) {
+          return list.map((x) => File(x.path)).take(maxFiles).toList();
+        }
+      } catch (_) {
+        // نكمل fallback تحت
       }
-    } catch (_) {}
+    }
 
     final one = await picker.pickImage(
       source: ImageSource.gallery,
@@ -57,13 +69,14 @@ class DocumentFilePicker {
     return <File>[File(one.path)];
   }
 
-  static Future<List<File>> captureUpToTwoFromCamera(
+  static Future<List<File>> captureFromCamera(
     ImagePicker picker, {
+    required int maxFiles,
     required Future<bool> Function() askAddMore,
   }) async {
     final result = <File>[];
 
-    while (result.length < maxFilesPerDoc) {
+    while (result.length < maxFiles) {
       final xFile = await picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 85,
@@ -72,8 +85,9 @@ class DocumentFilePicker {
 
       result.add(File(xFile.path));
 
-      if (result.length >= maxFilesPerDoc) break;
+      if (result.length >= maxFiles) break;
 
+      // لو maxFiles=1 ما رح نوصل هون
       final addMore = await askAddMore();
       if (!addMore) break;
     }
@@ -81,8 +95,11 @@ class DocumentFilePicker {
     return result;
   }
 
-  static Future<String?> validateFiles(List<File> files) async {
-    final trimmed = files.take(maxFilesPerDoc).toList();
+  static Future<String?> validateFiles(
+    List<File> files, {
+    required int maxFiles,
+  }) async {
+    final trimmed = files.take(maxFiles).toList();
     if (trimmed.isEmpty) return 'لم يتم اختيار أي ملف';
 
     for (final f in trimmed) {

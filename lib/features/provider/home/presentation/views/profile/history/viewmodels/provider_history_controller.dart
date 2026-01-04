@@ -284,6 +284,7 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
   }
 
   /// ✅ إرسال تقييم مزود الخدمة (provider->user)
+    /// ✅ إرسال تقييم مزود الخدمة (provider->user)
   Future<void> submitProviderRating({
     required int bookingId,
     required int providerRating,
@@ -292,6 +293,14 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
   }) async {
     final current = state.asData?.value;
     if (current == null) return;
+
+    // ✅ Validation (حتى لو UI نسي)
+    if (providerRating <= 0) {
+      throw Exception('يرجى اختيار التقييم قبل الإرسال');
+    }
+    if (amountPaid <= 0) {
+      throw Exception('يرجى إدخال المبلغ المدفوع بشكل صحيح');
+    }
 
     if (current.isRated(bookingId)) {
       throw Exception('تم تقييم هذه الخدمة مسبقاً.');
@@ -329,7 +338,9 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       final latest = state.asData?.value ?? current;
       final submitting2 = {...latest.submittingRatingIds}..remove(bookingId);
       state = AsyncData(latest.copyWith(submittingRatingIds: submitting2));
-      throw Exception(friendlyDioText(e));
+
+      // ✅ خلي الرسالة عربية وواضحة (حسب error_text.dart عندك)
+      throw Exception(errorText(e));
     } catch (_) {
       final latest = state.asData?.value ?? current;
       final submitting2 = {...latest.submittingRatingIds}..remove(bookingId);
@@ -337,6 +348,7 @@ class ProviderHistoryController extends AsyncNotifier<ProviderHistoryState> {
       throw Exception('تعذر إرسال التقييم. حاول مرة أخرى.');
     }
   }
+
 
   // ===================== helpers =====================
 

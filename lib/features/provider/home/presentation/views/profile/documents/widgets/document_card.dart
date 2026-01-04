@@ -19,6 +19,11 @@ class DocumentCard extends StatelessWidget {
     required this.onOpenTap,
   });
 
+  int _maxFilesForDoc(ProviderDocument d) {
+    // الهوية فقط 2، غيرها 1
+    return d.kind == ProviderDocKind.idCard ? 2 : 1;
+  }
+
   String _fileLine(ProviderDocument d) {
     if (d.fileNames.isEmpty) return 'لم يتم رفع أي ملف بعد';
     if (d.fileNames.length == 1) return d.fileNames.first;
@@ -31,28 +36,33 @@ class DocumentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasFiles = document.fileNames.isNotEmpty;
+    final maxFiles = _maxFilesForDoc(document);
+    final isAtLimit = document.fileNames.length >= maxFiles;
+
     final borderColor = document.isVerified
         ? AppColors.lightGreen
         : AppColors.borderLight.withValues(alpha: 0.8);
 
-    final hasFiles = document.fileNames.isNotEmpty;
-
     final statusColor =
         document.isVerified ? AppColors.lightGreen : AppColors.textSecondary;
 
+    // ✅ كل الوثائق مطلوبة (لا اختياري/موصى بها)
     final statusText = document.isVerified
         ? 'موثّقة'
-        : (!hasFiles
-            ? (document.isRequired
-                ? 'مطلوبة'
-                : (document.isRecommended ? 'موصى بها' : 'اختيارية'))
-            : 'قيد المراجعة');
+        : (!hasFiles ? 'مطلوبة' : 'قيد المراجعة');
 
     final statusIcon = document.isVerified
         ? Icons.check_circle
         : (hasFiles ? Icons.hourglass_top_rounded : Icons.lock_outline);
 
-    final buttonLabel = !hasFiles ? 'رفع الوثائق' : 'تحديث الوثائق';
+    // ✅ زر الرفع: إذا وصلت الحد وما في استبدال/حذف => نوقفه
+    final canUpload = (onUploadTap != null) && !document.isUploading && !isAtLimit;
+
+    final buttonLabel = !hasFiles
+        ? 'رفع الوثائق'
+        : (isAtLimit ? 'تم الرفع' : 'إضافة / تحديث');
+
     final fileLine = _fileLine(document);
 
     return Container(
@@ -144,10 +154,13 @@ class DocumentCard extends StatelessWidget {
           SizedBox(
             height: SizeConfig.h(42),
             child: ElevatedButton(
-              onPressed: onUploadTap,
+              onPressed: canUpload ? onUploadTap : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.lightGreen,
+                disabledBackgroundColor:
+                    AppColors.lightGreen.withValues(alpha: 0.35),
                 foregroundColor: Colors.white,
+                disabledForegroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(SizeConfig.radius(10)),
                 ),
@@ -173,11 +186,30 @@ class DocumentCard extends StatelessWidget {
                           ),
                         ),
                         SizeConfig.hSpace(6),
-                        const Icon(Icons.upload_rounded, size: 18),
+                        Icon(
+                          isAtLimit ? Icons.check_circle_outline : Icons.upload_rounded,
+                          size: 18,
+                        ),
                       ],
                     ),
             ),
           ),
+
+          // ✅ سطر بسيط يوضح السبب لما يكون Disabled
+          if (isAtLimit && !document.isVerified) ...[
+            SizeConfig.v(6),
+            Text(
+              document.kind == ProviderDocKind.idCard
+                  ? 'تم رفع الحد الأقصى للهوية (2 ملفات).'
+                  : 'تم رفع الحد الأقصى لهذه الوثيقة (ملف واحد).',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption11.copyWith(
+                fontSize: SizeConfig.ts(11.2),
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ],
       ),
     );

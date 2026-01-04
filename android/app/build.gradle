@@ -7,7 +7,7 @@ plugins {
 
 
 android {
-    namespace = "com.example.beitak_app"
+    namespace = "com.beitak.app"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -21,9 +21,16 @@ android {
 }
 
 
+    // ✅ P1: Load signing config from key.properties
+    def keystoreProperties = new Properties()
+    def keystorePropertiesFile = rootProject.file('key.properties')
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.beitak_app"
+        applicationId = "com.beitak.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdkVersion = flutter.minSdkVersion
@@ -32,11 +39,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties['keyAlias']
+                keyPassword = keystoreProperties['keyPassword']
+                storeFile = file(keystoreProperties['storeFile'])
+                storePassword = keystoreProperties['storePassword']
+            } else {
+                // Fallback for CI/CD or if keys are missing (prints warning)
+                println("⚠️ Warning: key.properties not found. Release build will likely fail signing.")
+                // signingConfig = signingConfigs.debug // Unwrap if you want to force debug signing temporarily
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // ✅ Use the release signing config
+            signingConfig signingConfigs.release
+            // Recommended: Enable shrinking for production
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

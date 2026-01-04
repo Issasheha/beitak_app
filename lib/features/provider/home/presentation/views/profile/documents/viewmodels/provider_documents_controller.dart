@@ -11,7 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'provider_documents_state.dart';
 
 class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> {
-  static const int _maxFilesPerDoc = 2;
   static const int _maxBytesPerFile = 5 * 1024 * 1024; // 5MB
 
   static const Set<String> _allowedExt = {
@@ -19,6 +18,7 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     'jpeg',
     'png',
     'pdf',
+    'webp',
   };
 
   int? _cachedProviderId;
@@ -29,6 +29,11 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
   }
 
   // ---------------- helpers ----------------
+
+  int _maxFilesForKind(ProviderDocKind kind) {
+    // QA: الهوية فقط ملفين، غيرها ملف واحد
+    return kind == ProviderDocKind.idCard ? 2 : 1;
+  }
 
   Future<int> _resolveProviderId() async {
     if (_cachedProviderId != null) return _cachedProviderId!;
@@ -77,6 +82,17 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     return p.substring(i + 1);
   }
 
+  String _docTitle(ProviderDocKind kind) {
+    switch (kind) {
+      case ProviderDocKind.idCard:
+        return 'بطاقة الهوية';
+      case ProviderDocKind.workLicense:
+        return 'رخصة العمل / الترخيص المهني';
+      case ProviderDocKind.policeClearance:
+        return 'شهادة عدم المحكومية';
+    }
+  }
+
   // ---------------- load ----------------
 
   Future<ProviderDocumentsState> _loadFromApi() async {
@@ -110,8 +126,11 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
         title: 'شهادة عدم المحكومية',
         fileNames: _files(provider['police_clearance_image']),
         isVerified: _b(provider['is_police_clearance_verified']),
-        isRequired: false,
-        isRecommended: true,
+        isRequired: true,
+
+        // ✅ IMPORTANT: كل الوثائق مطلوبة (لا يوجد اختياري/مستحسن)
+        isRecommended: false,
+
         isUploading: false,
       ),
     ];
@@ -120,7 +139,6 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
   }
 
   Future<void> refresh() async {
-    // ✅ تحسين: لو عندك بيانات، اعمل silent refresh بدون ما تقلب Loading
     final prev = state.asData?.value;
     if (prev == null) {
       state = const AsyncLoading();
@@ -149,6 +167,8 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
 
     final doc = current.docs.firstWhere((d) => d.kind == kind);
 
+    final maxFiles = _maxFilesForKind(kind);
+
     // ✅ avoid sync IO
     final cleanFiles = <File>[];
     for (final f in files) {
@@ -156,25 +176,35 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
         if (await f.exists()) cleanFiles.add(f);
       } catch (_) {}
     }
+
     if (cleanFiles.isEmpty) return 'لم يتم اختيار أي ملف';
 
-    if (cleanFiles.length > _maxFilesPerDoc) {
-      return 'يمكنك رفع ملفين كحد أقصى لكل وثيقة';
+    if (cleanFiles.length > maxFiles) {
+      return kind == ProviderDocKind.idCard
+          ? 'الهوية فقط: يمكنك رفع ملفين كحد أقصى (أمامي + خلفي) أو PDF.'
+          : 'يمكنك رفع ملف واحد فقط لهذه الوثيقة (صورة أو PDF).';
     }
 
     final existingCount = doc.fileNames.length;
-    if (existingCount + cleanFiles.length > _maxFilesPerDoc) {
-      final remaining = (_maxFilesPerDoc - existingCount).clamp(0, 2);
-      return remaining == 0
-          ? 'لديك بالفعل ملفين لهذه الوثيقة. قم بتحديثهما لاحقًا عند توفر خيار الحذف/الاستبدال.'
-          : 'يمكنك رفع $remaining ملف/ملفات إضافية فقط لهذه الوثيقة';
+    if (existingCount + cleanFiles.length > maxFiles) {
+      final remaining = (maxFiles - existingCount).clamp(0, maxFiles);
+
+      if (remaining == 0) {
+        return kind == ProviderDocKind.idCard
+            ? 'لديك بالفعل ملفين للهوية. (حالياً لا يوجد استبدال/حذف من التطبيق)'
+            : 'لديك بالفعل ملف لهذه الوثيقة. (حالياً لا يوجد استبدال/حذف من التطبيق)';
+      }
+
+      return kind == ProviderDocKind.idCard
+          ? 'يمكنك رفع $remaining ملف/ملفات إضافية فقط للهوية'
+          : 'يمكنك رفع ملف إضافي واحد فقط لهذه الوثيقة';
     }
 
     // ✅ type + size validations (async)
     for (final f in cleanFiles) {
       final ext = _extOfPath(f.path);
       if (!_allowedExt.contains(ext)) {
-        return 'نوع الملف غير مدعوم. الصيغ المدعومة: PDF, JPG, PNG';
+        return 'نوع الملف غير مدعوم. الصيغ المدعومة: PDF, JPG, PNG, WEBP';
       }
       try {
         final bytes = await f.length();
@@ -182,7 +212,7 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
           return 'حجم الملف كبير. الحد الأقصى 5MB لكل ملف';
         }
       } catch (_) {
-        return 'تعذر قراءة حجم الملف، حاول اختيار ملف آخر';
+        return 'تعذر قراءة الملف، حاول اختيار ملف آخر';
       }
     }
 
@@ -250,13 +280,13 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
           .map((d) => d.kind == kind ? d.copyWith(isUploading: false) : d)
           .toList();
       state = AsyncData(current.copyWith(docs: rollbackDocs));
-      return _friendlyDio(e);
+      return _friendlyDio(e, fallbackDoc: _docTitle(kind));
     } catch (_) {
       final rollbackDocs = current.docs
           .map((d) => d.kind == kind ? d.copyWith(isUploading: false) : d)
           .toList();
       state = AsyncData(current.copyWith(docs: rollbackDocs));
-      return 'فشل رفع الوثيقة، حاول مرة أخرى';
+      return 'فشل رفع ${_docTitle(kind)}، حاول مرة أخرى';
     }
   }
 
@@ -271,19 +301,37 @@ class ProviderDocumentsController extends AsyncNotifier<ProviderDocumentsState> 
     }
   }
 
-  String _friendlyDio(DioException e) {
+  String _friendlyDio(DioException e, {String? fallbackDoc}) {
     final code = e.response?.statusCode;
     final data = e.response?.data;
 
-    String msg = '';
-    if (data is Map) msg = (data['message'] ?? data['error'] ?? '').toString();
-    if (data is String) msg = data;
+    // Validation errors array
+    if (data is Map && data['errors'] is List) {
+      final errs = (data['errors'] as List)
+          .whereType<Map>()
+          .map((m) => (m['message'] ?? '').toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (errs.isNotEmpty) return errs.join('\n');
+    }
 
-    if (code == 400) return msg.isNotEmpty ? msg : 'بيانات غير صحيحة';
+    String msg = '';
+    if (data is Map) {
+      msg = (data['message'] ?? data['error'] ?? '').toString().trim();
+    } else if (data is String) {
+      msg = data.trim();
+    }
+
+    if (code == 400) {
+      return msg.isNotEmpty ? msg : 'بيانات غير صحيحة';
+    }
     if (code == 401) return 'انتهت الجلسة، أعد تسجيل الدخول';
     if (code == 403) return 'ليس لديك صلاحية';
+    if (code == 404) return 'المسار غير موجود على الخادم';
     if (msg.isNotEmpty) return msg;
 
-    return 'خطأ بالشبكة، حاول مرة أخرى';
+    return fallbackDoc == null
+        ? 'خطأ بالشبكة، حاول مرة أخرى'
+        : 'تعذر رفع $fallbackDoc حالياً، حاول مرة أخرى';
   }
 }

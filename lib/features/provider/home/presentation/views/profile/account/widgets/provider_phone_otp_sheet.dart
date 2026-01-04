@@ -70,6 +70,60 @@ class _ProviderPhoneOtpSheetState extends State<ProviderPhoneOtpSheet> {
     }
   }
 
+  Future<void> _handleResend() async {
+    try {
+      await _runWithLoading(() async {
+        final err = await widget.onResend();
+        if (err != null) throw Exception(err);
+      });
+
+      if (!mounted) return;
+      _startTimer();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم إعادة إرسال الرمز')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', '').trim(),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _handleVerify() async {
+    final code = _otpC.text.trim();
+
+    if (code.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('أدخل رمز مكوّن من 6 أرقام')),
+      );
+      return;
+    }
+
+    try {
+      await _runWithLoading(() async {
+        final err = await widget.onVerify(code);
+        if (err != null) throw Exception(err);
+      });
+
+      if (!mounted) return;
+      Navigator.pop(context, true); // ✅ success
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', '').trim(),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canResend = _secondsLeft == 0;
@@ -158,31 +212,11 @@ class _ProviderPhoneOtpSheetState extends State<ProviderPhoneOtpSheet> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: (!_loading && canResend)
-                      ? () async {
-                          await _runWithLoading(() async {
-                            final err = await widget.onResend();
-                            if (err != null) throw Exception(err);
-                          }).then((_) {
-                            if (!mounted) return;
-                            _startTimer();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('تم إعادة إرسال الرمز')),
-                            );
-                          }).catchError((e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
-                            );
-                          });
-                        }
-                      : null,
+                  onPressed: (!_loading && canResend) ? _handleResend : null,
                   child: Text(
-                    canResend ? 'إعادة إرسال الرمز' : 'إعادة الإرسال خلال $_secondsLeft ث',
+                    canResend
+                        ? 'إعادة إرسال الرمز'
+                        : 'إعادة الإرسال خلال $_secondsLeft ث',
                     style: AppTextStyles.body14.copyWith(
                       color: canResend
                           ? AppColors.lightGreen
@@ -204,34 +238,7 @@ class _ProviderPhoneOtpSheetState extends State<ProviderPhoneOtpSheet> {
                       borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
                     ),
                   ),
-                  onPressed: _loading
-                      ? null
-                      : () async {
-                          final code = _otpC.text.trim();
-                          if (code.length != 6) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('أدخل رمز مكوّن من 6 أرقام')),
-                            );
-                            return;
-                          }
-
-                          await _runWithLoading(() async {
-                            final err = await widget.onVerify(code);
-                            if (err != null) throw Exception(err);
-                          }).then((_) {
-                            if (!mounted) return;
-                            Navigator.pop(context, true); // ✅ success
-                          }).catchError((e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
-                            );
-                          });
-                        },
+                  onPressed: _loading ? null : _handleVerify,
                   child: _loading
                       ? const SizedBox(
                           height: 18,

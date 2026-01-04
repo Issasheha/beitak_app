@@ -1,7 +1,9 @@
 // lib/core/network/api_client.dart
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // ✅ For kDebugMode
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart'; // ✅ For IOHttpClientAdapter
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -25,9 +27,21 @@ class ApiClient {
         'Accept': 'application/json',
       },
     ),
-  )
-    // ✅ IMPORTANT: هذا لازم يكون قبل InterceptorsWrapper عشان الـ cookies تنحفظ وتتنرسل تلقائيًا
-    ..interceptors.add(CookieManager(_cookieJar))
+  )..interceptors.add(CookieManager(_cookieJar))
+    // ✅ P2: Certificate Pinning (Verify server identity)
+    // Note: This requires HTTPS. Enable this block once API endpoint uses HTTPS.
+    // ..httpClientAdapter = IOHttpClientAdapter(
+    //   createHttpClient: () {
+    //     final client = HttpClient();
+    //     client.badCertificateCallback = (cert, host, port) {
+    //       // ⚠️ SECURITY: Replace with actual SHA-256 hash or public key verification
+    //       // For development (self-signed): return true;
+    //       // For production: Verify cert.sha256 matches your known hash
+    //       return false; 
+    //     };
+    //     return client;
+    //   },
+    // )
     ..interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -180,7 +194,12 @@ class ApiClient {
 
   // ----------------- Logs -----------------
 
+  // ----------------- Logs (Guarded for Release) -----------------
+
   static void _logRequest(RequestOptions o) {
+    // ✅ P0: Disable logs in release mode to prevent token leakage
+    if (!kDebugMode) return;
+
     final auth = (o.headers['Authorization'] ?? '').toString();
     final maskedAuth = _maskBearer(auth);
 
@@ -210,6 +229,8 @@ class ApiClient {
   }
 
   static void _logResponse(Response r) {
+    // ✅ P0: Disable logs in release
+    if (!kDebugMode) return;
     final dataPreview = _previewResponse(r.data);
 
     // ignore: avoid_print
@@ -225,6 +246,8 @@ class ApiClient {
   }
 
   static void _logError(DioException e) {
+    // ✅ P0: Disable logs in release
+    if (!kDebugMode) return;
     final ro = e.requestOptions;
 
     final auth = (ro.headers['Authorization'] ?? '').toString();

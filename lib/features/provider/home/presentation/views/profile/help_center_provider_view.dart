@@ -17,74 +17,6 @@ class HelpCenterProviderView extends StatefulWidget {
 }
 
 class _HelpCenterViewState extends State<HelpCenterProviderView> {
-  final _formKey = GlobalKey<FormState>();
-
-  late final TextEditingController _name;
-  late final TextEditingController _email;
-  late final TextEditingController _phone;
-  late final TextEditingController _message;
-
-  @override
-  void initState() {
-    super.initState();
-    _name = TextEditingController();
-    _email = TextEditingController();
-    _phone = TextEditingController();
-    _message = TextEditingController();
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _email.dispose();
-    _phone.dispose();
-    _message.dispose();
-    super.dispose();
-  }
-
-  InputDecoration _fieldDecoration({
-    required String label,
-    required String hint,
-    Widget? prefixIcon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      prefixIcon: prefixIcon,
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: SizeConfig.padding(horizontal: 14, vertical: 14),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        borderSide: BorderSide(
-          color: AppColors.borderLight.withValues(alpha: 0.7),
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        borderSide: const BorderSide(color: AppColors.lightGreen, width: 1.2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-      labelStyle: AppTextStyles.label12.copyWith(
-        fontSize: SizeConfig.ts(12.5),
-        color: AppColors.textSecondary,
-        fontWeight: FontWeight.w700,
-      ),
-      hintStyle: AppTextStyles.label12.copyWith(
-        fontSize: SizeConfig.ts(12.5),
-        color: AppColors.textSecondary.withValues(alpha: 0.7),
-        fontWeight: FontWeight.w400,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
@@ -179,22 +111,6 @@ class _HelpCenterViewState extends State<HelpCenterProviderView> {
         ),
       ),
     );
-  }
-
-  void _submit() {
-    final ok = _formKey.currentState?.validate() ?? false;
-    if (!ok) return;
-
-    FocusScope.of(context).unfocus();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم إرسال رسالتك ✅ سنقوم بالرد قريبًا')),
-    );
-
-    _name.clear();
-    _email.clear();
-    _phone.clear();
-    _message.clear();
   }
 }
 

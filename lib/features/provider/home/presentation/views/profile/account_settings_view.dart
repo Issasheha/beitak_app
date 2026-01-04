@@ -11,7 +11,7 @@ import 'package:dio/dio.dart';
 
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 
 class ProviderAccountSettingsView extends ConsumerStatefulWidget {
   const ProviderAccountSettingsView({super.key});
@@ -90,16 +90,6 @@ class _ProviderAccountSettingsViewState
                   },
                 ),
                 SizeConfig.v(10),
-                _SettingsNavCard(
-                  title: 'تعديل معلومات الحساب',
-                  subtitle: 'إدارة التفاصيل المرتبطة بحسابك',
-                  icon: Icons.person_outline,
-                  onTap: () {
-                    context.push(AppRoutes.provideraccountEdit);
-                  },
-                ),
-                SizeConfig.v(24),
-
                 _DeleteAccountButton(
                   isLoading: _isDeleting,
                   onTap: _isDeleting ? null : () => _onDeleteAccountTap(),
@@ -115,7 +105,7 @@ class _ProviderAccountSettingsViewState
   Future<void> _onDeleteAccountTap() async {
     final result = await showDialog<_DeletePayload?>(
       context: context,
-      barrierDismissible:   false,
+      barrierDismissible: false,
       builder: (_) => const _DeleteAccountDialog(),
     );
 
@@ -126,7 +116,7 @@ class _ProviderAccountSettingsViewState
     try {
       // ✅ DELETE /users/profile
       final res = await ApiClient.dio.delete(
-        ApiConstants.userProfile, // نفس endpoint اللي أعطاك الباك
+        ApiConstants.userProfile,
         data: {
           "password": result.password,
           "confirmation": result.confirmation,
@@ -146,11 +136,9 @@ class _ProviderAccountSettingsViewState
         const SnackBar(content: Text('تم حذف الحساب بنجاح')),
       );
 
-      // ✅ سجّل خروج (يمسح الجلسة)
       await ref.read(authControllerProvider.notifier).logout();
 
       if (!mounted) return;
-      // عادة الـ redirect تبع GoRouter رح يتعامل، بس هذا ضمان إضافي
       context.go(AppRoutes.login);
     } on DioException catch (e) {
       final msg = _friendlyDeleteError(e);
@@ -160,29 +148,117 @@ class _ProviderAccountSettingsViewState
       );
     } catch (e) {
       if (!mounted) return;
+      final m = e.toString().replaceFirst('Exception: ', '').trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        SnackBar(content: Text(m.isEmpty ? 'تعذر حذف الحساب حالياً' : m)),
       );
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
   }
 
+  // ✅ QA: لا نعرض إنجليزي — ترجمة أخطاء كلمة المرور/التحقق
   String _friendlyDeleteError(DioException e) {
     final code = e.response?.statusCode;
-    final msg = (e.response?.data?['message'] ?? '').toString();
+    final data = e.response?.data;
 
+    // 1) Cloudflare/HTML
+    if (data is String) {
+      final lower = data.toLowerCase();
+      if (lower.contains('<html') || lower.contains('cloudflare')) {
+        return 'يوجد عطل مؤقت في الخادم. حاول مرة أخرى بعد قليل.';
+      }
+    }
+
+    // 2) errors: [{field, message}]
+    if (data is Map && data['errors'] is List) {
+      final errs = (data['errors'] as List)
+          .whereType<Map>()
+          .map((m) => (m['message'] ?? '').toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (errs.isNotEmpty) {
+        // لو بينهم كلمة مرور غلط -> أعط رسالة واضحة
+        final joined = errs.join(' ').toLowerCase();
+        if (joined.contains('password') &&
+            (joined.contains('invalid') ||
+                joined.contains('incorrect') ||
+                joined.contains('wrong'))) {
+          return 'كلمة المرور غير صحيحة';
+        }
+        // غير هيك: رجّعهم كما هم (ولو إنجليزي، نترجم أشهرها تحت)
+        final first = errs.first;
+        final mapped = _mapCommonDeleteEnglish(first);
+        return mapped ?? first;
+      }
+    }
+
+    // 3) message/error
+    String msg = '';
+    if (data is Map) {
+      msg = (data['message'] ?? data['error'] ?? '').toString().trim();
+    } else if (data is String) {
+      msg = data.trim();
+    }
+
+    // 4) ترجمة أشهر الرسائل الإنجليزية
+    final mapped = _mapCommonDeleteEnglish(msg);
+    if (mapped != null) return mapped;
+
+    // 5) status-based fallbacks
     if (code == 400) {
-      // الباك ممكن يرجع رسائل مختلفة، نخليها واضحة
-      if (msg.isNotEmpty) return msg;
+      if (msg.isNotEmpty) return msg; // لو عربي أصلاً
       return 'بيانات الحذف غير صحيحة. تأكد من كلمة المرور وجملة التأكيد.';
     }
-    if (code == 401) return 'غير مصرح. تأكد أنك مسجل دخول.';
+    if (code == 401) return 'انتهت الجلسة. أعد تسجيل الدخول.';
     if (code == 403) return 'ليس لديك صلاحية.';
-    if (code == 404) return 'المسار غير موجود على السيرفر.';
-    if (msg.isNotEmpty) return msg;
+    if (code == 404) return 'المسار غير موجود على الخادم.';
 
-    return 'حدث خطأ بالشبكة، حاول مرة أخرى.';
+    // Dio types
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout) {
+      return 'انتهت مهلة الاتصال. تأكد من الإنترنت وحاول مرة أخرى.';
+    }
+    if (e.type == DioExceptionType.connectionError) {
+      return 'تعذر الاتصال بالخادم. تأكد من الإنترنت أو جرّب لاحقاً.';
+    }
+
+    return msg.isNotEmpty ? msg : 'حدث خطأ بالشبكة، حاول مرة أخرى.';
+  }
+
+  // ✅ ترجمة رسائل معروفة للحذف/الباسورد
+  String? _mapCommonDeleteEnglish(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+    final lower = s.toLowerCase();
+
+    // كلمة المرور
+    if (lower.contains('invalid password') ||
+        lower.contains('incorrect password') ||
+        lower.contains('wrong password') ||
+        (lower.contains('password') && lower.contains('invalid')) ||
+        (lower.contains('password') && lower.contains('incorrect'))) {
+      return 'كلمة المرور غير صحيحة';
+    }
+
+    // التأكيد
+    if (lower.contains('confirmation') &&
+        (lower.contains('invalid') || lower.contains('required'))) {
+      return 'جملة التأكيد غير صحيحة. اكتب "حذف حسابي" في خانة التأكيد.';
+    }
+
+    // تحقق عام
+    if (lower.contains('validation error')) {
+      return 'البيانات المدخلة غير صحيحة. تحقق من الحقول وحاول مرة أخرى.';
+    }
+
+    // رسائل عامة من فلاتر Dio
+    if (lower.contains('bad response') && lower.contains('status code')) {
+      return 'تعذر تنفيذ الطلب حالياً. حاول مرة أخرى.';
+    }
+
+    return null;
   }
 }
 
@@ -521,7 +597,6 @@ class _DeletePayload {
   });
 }
 
-
 class _DeleteAccountDialog extends StatefulWidget {
   const _DeleteAccountDialog();
 
@@ -530,10 +605,7 @@ class _DeleteAccountDialog extends StatefulWidget {
 }
 
 class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
-  // ✅ المستخدم يكتبها بالعربي
   static const uiPhraseAr = 'حذف حسابي';
-
-  // ✅ اللي الباك بده ياه (ثابت)
   static const apiPhraseEn = 'DELETE MY ACCOUNT';
 
   final _passCtrl = TextEditingController();
@@ -561,7 +633,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // ✅ حل overflow: حدّ أعلى للارتفاع + scroll
           final maxH = MediaQuery.of(context).size.height * 0.80;
 
           return ConstrainedBox(
@@ -572,7 +643,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
             child: Stack(
               alignment: Alignment.topCenter,
               children: [
-                // ===== Card Body =====
                 Padding(
                   padding: EdgeInsets.only(top: SizeConfig.h(44)),
                   child: ClipRRect(
@@ -588,7 +658,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             SizeConfig.v(22),
-
                             Text(
                               'هل أنت متأكد أنك تريد حذف الحساب؟',
                               textAlign: TextAlign.center,
@@ -599,7 +668,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                               ),
                             ),
                             SizeConfig.v(8),
-
                             Text(
                               'هذا الإجراء نهائي ولا يمكن التراجع عنه.\nسيتم حذف جميع بياناتك.',
                               textAlign: TextAlign.center,
@@ -610,10 +678,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-
                             SizeConfig.v(14),
-
-                            // Password
                             TextField(
                               controller: _passCtrl,
                               obscureText: _obscure,
@@ -636,13 +701,11 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                                 ),
                               ),
                             ),
-
                             SizeConfig.v(12),
-
                             Align(
                               alignment: Alignment.centerRight,
                               child: Text(
-                                uiPhraseAr, // ✅ صارت بالعربي
+                                uiPhraseAr,
                                 style: AppTextStyles.body14.copyWith(
                                   fontSize: SizeConfig.ts(12.8),
                                   fontWeight: FontWeight.w900,
@@ -651,13 +714,12 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                               ),
                             ),
                             SizeConfig.v(6),
-
                             TextField(
                               controller: _confirmCtrl,
                               onChanged: (_) => setState(() {}),
                               decoration: InputDecoration(
                                 labelText: 'اكتب جملة التأكيد',
-                                hintText: uiPhraseAr, // ✅ بالعربي
+                                hintText: uiPhraseAr,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(
                                     SizeConfig.radius(12),
@@ -665,10 +727,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                                 ),
                               ),
                             ),
-
                             SizeConfig.v(16),
-
-                            // Buttons
                             Row(
                               children: [
                                 Expanded(
@@ -706,7 +765,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                                               context,
                                               _DeletePayload(
                                                 password: _passCtrl.text.trim(),
-                                                // ✅ نبعت للباك النص الإنجليزي الثابت
                                                 confirmation: apiPhraseEn,
                                               ),
                                             );
@@ -733,7 +791,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                                 ),
                               ],
                             ),
-
                             SizeConfig.v(4),
                           ],
                         ),
@@ -741,8 +798,6 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
                     ),
                   ),
                 ),
-
-                // ===== Top Circle Icon (like screenshot) =====
                 Container(
                   width: SizeConfig.w(88),
                   height: SizeConfig.w(88),

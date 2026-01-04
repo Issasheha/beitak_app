@@ -1,4 +1,3 @@
-import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/constants/fixed_service_categories.dart';
 import 'package:beitak_app/core/providers/categories_id_map_provider.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/marketplace/viewmodels/marketplace_providers.dart';
@@ -50,8 +49,8 @@ class MarketplaceFilterChips extends ConsumerWidget {
 
     String fmt(double v) => v.toStringAsFixed(0);
 
-    if (hasMin && hasMax) return '${fmt(min!)}-${fmt(max!)} د.أ';
-    if (hasMin) return 'من ${fmt(min!)} د.أ';
+    if (hasMin && hasMax) return '${fmt(min)}-${fmt(max)} د.أ';
+    if (hasMin) return 'من ${fmt(min)} د.أ';
     return 'إلى ${fmt(max!)} د.أ';
   }
 

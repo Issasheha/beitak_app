@@ -1,7 +1,7 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
-import 'package:beitak_app/features/auth/presentation/providers/locations_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/locations_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -106,7 +106,7 @@ class CityDropdownField extends ConsumerWidget {
     required String hint,
   }) {
     return DropdownButtonFormField<int>(
-      value: value,
+      initialValue: value,
       items: items,
       onChanged: enabled ? onChanged : null,
       isExpanded: true,

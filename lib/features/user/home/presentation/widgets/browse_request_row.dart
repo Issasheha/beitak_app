@@ -174,7 +174,7 @@ class _BrowseRequestRowState extends State<BrowseRequestRow> {
               )
             else
               DropdownButtonFormField<CityOption>(
-                value: _selectedCity,
+                initialValue: _selectedCity,
                 isExpanded: true,
                 hint: Text(
                   'اختر المحافظة *',

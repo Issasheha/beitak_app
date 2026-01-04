@@ -375,7 +375,7 @@ class _ProviderManageAvailabilityViewState
         ),
         Switch(
           value: available,
-          activeColor: AppColors.lightGreen,
+          activeThumbColor: AppColors.lightGreen,
           onChanged: (v) => _vm.toggleWeeklyDay(weekday, v),
         ),
         SizedBox(width: SizeConfig.w(6)),

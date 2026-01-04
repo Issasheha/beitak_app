@@ -90,10 +90,7 @@ class ProviderPackageTile extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Text(
                 (pkg.description ?? '').trim().isEmpty ? '—' : pkg.description!.trim(),
-                style: AppTextStyles.body14.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.4,
-                ),
+                style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary, height: 1.4),
               ),
             ),
             SizeConfig.v(12),
@@ -101,7 +98,7 @@ class ProviderPackageTile extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () async {
-                  final res = await Navigator.of(context).push<bool>(
+                  await Navigator.of(context).push<bool>(
                     MaterialPageRoute(
                       builder: (_) => ProviderEditPackageView(
                         service: service,
@@ -109,21 +106,6 @@ class ProviderPackageTile extends StatelessWidget {
                       ),
                     ),
                   );
-
-                  if (res == true && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'تم حفظ التعديل بنجاح',
-                          style: AppTextStyles.body14.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        backgroundColor: AppColors.lightGreen,
-                      ),
-                    );
-                  }
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.lightGreen,
@@ -132,10 +114,7 @@ class ProviderPackageTile extends StatelessWidget {
                 ),
                 child: Text(
                   'تعديل الباقة',
-                  style: AppTextStyles.body14.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: AppTextStyles.body14.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
                 ),
               ),
             ),

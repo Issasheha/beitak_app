@@ -1,5 +1,7 @@
 // lib/features/provider/home/presentation/views/profile/documents/widgets/provider_doc_viewer.dart
+// P1: Using CachedNetworkImage for document viewer
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import 'package:beitak_app/core/network/api_constants.dart';
@@ -12,7 +14,10 @@ class ProviderDocViewer {
     String? title,
   }) async {
     final url = ApiConstants.providerDocUrl(fileName);
+
+    // ✅ await gap -> لازم نتأكد إن الـ context لسا mounted قبل أي استخدام
     final headers = await _buildAuthHeaders();
+    if (!context.mounted) return;
 
     if (_isImage(fileName)) {
       await showDialog(
@@ -32,9 +37,9 @@ class ProviderDocViewer {
         ? 'PDF يحتاج رابط مباشر عام أو Signed URL من الباك.'
         : 'هذا النوع يحتاج دعم إضافي من الباك (Signed URL / streaming).';
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   static bool _isImage(String name) {
@@ -78,28 +83,24 @@ class _ImageViewerDialog extends StatelessWidget {
             child: InteractiveViewer(
               minScale: 0.8,
               maxScale: 4,
-              child: Image.network(
-                url,
-                headers: headers,
+              // ✅ P1: Use CachedNetworkImage for caching
+              child: CachedNetworkImage(
+                imageUrl: url,
+                httpHeaders: headers,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'تعذر فتح الصورة.\n'
-                      'تأكد من مسار الملفات في ApiConstants.providerDocsPath\n'
-                      'URL: $url',
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                },
-                loadingBuilder: (context, child, progress) {
-                  if (progress == null) return child;
-                  return const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                },
+                placeholder: (_, __) => const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (_, __, ___) => Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'تعذر فتح الصورة.\n'
+                    'تأكد من مسار الملفات في ApiConstants.providerDocsPath\n'
+                    'URL: $url',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ),
             ),
           ),

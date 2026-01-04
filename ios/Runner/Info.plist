@@ -45,5 +45,8 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- P1: Microphone permission for voice search -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>بيتك يحتاج صلاحية المايكروفون للبحث الصوتي عن الخدمات</string>
 </dict>
 </plist>

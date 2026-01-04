@@ -1,5 +1,6 @@
 // lib/features/user/home/data/datasources/home_remote_datasource.dart
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 
 import '../../../../../core/error/exceptions.dart';
@@ -58,14 +59,19 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
         );
       }
 
-      return rawList
-          .whereType<Map<String, dynamic>>()
-          .map(CategoryModel.fromJson)
-          .toList();
+      // ✅ P2: Use compute for parsing to adhere to performance best practices
+      return compute(_parseCategories, rawList);
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }
   }
+
+  // ✅ Static function for compute (isolate)
+  static List<CategoryModel> _parseCategories(List<dynamic> list) {
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(CategoryModel.fromJson)
+        .toList();
 
   @override
   Future<List<ServiceModel>> getServices({
@@ -131,14 +137,19 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
         );
       }
 
-      return rawList
-          .whereType<Map<String, dynamic>>()
-          .map(ServiceModel.fromJson)
-          .toList();
+      // ✅ P2: Use compute for parsing to prevent main thread blocking
+      return compute(_parseServices, rawList);
     } on DioException catch (e) {
       throw _mapDioErrorToServerException(e);
     }
   }
+
+  // ✅ Static function for compute (isolate)
+  static List<ServiceModel> _parseServices(List<dynamic> list) {
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(ServiceModel.fromJson)
+        .toList();
 
   // ===================== Helpers =====================
 

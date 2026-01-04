@@ -140,7 +140,6 @@ class ProviderAvailabilityViewModel extends ChangeNotifier {
     // weekly ranges must be valid if day is enabled
     for (final entry in _weekdayIntToApiName.entries) {
       final weekday = entry.key;
-      final label = entry.value; // Sunday/Monday.. (مش مهم للعرض الآن)
 
       final day = _weekly[weekday];
       if (day == null) continue;

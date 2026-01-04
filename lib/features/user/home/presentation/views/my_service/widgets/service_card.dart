@@ -91,7 +91,7 @@ class ServiceCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ui = _statusUi(item.status);
 
-    final bookingNo = (item.bookingNumber ?? '').trim();
+    final bookingNo = (item.bookingNumber).trim();
     final title = (item.serviceName).trim();
     final date = (item.date).trim();
     final time = (item.time).trim();

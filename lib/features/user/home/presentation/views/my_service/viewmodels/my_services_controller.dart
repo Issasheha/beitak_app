@@ -406,7 +406,7 @@ class MyServicesController extends StateNotifier<MyServicesState> {
       state = state.copyWithTab(
         tab,
         current.copyWith(
-          error: e.message ?? 'حدث خطأ غير متوقع.',
+          error: e.message,
           hasMore: false,
           isLoading: false,
           isLoadingMore: false,

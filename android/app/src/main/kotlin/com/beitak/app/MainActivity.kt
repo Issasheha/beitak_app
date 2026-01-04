@@ -1,4 +1,4 @@
-package com.example.beitak_app
+package com.beitak.app
 
 import io.flutter.embedding.android.FlutterActivity
 

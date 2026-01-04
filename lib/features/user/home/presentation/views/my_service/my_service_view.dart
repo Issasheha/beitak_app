@@ -1,3 +1,4 @@
+import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,7 +29,7 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
 
     _tabController = TabController(length: 3, vsync: this);
 
-    // ✅ مهم جداً: أول تحميل لازم يكون بعد أول frame (حتى ما يطلع Exception تبع Riverpod)
+    // ✅ مهم جداً: أول تحميل لازم يكون بعد أول frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(myServicesControllerProvider.notifier).loadInitial(
@@ -47,7 +48,6 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
 
     final tab = _indexToTab(_tabController.index);
 
-    // ✅ كمان نأخر التحميل بعد الـ frame (خصوصاً TabBarView أثناء إعادة البناء)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
@@ -229,30 +229,40 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
       return EmptyServicesState(message: _emptyMessage(tab));
     }
 
+    // ✅ السجل: 3 تابات داخلية (ملغية / مكتملة / غير مكتملة)
+    if (tab == MyServicesTab.archive) {
+      return _ArchiveStatusTabs(
+        items: items,
+        st: st,
+        onRefresh: () => ref
+            .read(myServicesControllerProvider.notifier)
+            .loadInitial(MyServicesTab.archive, limit: 20),
+        onLoadMore: () => ref
+            .read(myServicesControllerProvider.notifier)
+            .loadMore(MyServicesTab.archive, limit: 20),
+        onChanged: () => ref
+            .read(myServicesControllerProvider.notifier)
+            .loadInitial(MyServicesTab.archive, limit: 20),
+      );
+    }
+
+    // ✅ باقي التابات (القادمة / قيد الانتظار) زي ما هي
     final controller = ref.read(myServicesControllerProvider.notifier);
 
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
-        // ✅ تجاهل أي شيء غير تحديث سكرول فعلي
         if (n is! ScrollUpdateNotification && n is! OverscrollNotification) {
           return false;
         }
-
-        // ✅ إذا ما في سكرول أصلاً (القائمة أقصر من الشاشة) لا تعمل loadMore
         if (n.metrics.maxScrollExtent <= 0) return false;
-
-        // ✅ لا تعمل loadMore أثناء loadInitial
         if (st.isLoading) return false;
 
         if (n.metrics.extentAfter < 250) {
-          // ✅ نفذ بعد الحدث (حتى ما يصير تعديل Provider أثناء build/paint)
           Future.microtask(() {
             if (!mounted) return;
 
             final latest = ref.read(myServicesControllerProvider).tab(tab);
-            if (!latest.isLoading &&
-                !latest.isLoadingMore &&
-                latest.hasMore) {
+            if (!latest.isLoading && !latest.isLoadingMore && latest.hasMore) {
               ref
                   .read(myServicesControllerProvider.notifier)
                   .loadMore(tab, limit: 20);
@@ -277,6 +287,179 @@ class _MyServicesViewState extends ConsumerState<MyServicesView>
             return ServiceCard(
               item: items[i],
               onChanged: () => controller.loadInitial(tab, limit: 20),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _ArchiveStatusTabs extends StatefulWidget {
+  const _ArchiveStatusTabs({
+    required this.items,
+    required this.st,
+    required this.onRefresh,
+    required this.onLoadMore,
+    required this.onChanged,
+  });
+
+  final List<BookingListItem> items;
+  final TabBookingState st;
+
+  final Future<void> Function() onRefresh;
+  final VoidCallback onLoadMore;
+  final VoidCallback onChanged;
+
+  @override
+  State<_ArchiveStatusTabs> createState() => _ArchiveStatusTabsState();
+}
+
+class _ArchiveStatusTabsState extends State<_ArchiveStatusTabs>
+    with SingleTickerProviderStateMixin {
+  late TabController _inner;
+
+  @override
+  void initState() {
+    super.initState();
+    _inner = TabController(length: 3, vsync: this);
+    _inner.addListener(() {
+      if (_inner.indexIsChanging) return;
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _inner.dispose();
+    super.dispose();
+  }
+
+  Color _innerAccent(int index) {
+    switch (index) {
+      case 0:
+        return Colors.red.shade700; // ملغية
+      case 1:
+        return Colors.blue.shade700; // مكتملة
+      case 2:
+      default:
+        return Colors.grey.shade700; // غير مكتملة
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _innerAccent(_inner.index);
+
+    // فلترة محلية من نفس السجل
+    final cancelled = widget.items.where((e) => e.isCancelled).toList();
+    final completed = widget.items.where((e) => e.isCompleted).toList();
+    final incomplete = widget.items.where((e) => e.isIncomplete).toList();
+
+    return Column(
+      children: [
+        Container(
+          margin: SizeConfig.padding(horizontal: 16),
+          padding: SizeConfig.padding(all: 6),
+          decoration: BoxDecoration(
+            color: Colors.grey.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(SizeConfig.radius(18)),
+            border: Border.all(
+              color: Colors.grey.withValues(alpha: 0.16),
+            ),
+          ),
+          child: TabBar(
+            controller: _inner,
+            indicator: BoxDecoration(
+              borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+              color: accent.withValues(alpha: 0.20),
+            ),
+            labelColor: accent,
+            unselectedLabelColor: AppColors.textSecondary,
+            dividerColor: Colors.transparent,
+            labelStyle: AppTextStyles.semiBold.copyWith(
+              fontSize: SizeConfig.ts(13),
+              fontWeight: FontWeight.w800,
+            ),
+            tabs: const [
+              Tab(text: 'ملغية'),
+              Tab(text: 'مكتملة'),
+              Tab(text: 'غير مكتملة'),
+            ],
+          ),
+        ),
+        SizeConfig.v(12),
+        Expanded(
+          child: TabBarView(
+            controller: _inner,
+            children: [
+              _buildFilteredList(
+                items: cancelled,
+                emptyMessage: 'لا توجد طلبات ملغية في السجل.',
+              ),
+              _buildFilteredList(
+                items: completed,
+                emptyMessage: 'لا توجد طلبات مكتملة في السجل.',
+              ),
+              _buildFilteredList(
+                items: incomplete,
+                emptyMessage: 'لا توجد طلبات غير مكتملة في السجل.',
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilteredList({
+    required List<BookingListItem> items,
+    required String emptyMessage,
+  }) {
+    final st = widget.st;
+
+    if (items.isEmpty) {
+      // ✅ لو السجل نفسه فاضي
+      if (widget.items.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return EmptyServicesState(message: emptyMessage);
+    }
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n is! ScrollUpdateNotification && n is! OverscrollNotification) {
+          return false;
+        }
+        if (n.metrics.maxScrollExtent <= 0) return false;
+        if (st.isLoading) return false;
+
+        if (n.metrics.extentAfter < 250) {
+          // ✅ loadMore للسجل الأصلي (مش للفلترة)
+          Future.microtask(() {
+            if (!mounted) return;
+            if (!st.isLoading && !st.isLoadingMore && st.hasMore) {
+              widget.onLoadMore();
+            }
+          });
+        }
+        return false;
+      },
+      child: RefreshIndicator(
+        onRefresh: widget.onRefresh,
+        child: ListView.builder(
+          padding: SizeConfig.padding(horizontal: 16, bottom: 20),
+          itemCount: items.length + (st.isLoadingMore ? 1 : 0),
+          itemBuilder: (context, i) {
+            if (i >= items.length) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return ServiceCard(
+              item: items[i],
+              onChanged: widget.onChanged,
             );
           },
         ),

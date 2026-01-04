@@ -294,7 +294,7 @@ class _ProviderBusinessInfoStepState extends State<ProviderBusinessInfoStep> {
         ),
         SizeConfig.v(6),
         DropdownButtonFormField<int>(
-          value: widget.selectedCategoryId,
+          initialValue: widget.selectedCategoryId,
           items: widget.categories
               .map(
                 (c) => DropdownMenuItem<int>(

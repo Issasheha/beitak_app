@@ -10,9 +10,15 @@ class ProviderServiceCard extends StatelessWidget {
   const ProviderServiceCard({super.key, required this.service});
 
   String _arabicCategory() {
+    // ✅ 1) لو عندك name_ar (بعد التعديل) هذا اللي لازم يطلع
+    final nAr = (service.nameAr ?? '').trim();
+    if (nAr.isNotEmpty) return nAr;
+
+    // ✅ 2) لو category_other موجود
     final cat = (service.categoryOther ?? '').trim();
     if (cat.isNotEmpty) return cat;
 
+    // ✅ 3) fallback mapping من name key
     switch (service.name.toLowerCase()) {
       case 'plumbing':
         return 'السباكة';
@@ -27,6 +33,14 @@ class ProviderServiceCard extends StatelessWidget {
       default:
         return service.name;
     }
+  }
+
+  String _descText() {
+    final dAr = (service.descriptionAr ?? '').trim();
+    if (dAr.isNotEmpty) return dAr;
+
+    final d = (service.description ?? '').trim();
+    return d;
   }
 
   String _priceText() {
@@ -67,7 +81,7 @@ class ProviderServiceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title + badges
+          // Title + badge جديد فقط
           Row(
             children: [
               Expanded(
@@ -75,58 +89,38 @@ class ProviderServiceCard extends StatelessWidget {
                   _arabicCategory(),
                   style: AppTextStyles.body16.copyWith(
                     fontSize: SizeConfig.ts(16),
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
                     height: 1.25,
                   ),
                 ),
               ),
 
-              // ✅ Badge جديد
               if (service.isNew) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.12),
+                    color: Colors.blue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     'جديد',
                     style: AppTextStyles.label12.copyWith(
                       fontSize: SizeConfig.ts(12),
-                      fontWeight: FontWeight.w700,
-                      color: Colors.orange,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.blue,
                       height: 1.2,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
               ],
-
-              // status
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: (service.isActive ? AppColors.lightGreen : Colors.grey).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  service.isActive ? 'نشطة' : 'غير نشطة',
-                  style: AppTextStyles.label12.copyWith(
-                    fontSize: SizeConfig.ts(12),
-                    fontWeight: FontWeight.w600,
-                    color: service.isActive ? AppColors.lightGreen : Colors.grey,
-                    height: 1.2,
-                  ),
-                ),
-              ),
             ],
           ),
 
           SizeConfig.v(8),
 
           Text(
-            (service.description ?? '').trim().isEmpty ? '—' : service.description!.trim(),
+            _descText().isEmpty ? '—' : _descText(),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: AppTextStyles.body14.copyWith(
@@ -187,7 +181,7 @@ class ProviderServiceCard extends StatelessWidget {
                 child: Text(
                   'تفاصيل الخدمة',
                   style: AppTextStyles.body14.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: Colors.white,
                   ),
                 ),
@@ -207,7 +201,7 @@ class ProviderServiceCard extends StatelessWidget {
                     child: Text(
                       'عرض الباقات',
                       style: AppTextStyles.body14.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
@@ -226,7 +220,7 @@ class ProviderServiceCard extends StatelessWidget {
                     child: Text(
                       'تفاصيل الخدمة',
                       style: AppTextStyles.body14.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.lightGreen,
                       ),
                     ),

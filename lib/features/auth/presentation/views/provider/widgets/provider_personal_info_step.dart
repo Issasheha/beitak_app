@@ -242,7 +242,7 @@ class _ProviderPersonalInfoStepState extends State<ProviderPersonalInfoStep> {
         ),
         SizeConfig.v(6),
         DropdownButtonFormField<int>(
-          value: value,
+          initialValue: value,
           items: cities
               .map(
                 (c) => DropdownMenuItem<int>(

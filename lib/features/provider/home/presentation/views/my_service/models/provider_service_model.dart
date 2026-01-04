@@ -54,30 +54,46 @@ class ProviderServiceModel {
   /// اسم داخلي (مثل plumbing) — لا نعرضه بالضرورة
   final String name;
 
-  /// عربي من category_other (الأفضل للعرض)
+  /// ✅ اسم عربي (المفروض للعرض) - يرجع من الباك
+  final String? nameAr;
+
+  /// (اختياري)
+  final String? nameEn;
+
+  /// عربي من category_other (أحياناً null)
   final String? categoryOther;
 
   final String? description;
+  final String? descriptionAr;
+  final String? descriptionEn;
+
   final double basePrice;
   final String priceType; // hourly | fixed
 
-  /// (موجود بالباك، بس ممكن ما نعتمد عليه بالـ UI)
   final bool isActive;
 
   /// ✅ جديد: إذا موجود من الباك-إند نستخدمه لإظهار Badge "جديد"
   final bool isNew;
+
+  /// (مفيد للـ fallback)
+  final DateTime? createdAt;
 
   final List<ProviderServicePackage> packages;
 
   ProviderServiceModel({
     required this.id,
     required this.name,
+    this.nameAr,
+    this.nameEn,
     required this.categoryOther,
     required this.description,
+    this.descriptionAr,
+    this.descriptionEn,
     required this.basePrice,
     required this.priceType,
     this.isActive = true,
     this.isNew = false,
+    this.createdAt,
     required this.packages,
   });
 
@@ -89,25 +105,66 @@ class ProviderServiceModel {
     return s == '1' || s == 'true' || s == 'yes';
   }
 
+  static DateTime? _parseDate(dynamic v) {
+    if (v == null) return null;
+    try {
+      return DateTime.tryParse(v.toString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static bool _fallbackIsNew(DateTime? createdAt) {
+    if (createdAt == null) return false;
+    final now = DateTime.now().toUtc();
+    final t = createdAt.toUtc();
+    // ✅ مرن شوي للـ QA: آخر 48 ساعة
+    return now.difference(t).inHours <= 48;
+  }
+
   factory ProviderServiceModel.fromJson(Map<String, dynamic> json) {
     final pkgsRaw = (json['packages'] is List) ? (json['packages'] as List) : const [];
-
     final isNewRaw = json['is_new'] ?? json['isNew'] ?? json['new'] ?? json['is_new_service'];
+
+    final createdAt = _parseDate(json['created_at'] ?? json['createdAt']);
+
+    final bool isNew = (isNewRaw != null) ? _toBool(isNewRaw) : _fallbackIsNew(createdAt);
 
     return ProviderServiceModel(
       id: (json['id'] as num).toInt(),
       name: (json['name'] ?? '').toString(),
+      nameAr: json['name_ar']?.toString(),
+      nameEn: json['name_en']?.toString(),
       categoryOther: json['category_other']?.toString(),
       description: json['description']?.toString(),
+      descriptionAr: json['description_ar']?.toString(),
+      descriptionEn: json['description_en']?.toString(),
       basePrice: (json['base_price'] is num)
           ? (json['base_price'] as num).toDouble()
           : double.tryParse('${json['base_price']}') ?? 0,
       priceType: (json['price_type'] ?? 'hourly').toString(),
       isActive: _toBool(json['is_active']),
-      isNew: _toBool(isNewRaw),
-      packages: pkgsRaw
-          .map((e) => ProviderServicePackage.fromJson(Map<String, dynamic>.from(e)))
-          .toList(),
+      isNew: isNew,
+      createdAt: createdAt,
+      packages: pkgsRaw.map((e) => ProviderServicePackage.fromJson(Map<String, dynamic>.from(e))).toList(),
     );
+  }
+
+  /// ✅ اسم العرض بالعربي (الأولوية: name_ar ثم category_other ثم name)
+  String get displayNameAr {
+    final a = (nameAr ?? '').trim();
+    if (a.isNotEmpty) return a;
+    final c = (categoryOther ?? '').trim();
+    if (c.isNotEmpty) return c;
+    final n = name.trim();
+    return n.isEmpty ? 'الخدمة' : n;
+  }
+
+  /// ✅ وصف العرض (الأولوية: description_ar ثم description)
+  String get displayDescAr {
+    final a = (descriptionAr ?? '').trim();
+    if (a.isNotEmpty) return a;
+    final d = (description ?? '').trim();
+    return d;
   }
 }

@@ -51,13 +51,18 @@ class ProviderHomeViewModel extends ChangeNotifier {
     'in_progress',
   };
 
+  static const Set<String> _completedStatuses = {
+    'completed',
+    'done',
+    'finished',
+  };
+
   bool _refreshing = false;
 
   // =========================
-  // ✅ NEW: name helpers
+  // ✅ Name helpers
   // =========================
 
-  /// ✅ تحديث الاسم فوراً (ليظهر في الهيدر مباشرة)
   void setProviderName(String name) {
     final cleaned = name.trim();
     final finalName = cleaned.isEmpty ? 'مزود الخدمة' : cleaned;
@@ -67,8 +72,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ✅ سحب الاسم من الكاش (SharedPrefs) وتحديثه
-  /// notify=false مفيد أثناء refresh لتجنب نداءات كثيرة
   Future<void> syncProviderNameFromCache({bool notify = true}) async {
     try {
       final session = await _local.getCachedAuthSession();
@@ -127,14 +130,9 @@ class ProviderHomeViewModel extends ChangeNotifier {
     return 'تعذر تنفيذ العملية. حاول مرة أخرى.';
   }
 
-  /// ✅ Refresh يدعم silent polling
-  /// - silent=false: يطلع loading طبيعي
-  /// - silent=true : بدون ما يغير isLoading (ولا يعمل flicker)
   Future<void> refresh({bool silent = false}) async {
     if (_refreshing) return;
     _refreshing = true;
-
-    final bool hadDataBefore = _hasAnyDashboardData();
 
     if (!silent) {
       isLoading = true;
@@ -142,84 +140,41 @@ class ProviderHomeViewModel extends ChangeNotifier {
       notifyListeners();
     }
 
-    String? statsErr;
-    String? bookingsErr;
-
-    bool statsOk = false;
-    bool bookingsOk = false;
-
     try {
-      // ✅ بدل _resolveProviderNameIfPossible
       await syncProviderNameFromCache(notify: false);
 
-      // --- Stats ---
+      // Stats from API
       try {
         stats = await _remote.getDashboardStats();
-        statsOk = true;
-      } on DioException catch (e) {
-        _logDio('getDashboardStats', e);
-        statsErr = _friendlyErrorFromStatus(e.response?.statusCode);
-      } catch (e) {
-        _log('getDashboardStats error: $e');
-        statsErr = 'تعذر تحميل الإحصائيات حالياً.';
-      }
+      } catch (_) {}
 
-      // --- Bookings ---
-      try {
-        allBookings = await _remote.getMyBookings(
-          limit: 60,
-          sortBy: 'booking_date',
-          order: 'ASC',
-        );
-        _computeDashboardFromBookings(allBookings);
-        bookingsOk = true;
-      } on DioException catch (e) {
-        _logDio('getMyBookings', e);
-        bookingsErr = _friendlyErrorFromStatus(e.response?.statusCode);
-      } catch (e) {
-        _log('getMyBookings error: $e');
-        bookingsErr = 'تعذر تحميل الحجوزات حالياً.';
-      }
+      // Bookings + compute local
+      allBookings = await _remote.getMyBookings(
+        limit: 200,
+        sortBy: 'booking_date',
+        order: 'ASC',
+      );
 
-      // --- Error message policy ---
-      if (!silent) {
-        if (statsErr != null && bookingsErr != null) {
-          errorMessage =
-              'تعذر تحميل بيانات لوحة التحكم. تأكد من الاتصال بالإنترنت وحاول مرة أخرى.';
-        } else if (statsErr != null) {
-          errorMessage = 'تعذر تحميل الإحصائيات حالياً.';
-        } else if (bookingsErr != null) {
-          errorMessage = 'تعذر تحميل الحجوزات حالياً.';
-        } else {
-          errorMessage = null;
-        }
-      } else {
-        // ✅ Silent: لا تزعج المستخدم بأخطاء أثناء polling
-        final anyOk = statsOk || bookingsOk;
-        if (anyOk) errorMessage = null;
+      _computeDashboardFromBookings(allBookings);
 
-        if (!hadDataBefore && !anyOk) {
-          // keep as is
-        }
-      }
+      errorMessage = null;
+    } on DioException catch (e) {
+      _logDio('refresh', e);
+      if (!silent) errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
+    } catch (e) {
+      _log('refresh error: $e');
+      if (!silent) errorMessage = 'تعذر تحميل بيانات لوحة التحكم حالياً.';
     } finally {
-      if (!silent) {
-        isLoading = false;
-      }
+      if (!silent) isLoading = false;
       _refreshing = false;
       notifyListeners();
     }
   }
 
-  bool _hasAnyDashboardData() {
-    return allBookings.isNotEmpty ||
-        totalRequestsCount > 0 ||
-        upcomingCount > 0 ||
-        completedCount > 0 ||
-        totalEarnings > 0;
-  }
+  // =========================
+  // ✅ Actions
+  // =========================
 
-  // ✅ Accept: local same-day rule + no longer available handling
   Future<void> accept(int bookingId) async {
     errorMessage = null;
     notifyListeners();
@@ -236,17 +191,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
       await refresh();
     } on DioException catch (e) {
       _logDio('accept($bookingId)', e);
-
-      final status = e.response?.statusCode;
-
-      if (status == 404 || status == 409) {
-        errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
-        notifyListeners();
-        await refresh();
-        return;
-      }
-
-      errorMessage = _friendlyErrorFromStatus(status);
+      errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
       notifyListeners();
     } catch (e) {
       _log('accept($bookingId) error: $e');
@@ -255,7 +200,6 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
-  // ✅ Reject: no longer available handling
   Future<void> reject(int bookingId) async {
     errorMessage = null;
     notifyListeners();
@@ -265,17 +209,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
       await refresh();
     } on DioException catch (e) {
       _logDio('reject($bookingId)', e);
-
-      final status = e.response?.statusCode;
-
-      if (status == 404 || status == 409) {
-        errorMessage = 'هذا الطلب لم يعد متاحاً. تم تحديث القائمة.';
-        notifyListeners();
-        await refresh();
-        return;
-      }
-
-      errorMessage = _friendlyErrorFromStatus(status);
+      errorMessage = _friendlyErrorFromStatus(e.response?.statusCode);
       notifyListeners();
     } catch (e) {
       _log('reject($bookingId) error: $e');
@@ -328,32 +262,9 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }
   }
 
-  // (قديم) صار مش مستخدم — تقدر تحذفه لاحقاً
-  Future<void> _resolveProviderNameIfPossible() async {
-    try {
-      final session = await _local.getCachedAuthSession();
-      if (session == null) return;
-
-      final dynamic user = (session as dynamic).user ?? session;
-
-      final String fn = ((user as dynamic).firstName ??
-              (user as dynamic).first_name ??
-              (user as dynamic).first ??
-              '')
-          .toString()
-          .trim();
-
-      final String ln = (((user as dynamic).lastName ??
-              (user as dynamic).last_name ??
-              (user as dynamic).last ??
-              '') as dynamic)
-          .toString()
-          .trim();
-
-      final full = ('$fn $ln').trim();
-      if (full.isNotEmpty) providerName = full;
-    } catch (_) {}
-  }
+  // =========================
+  // ✅ Dashboard computations
+  // =========================
 
   void _computeDashboardFromBookings(List<ProviderBookingModel> bookings) {
     newRequests =
@@ -364,6 +275,7 @@ class ProviderHomeViewModel extends ChangeNotifier {
     newRequestPreview = newRequests.isEmpty ? null : newRequests.first;
 
     final today = _todayDateOnly();
+
     final todays = bookings.where((b) {
       final d = _parseDateOnly(b.bookingDate);
       if (d == null) return false;
@@ -383,6 +295,49 @@ class ProviderHomeViewModel extends ChangeNotifier {
     }).toList();
 
     upcomingCount = upcoming.length;
+
+    // ✅ Correct month earnings: PAID ONLY
+    final monthEarned = _computeThisMonthEarningsFromBookings(bookings);
+    final completedLocal = _computeCompletedCount(bookings);
+
+    stats = stats.copyWith(
+      thisMonthEarnings: monthEarned,
+      completedBookings: completedLocal,
+    );
+
+    _log('monthEarned=$monthEarned completed=$completedLocal');
+  }
+
+  static double _computeThisMonthEarningsFromBookings(
+    List<ProviderBookingModel> bookings,
+  ) {
+    double sum = 0.0;
+
+    for (final b in bookings) {
+      // ❌ لا نحسب pending
+      if (b.status == _pendingProviderAccept) continue;
+
+      final dt = _parseBookingDateTime(b);
+      if (dt == null) continue;
+
+      if (_isInThisMonth(dt)) {
+        // ✅ PAID rules
+        final paid = b.amountPaid;
+        if (paid != null && paid > 0) {
+          sum += paid;
+        } else {
+          final ps = (b.paymentStatus ?? '').trim().toLowerCase();
+          final isPaid = ps == 'paid' || ps == 'success' || ps == 'completed';
+          if (isPaid) sum += b.totalPrice;
+        }
+      }
+    }
+
+    return sum;
+  }
+
+  static int _computeCompletedCount(List<ProviderBookingModel> bookings) {
+    return bookings.where((b) => _completedStatuses.contains(b.status)).length;
   }
 
   ProviderBookingModel? _findBookingById(int bookingId) {
@@ -434,6 +389,25 @@ class ProviderHomeViewModel extends ChangeNotifier {
     final dt = DateTime.tryParse(s);
     if (dt == null) return null;
     return DateTime(dt.year, dt.month, dt.day);
+  }
+
+  static DateTime? _parseBookingDateTime(ProviderBookingModel b) {
+    final d = _parseDateOnly(b.bookingDate);
+    if (d == null) return null;
+
+    final t = b.bookingTime.trim();
+    if (t.isEmpty) return d;
+
+    final parts = t.split(':');
+    final hh = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 0 : 0;
+    final mm = parts.length >= 2 ? int.tryParse(parts[1]) ?? 0 : 0;
+
+    return DateTime(d.year, d.month, d.day, hh, mm);
+  }
+
+  static bool _isInThisMonth(DateTime d) {
+    final now = DateTime.now();
+    return d.year == now.year && d.month == now.month;
   }
 
   static bool _isSameDate(DateTime a, DateTime b) =>

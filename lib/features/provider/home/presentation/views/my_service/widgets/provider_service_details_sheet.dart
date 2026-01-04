@@ -1,4 +1,5 @@
 import 'package:beitak_app/core/constants/colors.dart';
+import 'package:beitak_app/core/constants/fixed_service_categories.dart'; // ✅ NEW
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
@@ -10,6 +11,9 @@ import 'package:beitak_app/features/provider/home/presentation/views/my_service/
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// ✅ unified error mapper
+import 'package:beitak_app/core/error/error_text.dart';
 
 class ProviderServiceDetailsSheet extends ConsumerStatefulWidget {
   final ProviderServiceModel service;
@@ -30,7 +34,6 @@ class _ProviderServiceDetailsSheetState
     extends ConsumerState<ProviderServiceDetailsSheet>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
-
   bool _deleting = false;
 
   @override
@@ -49,19 +52,34 @@ class _ProviderServiceDetailsSheetState
     super.dispose();
   }
 
-  String _arabicCategory() {
-    final cat = (widget.service.categoryOther ?? '').trim();
-    if (cat.isNotEmpty) return cat;
-    return widget.service.name;
+  ProviderServiceModel? _findLatest(List<ProviderServiceModel> services) {
+    for (final s in services) {
+      if (s.id == widget.service.id) return s;
+    }
+    return null;
   }
 
-  String _priceText() {
-    final p = widget.service.basePrice.toStringAsFixed(0);
-    if (widget.service.priceType == 'hourly') return '$p د.أ / ساعة';
+  // ✅ Arabic display name (category_other > fixed map > raw name)
+  String _arabicCategory(ProviderServiceModel s) {
+    final cat = (s.categoryOther ?? '').trim();
+    if (cat.isNotEmpty) return cat;
+
+    final key = FixedServiceCategories.keyFromAnyString(s.name);
+    if (key != null) return FixedServiceCategories.labelArFromKey(key);
+
+    final n = s.name.trim();
+    return n.isEmpty ? 'الخدمة' : n;
+  }
+
+  String _priceText(ProviderServiceModel s) {
+    final p = s.basePrice.toStringAsFixed(0);
+    if (s.priceType == 'hourly') return '$p د.أ / ساعة';
     return '$p د.أ';
   }
 
-  Future<bool> _confirmDelete() async {
+  Future<bool> _confirmDelete({required int packagesCount}) async {
+    final hasPkgs = packagesCount > 0;
+
     final res = await showDialog<bool>(
       context: context,
       builder: (ctx) => Directionality(
@@ -69,7 +87,9 @@ class _ProviderServiceDetailsSheetState
         child: AlertDialog(
           title: const Text('حذف الخدمة'),
           content: Text(
-            'هل أنت متأكد أنك تريد حذف هذه الخدمة؟\nلا يمكن التراجع عن هذا الإجراء.',
+            hasPkgs
+                ? 'هذه الخدمة مرتبطة بـ ($packagesCount) باقات.\nسيتم حذف الخدمة مع الباقات التابعة لها.\nهل تريد المتابعة؟'
+                : 'هل أنت متأكد أنك تريد حذف هذه الخدمة؟\nلا يمكن التراجع عن هذا الإجراء.',
             style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
           ),
           actions: [
@@ -80,22 +100,26 @@ class _ProviderServiceDetailsSheetState
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text(
-                'حذف',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              child: Text(
+                hasPkgs ? 'حذف مع الباقات' : 'حذف',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
           ],
         ),
       ),
     );
+
     return res == true;
   }
 
-  Future<void> _deleteService() async {
+  Future<void> _deleteService(int packagesCount) async {
     if (_deleting) return;
 
-    final ok = await _confirmDelete();
+    final ok = await _confirmDelete(packagesCount: packagesCount);
     if (!ok) return;
 
     setState(() => _deleting = true);
@@ -106,7 +130,6 @@ class _ProviderServiceDetailsSheetState
         options: Options(contentType: Headers.jsonContentType),
       );
 
-      // ✅ Refresh list
       ref.invalidate(providerMyServicesProvider);
 
       if (!mounted) return;
@@ -117,24 +140,25 @@ class _ProviderServiceDetailsSheetState
             'تم حذف الخدمة بنجاح',
             style: AppTextStyles.body14.copyWith(
               color: Colors.white,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
           backgroundColor: AppColors.lightGreen,
         ),
       );
 
-      // ✅ Close sheet after delete
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (err) {
       if (!mounted) return;
+      final msg = errorText(err);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'تعذر حذف الخدمة. حاول مرة أخرى.',
+            msg,
             style: AppTextStyles.body14.copyWith(
               color: Colors.white,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             ),
           ),
           backgroundColor: Colors.red,
@@ -148,6 +172,9 @@ class _ProviderServiceDetailsSheetState
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height * 0.82;
+
+    // ✅ watch latest services so sheet updates live
+    final servicesAsync = ref.watch(providerMyServicesProvider);
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -166,179 +193,16 @@ class _ProviderServiceDetailsSheetState
               right: SizeConfig.w(16),
               bottom: MediaQuery.of(context).viewInsets.bottom + 14,
             ),
-            child: Column(
-              children: [
-                // handle
-                Center(
-                  child: Container(
-                    width: 46,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                SizeConfig.v(12),
-
-                // title row (بدون Badge نشطة/غير نشطة)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _arabicCategory(),
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.body16.copyWith(
-                          fontSize: SizeConfig.ts(16.5),
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                SizeConfig.v(10),
-
-                // tabs
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: TabBar(
-                    controller: _tab,
-                    labelColor: AppColors.lightGreen,
-                    unselectedLabelColor: AppColors.textSecondary,
-                    indicator: BoxDecoration(
-                      color: AppColors.lightGreen.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    labelStyle:
-                        AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
-                    unselectedLabelStyle:
-                        AppTextStyles.body14.copyWith(fontWeight: FontWeight.w600),
-                    tabs: [
-                      const Tab(text: 'تفاصيل الخدمة'),
-                      Tab(text: 'الباقات (${widget.service.packages.length})'),
-                    ],
-                  ),
-                ),
-
-                SizeConfig.v(12),
-
-                Expanded(
-                  child: TabBarView(
-                    controller: _tab,
-                    children: [
-                      _detailsTab(context),
-                      _packagesTab(context),
-                    ],
-                  ),
-                ),
-
-                SizeConfig.v(10),
-
-                // Main actions row
-                Row(
-                  children: [
-                   Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final res = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  ProviderEditServiceView(service: widget.service),
-                            ),
-                          );
-
-                          if (res == true && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'تم تعديل الخدمة بنجاح',
-                                  style: AppTextStyles.body14.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                backgroundColor: AppColors.lightGreen,
-                              ),
-                            );
-
-                            Navigator.of(context).pop();
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.lightGreen,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding: SizeConfig.padding(vertical: 12),
-                        ),
-                        child: Text(
-                          'تعديل الخدمة',
-                          style: AppTextStyles.body14.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.lightGreen,
-                          side: const BorderSide(color: AppColors.lightGreen),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          padding: SizeConfig.padding(vertical: 12),
-                        ),
-                        child: Text(
-                          'إغلاق',
-                          style: AppTextStyles.body14.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.lightGreen,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                SizeConfig.v(10),
-
-                // ✅ Delete button (full width, destructive)
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: _deleteService,
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.red.withValues(alpha: 0.55)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: SizeConfig.padding(vertical: 12),
-                    ),
-                    child: _deleting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(
-                            'حذف الخدمة',
-                            style: AppTextStyles.body14.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: Colors.red,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+            child: servicesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) {
+                final s = widget.service;
+                return _content(context, s);
+              },
+              data: (services) {
+                final latest = _findLatest(services) ?? widget.service;
+                return _content(context, latest);
+              },
             ),
           ),
         ),
@@ -346,7 +210,178 @@ class _ProviderServiceDetailsSheetState
     );
   }
 
-  Widget _detailsTab(BuildContext context) {
+  Widget _content(BuildContext context, ProviderServiceModel s) {
+    return Column(
+      children: [
+        Center(
+          child: Container(
+            width: 46,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+        SizeConfig.v(12),
+
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _arabicCategory(s),
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body16.copyWith(
+                  fontSize: SizeConfig.ts(16.5),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        SizeConfig.v(10),
+
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: TabBar(
+            controller: _tab,
+            labelColor: AppColors.lightGreen,
+            unselectedLabelColor: AppColors.textSecondary,
+            indicator: BoxDecoration(
+              color: AppColors.lightGreen.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            labelStyle: AppTextStyles.body14.copyWith(fontWeight: FontWeight.w700),
+            unselectedLabelStyle:
+                AppTextStyles.body14.copyWith(fontWeight: FontWeight.w600),
+            tabs: [
+              const Tab(text: 'تفاصيل الخدمة'),
+              Tab(text: 'الباقات (${s.packages.length})'),
+            ],
+          ),
+        ),
+
+        SizeConfig.v(12),
+
+        Expanded(
+          child: TabBarView(
+            controller: _tab,
+            children: [
+              _detailsTab(s),
+              _packagesTab(s),
+            ],
+          ),
+        ),
+
+        SizeConfig.v(10),
+
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () async {
+                  final res = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => ProviderEditServiceView(service: s),
+                    ),
+                  );
+
+                  if (res == true) {
+                    ref.invalidate(providerMyServicesProvider);
+
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'تم تعديل الخدمة بنجاح',
+                          style: AppTextStyles.body14.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        backgroundColor: AppColors.lightGreen,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: SizeConfig.padding(vertical: 12),
+                ),
+                child: Text(
+                  'تعديل الخدمة',
+                  style: AppTextStyles.body14.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.lightGreen,
+                  side: const BorderSide(color: AppColors.lightGreen),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  padding: SizeConfig.padding(vertical: 12),
+                ),
+                child: Text(
+                  'إغلاق',
+                  style: AppTextStyles.body14.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.lightGreen,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        SizeConfig.v(10),
+
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: () => _deleteService(s.packages.length),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: Colors.red.withValues(alpha: 0.55)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              padding: SizeConfig.padding(vertical: 12),
+            ),
+            child: _deleting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    'حذف الخدمة',
+                    style: AppTextStyles.body14.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.red,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _detailsTab(ProviderServiceModel s) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       child: Column(
@@ -355,7 +390,7 @@ class _ProviderServiceDetailsSheetState
           Row(
             children: [
               Text(
-                _priceText(),
+                _priceText(s),
                 style: AppTextStyles.body14.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -370,7 +405,7 @@ class _ProviderServiceDetailsSheetState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'عدد الباقات: ${widget.service.packages.length}',
+                    'عدد الباقات: ${s.packages.length}',
                     style: AppTextStyles.body14.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -390,9 +425,7 @@ class _ProviderServiceDetailsSheetState
           ),
           SizeConfig.v(6),
           Text(
-            (widget.service.description ?? '').trim().isEmpty
-                ? '—'
-                : widget.service.description!.trim(),
+            (s.description ?? '').trim().isEmpty ? '—' : s.description!.trim(),
             style: AppTextStyles.body14.copyWith(
               color: AppColors.textSecondary,
               height: 1.4,
@@ -403,14 +436,16 @@ class _ProviderServiceDetailsSheetState
     );
   }
 
-  Widget _packagesTab(BuildContext context) {
-    final pkgs = widget.service.packages;
+  Widget _packagesTab(ProviderServiceModel s) {
+    final pkgs = s.packages;
 
     if (pkgs.isEmpty) {
       return Center(
         child: Text(
           'لا توجد باقات لهذه الخدمة حالياً',
-          style: AppTextStyles.body14.copyWith(color: AppColors.textSecondary),
+          style: AppTextStyles.body14.copyWith(
+            color: AppColors.textSecondary,
+          ),
         ),
       );
     }
@@ -420,7 +455,7 @@ class _ProviderServiceDetailsSheetState
       itemCount: pkgs.length,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) => ProviderPackageTile(
-        service: widget.service,
+        service: s,
         packageIndex: i,
       ),
     );

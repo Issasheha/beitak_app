@@ -1,8 +1,11 @@
-import 'dart:convert';
+// lib/features/auth/data/datasources/auth_local_datasource.dart
+// P0: Updated to use SecureTokenStorage for token, SharedPreferences for flags
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/error/exceptions.dart';
+import '../../../../core/security/secure_token_storage.dart';
 import '../models/auth_session_model.dart';
 
 abstract class AuthLocalDataSource {
@@ -26,9 +29,10 @@ abstract class AuthLocalDataSource {
 }
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
-  static const _sessionKey = 'auth_session';
+  // Cache SharedPreferences instance
+  static SharedPreferences? _prefsCache;
 
-  // مفاتيح للمنطق المركزي في AppRouter
+  // مفاتيح للمنطق المركزي في AppRouter (non-sensitive, OK in SharedPreferences)
   static const _isLoggedInKey = 'is_logged_in';
   static const _isGuestKey = 'is_guest';
   static const _seenOnboardingKey = 'seen_onboarding';
@@ -36,9 +40,14 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   // 🔹 مفتاح لتخزين role المستخدم (customer / provider / ..)
   static const _userRoleKey = 'user_role';
 
+  /// Get cached SharedPreferences instance
+  Future<SharedPreferences> get _prefs async {
+    return _prefsCache ??= await SharedPreferences.getInstance();
+  }
+
   @override
   Future<void> cacheAuthSession(AuthSessionModel session) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _prefs;
 
     // ✅ تنظيف التوكن
     final raw = (session.token ?? '').trim();
@@ -47,12 +56,12 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
         : raw;
     final hasToken = clean.isNotEmpty;
 
-    // ✅ مهم: الضيف لا يُخزَّن نهائيًا (جلسة مؤقتة داخل runtime فقط)
+    // ✅ مهم: الضيف لا يُخزَّن نهائيًا (جلسة مؤقتة داخل runtime فقط)
     if (!hasToken) {
-      // تنظيف أي بقايا سابقة
-      await prefs.remove(_sessionKey);
+      // Clear secure storage as well
+      await SecureTokenStorage.clearSession();
 
-      // اعتبره غير مسجّل دخول عند إعادة فتح التطبيق
+      // اعتبرهغير مسجّل دخول عند إعادة فتح التطبيق
       await prefs.setBool(_isLoggedInKey, false);
       await prefs.setBool(_isGuestKey, false);
 
@@ -72,13 +81,13 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       expiresAt: session.expiresAt,
     );
 
-    final jsonString = jsonEncode(fixedSession.toJson());
+    // ✅ P0: Store token securely (NOT in SharedPreferences)
+    await SecureTokenStorage.saveToken(clean);
 
-    final success = await prefs.setString(_sessionKey, jsonString);
-    if (!success) {
-      throw const CacheException('Failed to cache auth session');
-    }
+    // Store session (with user info) securely
+    await SecureTokenStorage.saveSession(fixedSession.toJson());
 
+    // Update UI flags in SharedPreferences (non-sensitive)
     await prefs.setBool(_isLoggedInKey, true);
     await prefs.setBool(_seenOnboardingKey, true);
     await prefs.setBool(_isGuestKey, false);
@@ -93,19 +102,20 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<AuthSessionModel?> getCachedAuthSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonString = prefs.getString(_sessionKey);
-
-    if (jsonString == null) return null;
+    final prefs = await _prefs;
 
     try {
-      final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
-      final session = AuthSessionModel.fromJson(jsonMap);
+      // ✅ P0: Get session from secure storage
+      final sessionMap = await SecureTokenStorage.getSession();
+
+      if (sessionMap == null) return null;
+
+      final session = AuthSessionModel.fromJson(sessionMap);
 
       // ✅ Migration + Safety:
       // لو لأي سبب session طلعت Guest (token فاضي) → اعتبرها null وامسحها.
       if (session.isGuest || session.token == null || session.token!.isEmpty) {
-        await prefs.remove(_sessionKey);
+        await SecureTokenStorage.clearSession();
         await prefs.setBool(_isLoggedInKey, false);
         await prefs.setBool(_isGuestKey, false);
         await prefs.remove(_userRoleKey);
@@ -113,7 +123,10 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
       }
 
       return session;
-    } catch (_) {
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('getCachedAuthSession error: $e');
+      }
       throw const CacheException('Failed to parse cached auth session');
     }
   }
@@ -148,8 +161,10 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clearSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_sessionKey);
+    final prefs = await _prefs;
+    
+    // ✅ P0: Clear secure storage
+    await SecureTokenStorage.clearSession();
 
     await prefs.setBool(_isLoggedInKey, false);
     await prefs.setBool(_isGuestKey, false);

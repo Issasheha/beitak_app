@@ -57,8 +57,10 @@ class _OtpVerifyDialogState extends State<OtpVerifyDialog> {
         if (_error!.isEmpty) _error = 'فشل التحقق من الرمز';
       });
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      // ✅ بدون return داخل finally: فقط setState إذا mounted
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -67,16 +69,20 @@ class _OtpVerifyDialogState extends State<OtpVerifyDialog> {
       _loading = true;
       _error = null;
     });
+
     try {
       await widget.onResend();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '').trim();
         if (_error!.isEmpty) _error = 'فشل إعادة الإرسال';
       });
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      // ✅ نفس الفكرة هنا
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 

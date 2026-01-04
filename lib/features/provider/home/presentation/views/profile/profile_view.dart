@@ -1,4 +1,4 @@
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,18 +7,13 @@ import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
-
-// ✅ NEW: لتصفية الأخطاء وترجمتها
 import 'package:beitak_app/core/error/error_text.dart';
-
 import 'package:beitak_app/features/user/home/presentation/views/profile/account_setting_widgets/confirm_action_dialog.dart';
-
 import 'package:beitak_app/features/provider/home/presentation/views/profile/viewmodels/provider_profile_providers.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_profile_header_card.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_about_section.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/reviews/provider_reviews_section.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_availability_section.dart';
-import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_location_section.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_profile_section_card.dart';
 import 'package:beitak_app/features/provider/home/presentation/views/profile/widgets/provider_support_section.dart';
 
@@ -92,8 +87,6 @@ class ProviderProfileView extends ConsumerWidget {
                     ProviderReviewsSection(state: state),
                     SizeConfig.v(12),
                     const ProviderAvailabilitySection(),
-                    SizeConfig.v(12),
-                    ProviderLocationSection(state: state),
                     SizeConfig.v(12),
                     const ProviderProfileSectionCard(
                       title: '',

@@ -10,7 +10,7 @@ import 'package:beitak_app/core/utils/app_text_styles.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/viewmodels/profile_providers.dart';
 
 // ✅ NEW: Auth logout الحقيقي (مش clearSessionOnly)
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 
 import 'account_setting_widgets/account_profile_form_card.dart';
 import 'account_setting_widgets/account_change_password_card.dart';

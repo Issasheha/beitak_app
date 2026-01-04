@@ -7,7 +7,7 @@ import 'package:beitak_app/core/network/api_client.dart';
 import 'package:beitak_app/core/network/api_constants.dart';
 import 'package:beitak_app/features/auth/data/datasources/auth_local_datasource.dart';
 import 'package:beitak_app/features/auth/data/models/auth_session_model.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
