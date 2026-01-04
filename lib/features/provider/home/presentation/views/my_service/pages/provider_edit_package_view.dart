@@ -10,6 +10,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// ✅ unified error mapper
+import 'package:beitak_app/core/error/error_text.dart';
+
 class ProviderEditPackageView extends ConsumerStatefulWidget {
   final ProviderServiceModel service;
   final int packageIndex;
@@ -25,15 +28,14 @@ class ProviderEditPackageView extends ConsumerStatefulWidget {
       _ProviderEditPackageViewState();
 }
 
-class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageView> {
+class _ProviderEditPackageViewState
+    extends ConsumerState<ProviderEditPackageView> {
   final _formKey = GlobalKey<FormState>();
 
-  // اسم الباقة: فقط لو كانت "مخصصة"
   late final TextEditingController _customName;
   late final TextEditingController _price;
   late final TextEditingController _desc;
 
-  // Features
   final List<TextEditingController> _featuresCtrls = [];
 
   // ✅ Dirty tracking
@@ -45,7 +47,6 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
   bool _saving = false;
 
-  // package name bounds (لو مخصصة فقط)
   static const int _nameMin = 2;
   static const int _nameMax = 60;
 
@@ -55,11 +56,9 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
   static const int _descMin = 10;
   static const int _descMax = 250;
 
-  // features rules
   static const int _featureMin = 3;
   static const int _featureMax = 60;
 
-  // types
   static const String _tStandard = 'standard';
   static const String _tPremium = 'premium';
   static const String _tEmergency = 'emergency';
@@ -96,7 +95,6 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
       _featuresCtrls.add(TextEditingController(text: f));
     }
 
-    // لو نوع جاهز، نخلي الاسم المعروض عربي (بس بدون ما نكسر الباقج القديمة)
     if (_selectedType != _tCustom) {
       _customName.text = _typeNameAr(_selectedType);
     }
@@ -115,6 +113,7 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     super.dispose();
   }
 
+  // ===== Helpers =====
   String _normalize(String s) => s.trim().toLowerCase().replaceAll(' ', '');
 
   String _detectTypeFromName(String name) {
@@ -122,13 +121,20 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     if (n.isEmpty) return _tCustom;
 
     final standardAliases = <String>[
-      'standard', 'ستاندرد', 'ستاندر', 'عادي', 'أساسي', 'اساسي',
+      'standard',
+      'ستاندرد',
+      'ستاندر',
+      'عادي',
+      'أساسي',
+      'اساسي'
     ];
-    final premiumAliases = <String>[
-      'premium', 'بريميوم', 'مميز', 'مميّز',
-    ];
+    final premiumAliases = <String>['premium', 'بريميوم', 'مميز', 'مميّز'];
     final emergencyAliases = <String>[
-      'emergency', 'طوارئ', 'عاجل', 'طارئة', 'طارئ',
+      'emergency',
+      'طوارئ',
+      'عاجل',
+      'طارئة',
+      'طارئ'
     ];
 
     if (standardAliases.any((a) => _normalize(a) == n)) return _tStandard;
@@ -138,21 +144,19 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     return _tCustom;
   }
 
-  // اسم يُعرض للمستخدم
   String _typeTitleAr(String t) {
     switch (t) {
       case _tStandard:
-        return 'ستاندرد';
+        return 'عادي';
       case _tPremium:
-        return 'بريميوم';
+        return 'مميز';
       case _tEmergency:
-        return 'طوارئ';
+        return 'مستعجل';
       default:
         return 'مخصص';
     }
   }
 
-  // اسم نرسله للباك (نخليه عربي حتى تتوحّد البيانات)
   String _typeNameAr(String t) => _typeTitleAr(t);
 
   String _typeSubtitleAr(String t) {
@@ -185,7 +189,6 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
   bool get _isDirty {
     final typeChanged = _selectedType != _initialSelectedType;
-
     final priceChanged = _price.text.trim() != _initialPrice.trim();
     final descChanged = _desc.text.trim() != _initialDesc.trim();
 
@@ -200,7 +203,36 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
         List.generate(nowF.length, (i) => i)
             .any((i) => i >= initF.length || nowF[i] != initF[i]);
 
-    return typeChanged || priceChanged || descChanged || nameChanged || featuresChanged;
+    return typeChanged ||
+        priceChanged ||
+        descChanged ||
+        nameChanged ||
+        featuresChanged;
+  }
+
+  Future<void> _showSuccessDialog(String msg) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('تم بنجاح'),
+          content: Text(msg),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen),
+              child: const Text('تمام',
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<bool> _confirmDiscardIfDirty() async {
@@ -220,7 +252,8 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.lightGreen),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen),
               child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -231,12 +264,15 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     return res == true;
   }
 
+  // ===== Validators =====
   String? _validateCustomName(String? v) {
     if (_selectedType != _tCustom) return null;
 
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'اسم الباقة مطلوب';
-    if (s.length < _nameMin) return 'اسم الباقة لازم يكون على الأقل $_nameMin أحرف';
+    if (s.length < _nameMin) {
+      return 'اسم الباقة لازم يكون على الأقل $_nameMin أحرف';
+    }
     if (s.length > _nameMax) return 'اسم الباقة لازم يكون أقل من $_nameMax حرف';
     return null;
   }
@@ -257,8 +293,10 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
   String? _validateDesc(String? v) {
     final s = (v ?? '').trim();
     if (s.isEmpty) return 'وصف الباقة مطلوب';
-    if (s.length < _descMin) return 'الوصف لازم يكون على الأقل $_descMin أحرف';
-    if (s.length > _descMax) return 'الوصف لازم يكون أقل من $_descMax حرف';
+    if (s.length < _descMin) {
+      return 'وصف الباقة لازم يكون على الأقل $_descMin أحرف';
+    }
+    if (s.length > _descMax) return 'وصف الباقة لازم يكون أقل من $_descMax حرف';
     return null;
   }
 
@@ -267,8 +305,12 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     if (list.isEmpty) return 'أضف ميزة واحدة على الأقل';
 
     for (final f in list) {
-      if (f.length < _featureMin) return 'كل ميزة لازم تكون على الأقل $_featureMin أحرف';
-      if (f.length > _featureMax) return 'كل ميزة لازم تكون أقل من $_featureMax حرف';
+      if (f.length < _featureMin) {
+        return 'كل ميزة لازم تكون على الأقل $_featureMin أحرف';
+      }
+      if (f.length > _featureMax) {
+        return 'كل ميزة لازم تكون أقل من $_featureMax حرف';
+      }
     }
     return null;
   }
@@ -277,15 +319,15 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     final k1 = FixedServiceCategories.keyFromAnyString(widget.service.name);
     if (k1 != null) return k1;
 
-    final k2 = FixedServiceCategories.keyFromAnyString(widget.service.categoryOther ?? '');
+    final k2 = FixedServiceCategories.keyFromAnyString(
+        widget.service.categoryOther ?? '');
     if (k2 != null) return k2;
 
     return null;
   }
 
-  void _addFeature() {
-    setState(() => _featuresCtrls.add(TextEditingController()));
-  }
+  void _addFeature() =>
+      setState(() => _featuresCtrls.add(TextEditingController()));
 
   void _removeFeature(int index) {
     if (_featuresCtrls.length <= 1) {
@@ -300,28 +342,21 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
   Future<void> _save() async {
     if (_saving) return;
+    if (!_isDirty) return; // ✅ ممنوع حفظ بدون تغييرات
 
     final ok = _formKey.currentState?.validate() ?? false;
     if (!ok) return;
 
     final featuresError = _validateFeatures();
     if (featuresError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(featuresError, style: const TextStyle(color: Colors.white)),
-          backgroundColor: Colors.red,
-        ),
-      );
+      // ✅ نخليها تحت الحقل؟ (لسا عندك validator على كل input)
+      // هنا بنخلي رسالة عامة Dialog أفضل من SnackBar
+      await _showSuccessDialog(featuresError);
       return;
     }
 
     if (_selectedType != _tCustom && _typeAlreadyExists(_selectedType)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('هذا النوع موجود مسبقاً داخل الخدمة.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      await _showSuccessDialog('هذا النوع موجود مسبقاً داخل الخدمة.');
       return;
     }
 
@@ -330,8 +365,8 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
     try {
       final newPrice = double.tryParse(_price.text.trim()) ?? 0;
 
-      final updatedPackages = widget.service.packages.map((p) => p.toJson()).toList();
-
+      final updatedPackages =
+          widget.service.packages.map((p) => p.toJson()).toList();
       final old = widget.service.packages[widget.packageIndex];
 
       final newName = _selectedType == _tCustom
@@ -359,7 +394,8 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
         final categoryId = idMap[key];
         if (categoryId != null) {
           payload['category_id'] = categoryId;
-          payload['category_other'] = FixedServiceCategories.labelArFromKey(key);
+          payload['category_other'] =
+              FixedServiceCategories.labelArFromKey(key);
           payload['name'] = key;
         }
       }
@@ -370,27 +406,19 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
         options: Options(contentType: Headers.jsonContentType),
       );
 
+      // ✅ تحديث القائمة قبل الرجوع
       ref.invalidate(providerMyServicesProvider);
 
+      // ✅ Dialog نجاح واضح
+      await _showSuccessDialog('تم حفظ تعديل الباقة بنجاح');
+
       if (!mounted) return;
-
-      // ✅ Toast نجاح عربي (اختياري: انت كنت بتغلق مباشرة)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('تم حفظ التعديل بنجاح'),
-          backgroundColor: AppColors.lightGreen,
-        ),
-      );
-
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (err) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('تعذر حفظ التعديل. حاول مرة أخرى.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      final msg = errorText(err);
+
+      await _showSuccessDialog(msg);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -402,7 +430,7 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final canLeave = await _confirmDiscardIfDirty();
         if (!context.mounted) return;
@@ -416,7 +444,8 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
             backgroundColor: Colors.transparent,
             elevation: 0,
             centerTitle: true,
-            title: const Text('تعديل الباقة', style: TextStyle(fontWeight: FontWeight.bold)),
+            title: const Text('تعديل الباقة',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             leading: IconButton(
               icon: const BackButtonIcon(),
               color: AppColors.textPrimary,
@@ -429,103 +458,91 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
           ),
           body: Padding(
             padding: SizeConfig.padding(all: 20),
-            child: Form(
-              key: _formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _label('نوع الباقة *'),
-                    SizeConfig.v(8),
-                    _typeSelector(),
-
-                    if (_selectedType == _tCustom) ...[
+            child: AbsorbPointer(
+              absorbing: _saving,
+              child: Form(
+                key: _formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _label('نوع الباقة *'),
+                      SizeConfig.v(8),
+                      _typeSelector(),
+                      if (_selectedType == _tCustom) ...[
+                        SizeConfig.v(16),
+                        _label('اسم الباقة *'),
+                        _input(_customName, 'مثال: باقة خاصة',
+                            validator: _validateCustomName),
+                      ],
                       SizeConfig.v(16),
-                      _label('اسم الباقة *'),
+                      _label('السعر (د.أ) *'),
                       _input(
-                        _customName,
-                        'مثال: باقة خاصة',
-                        validator: _validateCustomName,
+                        _price,
+                        'مثال: 150',
+                        keyboardType: TextInputType.number,
+                        validator: _validatePrice,
+                      ),
+                      SizeConfig.v(16),
+                      _label('الوصف *'),
+                      _input(_desc, 'اشرح تفاصيل الباقة...',
+                          maxLines: 3, validator: _validateDesc),
+                      SizeConfig.v(16),
+                      _featuresSection(),
+                      SizeConfig.v(26),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: (!_isDirty || _saving) ? null : _save,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.lightGreen,
+                                disabledBackgroundColor: AppColors.lightGreen
+                                    .withValues(alpha: 0.25),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                                padding: SizeConfig.padding(vertical: 12),
+                              ),
+                              child: _saving
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Text(
+                                      'حفظ',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final canLeave = await _confirmDiscardIfDirty();
+                                if (!context.mounted) return;
+                                if (canLeave) Navigator.of(context).pop(false);
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.lightGreen,
+                                side: const BorderSide(
+                                    color: AppColors.lightGreen),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
+                                padding: SizeConfig.padding(vertical: 12),
+                              ),
+                              child: const Text('إلغاء',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-
-                    SizeConfig.v(16),
-                    _label('السعر (د.أ) *'),
-                    _input(
-                      _price,
-                      'مثال: 150',
-                      keyboardType: TextInputType.number,
-                      validator: _validatePrice,
-                    ),
-
-                    SizeConfig.v(16),
-                    _label('الوصف *'),
-                    _input(
-                      _desc,
-                      'اشرح تفاصيل الباقة...',
-                      maxLines: 3,
-                      validator: _validateDesc,
-                    ),
-
-                    SizeConfig.v(16),
-                    _featuresSection(),
-
-                    SizeConfig.v(26),
-                    Row(
-                      children: [
-                       Expanded(
-                          child: ElevatedButton(
-                            onPressed: _save,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.lightGreen,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              padding: SizeConfig.padding(vertical: 12),
-                            ),
-                            child: _saving
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    'حفظ',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                         Expanded(
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              final canLeave = await _confirmDiscardIfDirty();
-                              if (!context.mounted) return;
-                              if (canLeave) Navigator.of(context).pop(false);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.lightGreen,
-                              side: const BorderSide(color: AppColors.lightGreen),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              padding: SizeConfig.padding(vertical: 12),
-                            ),
-                            child: const Text(
-                              'إلغاء',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -546,9 +563,7 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
               ? null
               : () => setState(() {
                     _selectedType = type;
-                    if (type != _tCustom) {
-                      _customName.text = _typeNameAr(type);
-                    }
+                    if (type != _tCustom) _customName.text = _typeNameAr(type);
                   }),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
@@ -577,7 +592,9 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    color: exists ? AppColors.textSecondary : AppColors.textPrimary,
+                    color: exists
+                        ? AppColors.textSecondary
+                        : AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -593,10 +610,9 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
                 ),
                 if (exists) ...[
                   const SizedBox(height: 8),
-                  const Text(
-                    'موجودة مسبقاً',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.w800),
-                  ),
+                  const Text('موجودة مسبقاً',
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.w800)),
                 ],
               ],
             ),
@@ -626,13 +642,10 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
             TextButton.icon(
               onPressed: _addFeature,
               icon: const Icon(Icons.add, color: AppColors.lightGreen),
-              label: const Text(
-                'إضافة ميزة',
-                style: TextStyle(
-                  color: AppColors.lightGreen,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              label: const Text('إضافة ميزة',
+                  style: TextStyle(
+                      color: AppColors.lightGreen,
+                      fontWeight: FontWeight.w800)),
             ),
           ],
         ),
@@ -640,10 +653,9 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
         Text(
           'أدخل الخدمات أو الميزات الموجودة داخل هذه الباقة (ميزة واحدة على الأقل).',
           style: TextStyle(
-            color: AppColors.textSecondary,
-            fontSize: SizeConfig.ts(12.5),
-            height: 1.3,
-          ),
+              color: AppColors.textSecondary,
+              fontSize: SizeConfig.ts(12.5),
+              height: 1.3),
         ),
         const SizedBox(height: 10),
         ListView.separated(
@@ -711,7 +723,8 @@ class _ProviderEditPackageViewState extends ConsumerState<ProviderEditPackageVie
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       validator: validator,
     );

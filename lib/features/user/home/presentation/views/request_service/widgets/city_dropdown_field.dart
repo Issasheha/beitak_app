@@ -68,7 +68,7 @@ class CityDropdownField extends StatelessWidget {
           )
         else
           DropdownButtonFormField<CityModel>(
-            value: selected,
+            initialValue: selected,
             isExpanded: true,
             items: cities
                 .map(

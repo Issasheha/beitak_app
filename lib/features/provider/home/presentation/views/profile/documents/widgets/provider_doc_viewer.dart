@@ -12,7 +12,10 @@ class ProviderDocViewer {
     String? title,
   }) async {
     final url = ApiConstants.providerDocUrl(fileName);
+
+    // ✅ await gap -> لازم نتأكد إن الـ context لسا mounted قبل أي استخدام
     final headers = await _buildAuthHeaders();
+    if (!context.mounted) return;
 
     if (_isImage(fileName)) {
       await showDialog(
@@ -32,9 +35,9 @@ class ProviderDocViewer {
         ? 'PDF يحتاج رابط مباشر عام أو Signed URL من الباك.'
         : 'هذا النوع يحتاج دعم إضافي من الباك (Signed URL / streaming).';
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   static bool _isImage(String name) {

@@ -25,7 +25,13 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
 
   bool _isPlaceholder(String s) {
     final x = s.trim().toLowerCase();
-    return x.isEmpty || x == 'n/a' || x == 'na' || x == 'none' || x == 'null' || x == '-' || x == '—';
+    return x.isEmpty ||
+        x == 'n/a' ||
+        x == 'na' ||
+        x == 'none' ||
+        x == 'null' ||
+        x == '-' ||
+        x == '—';
   }
 
   String _clean(String? s) {
@@ -42,12 +48,11 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
     final key = FixedServiceCategories.keyFromAnyString(s);
     if (key != null) return FixedServiceCategories.labelArFromKey(key);
 
-    // لو عربي أصلاً
     final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
     return hasArabic ? s : s;
   }
 
-    String _formatTime(String hhmmss) {
+  String _formatTime(String hhmmss) {
     final s = hhmmss.trim();
     if (s.isEmpty) return '—';
 
@@ -75,7 +80,144 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
     return '$v ساعات';
   }
 
-  String _dateNice(String d) => d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
+  String _dateNice(String d) =>
+      d.trim().isEmpty ? '—' : d.trim().replaceAll('-', '/');
+
+  // ---------- Location split ----------
+  List<String> _splitCityArea(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return const [];
+
+    var norm = s;
+    norm = norm.replaceAll('،', ',');
+    norm = norm.replaceAll(' - ', '-');
+    norm = norm.replaceAll(' — ', '-');
+
+    List<String> parts;
+    if (norm.contains(',')) {
+      parts = norm.split(',');
+    } else if (norm.contains('-')) {
+      parts = norm.split('-');
+    } else {
+      parts = [norm];
+    }
+
+    parts = parts.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
+    if (parts.length == 1) return ['', parts[0]];
+    return [parts[0], parts[1]];
+  }
+
+  // ✅ نفس فكرة TodayTask: normalize -> tokens
+  String _norm(String s) {
+    var x = s.trim().toLowerCase();
+    if (x.isEmpty) return '';
+
+    x = x
+        .replaceAll('أ', 'ا')
+        .replaceAll('إ', 'ا')
+        .replaceAll('آ', 'ا')
+        .replaceAll('ى', 'ي')
+        .replaceAll('ة', 'ه');
+
+    // كل شيء غير عربي/لاتيني/أرقام/مسافة -> مسافة
+    x = x.replaceAll(RegExp(r'[^\u0600-\u06FFa-z0-9\s]'), ' ');
+    x = x.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return x;
+  }
+
+  Set<String> _tokens(String s) {
+    final n = _norm(s);
+    if (n.isEmpty) return {};
+    return n.split(' ').where((t) => t.trim().isNotEmpty).toSet();
+  }
+
+  /// ✅ نفس المنطق الزابط عندك:
+  /// نخفي العنوان إذا كان مكرر للموقع حتى لو لغة مختلفة
+  bool _shouldShowAddress({
+    required String address,
+    required String locationAr,
+    required String locationRaw,
+  }) {
+    final addrTokens = _tokens(address);
+    if (addrTokens.isEmpty) return false;
+
+    final locTokens = <String>{
+      ..._tokens(locationRaw), // غالباً إنجليزي (من السيرفر)
+      ..._tokens(locationAr), // عربي (المعروض)
+    };
+
+    if (locTokens.isEmpty) return true;
+
+    // إذا كل كلمات العنوان موجودة داخل كلمات الموقع => مكرر
+    final addrIsSubset = addrTokens.difference(locTokens).isEmpty;
+    if (addrIsSubset) return false;
+
+    // إذا overlap عالي => مكرر
+    final intersection = addrTokens.intersection(locTokens);
+    final overlapRatio =
+        intersection.isEmpty ? 0.0 : (intersection.length / addrTokens.length);
+    if (overlapRatio >= 0.9 && addrTokens.length <= locTokens.length + 1) {
+      return false;
+    }
+
+    // شيل كلمات الموقع من العنوان، إذا ما ضل شيء مفيد نخفيه
+    final remainder = addrTokens.difference(locTokens);
+
+    const generic = {
+      'jordan',
+      'jo',
+      'amman',
+      'abdoun',
+      'abdun',
+      'abdoon',
+      'street',
+      'st',
+      'road',
+      'rd',
+      'building',
+      'bldg',
+      'apt',
+      'apartment',
+      'area',
+      'near',
+      'الاردن',
+      'عمان',
+      'عبدون',
+      'شارع',
+      'طريق',
+      'بنايه',
+      'عماره',
+      'شقه',
+      'منطقه',
+      'بالقرب',
+    };
+
+    final remainderUseful =
+        remainder.where((t) => t.length >= 3 && !generic.contains(t)).toList();
+
+    if (remainderUseful.isEmpty) return false;
+
+    return true;
+  }
+
+  // ---------- Package translation ----------
+  String _packageLabelAr(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return '';
+
+    // لو عربي خلّيه
+    final hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(s);
+    if (hasArabic) return s;
+
+    final n = s.toLowerCase().trim();
+
+    if (n == 'standard' || n == 'normal' || n == 'basic') return 'عادي';
+    if (n == 'premium' || n == 'featured' || n == 'vip') return 'مميز';
+    if (n == 'urgent' || n == 'express' || n == 'rush') return 'مستعجل';
+
+    return s;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -92,15 +234,16 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
     final duration = _formatDurationHours(b.durationHours);
 
     // ✅ تنظيف القيم
-    final addressClean = _clean(b.serviceAddress);
-    final descClean = _clean(b.serviceDescription);
-    final notesClean = _clean(b.customerNotes);
-    final packageClean = _clean(b.packageSelected);
+    final address = _clean(b.serviceAddress);
+    final desc = _clean(b.serviceDescription);
+    final notes = _clean(b.customerNotes);
+    final packageRaw = _clean(b.packageSelected);
+    final packageAr = _packageLabelAr(packageRaw);
 
-    final hasAddress = addressClean.isNotEmpty;
-    final hasDesc = descClean.isNotEmpty;
-    final hasNotes = notesClean.isNotEmpty;
-    final hasPackage = packageClean.isNotEmpty;
+    final hasAddress = address.isNotEmpty;
+    final hasDesc = desc.isNotEmpty;
+    final hasNotes = notes.isNotEmpty;
+    final hasPackage = packageAr.isNotEmpty;
 
     final addons = b.addOnsSelected;
     final addonsPreview = addons.length <= 4 ? addons : addons.take(4).toList();
@@ -113,12 +256,49 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
     // ✅ ماب المناطق من السيرفر
     final areasMapAsync = ref.watch(areasNameMapProvider);
 
+    // ✅ locationRaw من السيرفر (غالباً "Amman, Abdoun")
     final locationRaw = _clean(b.locationText);
+
+    // ✅ نطلع City + Area (عمان، عبدون)
+    final locParts = _splitCityArea(locationRaw);
+    final cityRaw = locParts.isNotEmpty ? locParts[0] : '';
+    final areaRaw = locParts.length > 1 ? locParts[1] : '';
+
     final locationAr = areasMapAsync.when(
-      data: (m) => FixedLocations.labelArFromAny(locationRaw, map: m),
-      loading: () => FixedLocations.labelArFromAny(locationRaw), // fallback مؤقت
-      error: (_, __) => FixedLocations.labelArFromAny(locationRaw),
+      data: (m) {
+        final cityAr = _clean(FixedLocations.labelArFromAny(cityRaw, map: m));
+        final areaAr = _clean(FixedLocations.labelArFromAny(areaRaw, map: m));
+
+        final cityShown = cityAr.isNotEmpty ? cityAr : _clean(cityRaw);
+        final areaShown = areaAr.isNotEmpty ? areaAr : _clean(areaRaw);
+
+        final hasCity = cityShown.isNotEmpty && !_isPlaceholder(cityShown);
+        final hasArea = areaShown.isNotEmpty && !_isPlaceholder(areaShown);
+
+        if (hasCity && hasArea) return '$cityShown، $areaShown';
+        if (hasCity) return cityShown;
+        if (hasArea) return areaShown;
+
+        // fallback أخير
+        final full = _clean(FixedLocations.labelArFromAny(locationRaw, map: m));
+        return full.isNotEmpty ? full : (locationRaw.isNotEmpty ? locationRaw : '—');
+      },
+      loading: () {
+        // أثناء التحميل: لا تكسر.. اعرض raw
+        return locationRaw.isNotEmpty ? locationRaw : '—';
+      },
+      error: (_, __) {
+        return locationRaw.isNotEmpty ? locationRaw : '—';
+      },
     );
+
+    // ✅ show address فقط إذا مش مكرر (نفس فكرة TodayTask بالضبط)
+    final showAddress = hasAddress &&
+        _shouldShowAddress(
+          address: address,
+          locationAr: locationAr,
+          locationRaw: locationRaw,
+        );
 
     return Directionality(
       textDirection: TextDirection.rtl,
@@ -132,7 +312,8 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.o(0.12),
@@ -176,9 +357,9 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                     ),
 
                     _InfoCard(
-                      // ✅ الفئة عربي بدل cleaning
                       title: _serviceTitleAr(b.serviceName),
-                      subtitle: 'رقم الحجز: ${_clean(b.bookingNumber).isEmpty ? '—' : _clean(b.bookingNumber)}',
+                      subtitle:
+                          'رقم الحجز: ${_clean(b.bookingNumber).isEmpty ? '—' : _clean(b.bookingNumber)}',
                       trailing: Text(
                         '${b.totalPrice.toStringAsFixed(0)} د.أ',
                         style: AppTextStyles.body14.copyWith(
@@ -202,16 +383,22 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                             _KeyValue('📅', 'التاريخ', date),
                             _KeyValue('🕘', 'الوقت', time),
                             _KeyValue('⏱️', 'المدة', duration),
+
+                            // ✅ المنطقة: City + Area
                             _KeyValue('📍', 'المنطقة', locationAr),
 
-                            // ✅ العنوان لا يظهر إذا N/A / فاضي
-                            if (hasAddress) _KeyValue('🏠', 'العنوان', addressClean, maxLines: 2),
+                            // ✅ العنوان فقط إذا مش مكرر
+                            if (showAddress) _KeyValue('🏠', 'العنوان', address, maxLines: 2),
 
                             SizedBox(height: SizeConfig.h(10)),
 
                             const _SectionTitle('العميل'),
                             SizedBox(height: SizeConfig.h(6)),
-                            _KeyValue('👤', 'الاسم', _clean(b.customerName).isEmpty ? '—' : _clean(b.customerName)),
+                            _KeyValue(
+                              '👤',
+                              'الاسم',
+                              _clean(b.customerName).isEmpty ? '—' : _clean(b.customerName),
+                            ),
 
                             if (showContactInfo) ...[
                               if (b.customerPhone != null && _clean(b.customerPhone).isNotEmpty)
@@ -221,7 +408,8 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                             ] else ...[
                               SizedBox(height: SizeConfig.h(10)),
                               const _PrivacyNoticeCard(
-                                text: '🔒 بيانات التواصل مخفية حالياً.\nستظهر رقم الهاتف والإيميل بعد قبول الطلب.',
+                                text:
+                                    '🔒 بيانات التواصل مخفية حالياً.\nستظهر رقم الهاتف والإيميل بعد قبول الطلب.',
                               ),
                             ],
 
@@ -233,7 +421,7 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                               if (hasDesc)
                                 _MultiLineCard(
                                   title: 'وصف الخدمة',
-                                  text: descClean,
+                                  text: desc,
                                   maxLines: 3,
                                 ),
 
@@ -242,7 +430,8 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.stretch,
                                     children: [
-                                      if (hasPackage) _KeyValue('📦', 'الباقة', packageClean),
+                                      if (hasPackage) _KeyValue('📦', 'الباقة', packageAr),
+
                                       if (addonsPreview.isNotEmpty) ...[
                                         SizedBox(height: SizeConfig.h(8)),
                                         Wrap(
@@ -250,7 +439,8 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                                           runSpacing: SizeConfig.h(8),
                                           children: [
                                             ...addonsPreview.map((t) => _ChipPill(label: t)),
-                                            if (remainingAddons > 0) _ChipPill(label: '+$remainingAddons'),
+                                            if (remainingAddons > 0)
+                                              _ChipPill(label: '+$remainingAddons'),
                                           ],
                                         ),
                                       ],
@@ -261,7 +451,7 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
                               if (hasNotes)
                                 _MultiLineCard(
                                   title: 'ملاحظات العميل',
-                                  text: notesClean,
+                                  text: notes,
                                   maxLines: 3,
                                 ),
                             ],
@@ -282,7 +472,7 @@ class ProviderBookingDetailsSheet extends ConsumerWidget {
   }
 }
 
-// -------- UI Widgets (كما هي عندك) --------
+// -------- UI Widgets (كما هي) --------
 
 class _SheetHandle extends StatelessWidget {
   const _SheetHandle();
@@ -457,7 +647,10 @@ class _PrivacyNoticeCard extends StatelessWidget {
               border: Border.all(color: AppColors.lightGreen.o(0.25)),
             ),
             alignment: Alignment.center,
-            child: Text('🔒', style: TextStyle(fontSize: SizeConfig.ts(16), height: 1.0)),
+            child: Text(
+              '🔒',
+              style: TextStyle(fontSize: SizeConfig.ts(16), height: 1.0),
+            ),
           ),
           SizedBox(width: SizeConfig.w(10)),
           Expanded(

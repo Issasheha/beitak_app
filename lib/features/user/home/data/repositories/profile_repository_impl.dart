@@ -30,6 +30,7 @@ class ProfileRepositoryImpl implements ProfileRepository {
     await remote.changePassword(params.toJson());
   }
 
+  @override
   Future<void> deleteAccount() async {
     await remote.deleteAccount();
   }

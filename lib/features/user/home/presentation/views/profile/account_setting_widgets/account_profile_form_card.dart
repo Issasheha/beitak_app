@@ -117,9 +117,9 @@ class _AccountProfileFormCardState extends ConsumerState<AccountProfileFormCard>
     var s = _cleanPhone(input);
 
     if (s.startsWith('+962')) {
-      s = '0' + s.substring(4);
+      s = '0${s.substring(4)}';
     } else if (s.startsWith('962')) {
-      s = '0' + s.substring(3);
+      s = '0${s.substring(3)}';
     } else if (s.startsWith('7') && s.length == 9) {
       s = '0$s';
     }

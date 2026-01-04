@@ -39,7 +39,10 @@ class ProviderProfileHeaderCard extends StatelessWidget {
 
     final initials = _initials(state.displayName);
     final imgUrl = _profileImageUrl();
-    final avatarSize = SizeConfig.w(52);
+    final avatarSize = SizeConfig.w(56);
+
+    final city = state.cityLabel.trim();
+    final hasCity = city.isNotEmpty && city != '—';
 
     return Container(
       padding: SizeConfig.padding(horizontal: 14, vertical: 14),
@@ -57,12 +60,11 @@ class ProviderProfileHeaderCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ===== Top Row (Avatar + Name/MemberSince) | Category Chip on left =====
           Row(
             textDirection: TextDirection.rtl,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ Right block: Avatar (يمين) + اسم + عضو منذ (تحت الاسم)
+              // ========= Right side (Avatar + texts) =========
               Expanded(
                 child: Row(
                   textDirection: TextDirection.rtl,
@@ -73,33 +75,70 @@ class ProviderProfileHeaderCard extends StatelessWidget {
                       initials: initials,
                       imgUrl: imgUrl,
                     ),
-                    SizeConfig.hSpace(10),
+                    SizeConfig.hSpace(12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            state.displayName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.body16.copyWith(
-                              fontSize: SizeConfig.ts(16),
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.textPrimary,
-                              height: 1.15,
-                            ),
+                          // الاسم + شارة تحقق
+                          Row(
+                            textDirection: TextDirection.rtl,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  state.displayName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTextStyles.body16.copyWith(
+                                    fontSize: SizeConfig.ts(16),
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimary,
+                                    height: 1.12,
+                                  ),
+                                ),
+                              ),
+                              if (state.isFullyVerified) ...[
+                                SizeConfig.hSpace(6),
+                                Icon(
+                                  Icons.check_circle_rounded,
+                                  color: AppColors.lightGreen,
+                                  size: SizeConfig.ts(18),
+                                ),
+                              ],
+                            ],
                           ),
+
                           SizeConfig.v(4),
+
+                          // سطر الوصف (زي فيجما)
                           Text(
-                            state.memberSinceLabel,
+                            'مقدم خدمات محترف',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.caption11.copyWith(
-                              fontSize: SizeConfig.ts(12),
+                            style: AppTextStyles.body14.copyWith(
+                              fontSize: SizeConfig.ts(12.8),
                               color: AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
+
+                          SizeConfig.v(6),
+
+                          // عضو منذ + أيقونة
+                          _MetaRow(
+                            icon: Icons.emoji_events_outlined,
+                            text: state.memberSinceLabel,
+                          ),
+
+                          // الموقع داخل الهيدر ✅ (إضافة QA)
+                          if (hasCity) ...[
+                            SizeConfig.v(6),
+                            _MetaRow(
+                              icon: Icons.location_on_rounded,
+                              text: city,
+                              iconColor: AppColors.lightGreen,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -107,13 +146,11 @@ class ProviderProfileHeaderCard extends StatelessWidget {
                 ),
               ),
 
-              // ✅ Left: Category chip with label
+              // ========= Left side (Category chip) =========
               if (_showCategoryChip) ...[
                 SizeConfig.hSpace(10),
                 ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: SizeConfig.w(155),
-                  ),
+                  constraints: BoxConstraints(maxWidth: SizeConfig.w(150)),
                   child: _CategoryChip(label: state.categoryLabel),
                 ),
               ],
@@ -124,33 +161,28 @@ class ProviderProfileHeaderCard extends StatelessWidget {
           Divider(height: 1, color: Colors.grey.withValues(alpha: 0.14)),
           SizeConfig.v(12),
 
-          // ✅ Stats Row (نفس ترتيب التصميم: إجمالي - التقييم - مكتمل)
+          // ✅ Stats Row (نفس ترتيبك)
           Row(
             textDirection: TextDirection.rtl,
             children: [
               Expanded(
                 child: _Stat(
                   value: '${state.totalBookings}',
-                  label: 'إجمالي',
-                  icon: Icons.calendar_month_outlined,
+                  label: 'إجمالي الحجوزات',
                 ),
               ),
-              SizeConfig.hSpace(10),
+              _VLine(),
               Expanded(
                 child: _Stat(
-                  value: state.ratingCount == 0
-                      ? '—'
-                      : state.rating.toStringAsFixed(1),
+                  value: state.ratingCount == 0 ? '—' : state.rating.toStringAsFixed(1),
                   label: 'التقييم',
-                  icon: Icons.star_border_rounded,
                 ),
               ),
-              SizeConfig.hSpace(10),
+              _VLine(),
               Expanded(
                 child: _Stat(
                   value: '${state.completedBookings}',
-                  label: 'مكتمل',
-                  icon: Icons.check_circle_outline_rounded,
+                  label: 'مكتملة',
                 ),
               ),
             ],
@@ -218,6 +250,48 @@ class _Avatar extends StatelessWidget {
   }
 }
 
+class _MetaRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? iconColor;
+
+  const _MetaRow({
+    required this.icon,
+    required this.text,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = text.trim();
+    if (t.isEmpty) return const SizedBox.shrink();
+
+    return Row(
+      textDirection: TextDirection.rtl,
+      children: [
+        Icon(
+          icon,
+          size: SizeConfig.ts(16),
+          color: iconColor ?? const Color(0xFFFFC107),
+        ),
+        SizeConfig.hSpace(6),
+        Expanded(
+          child: Text(
+            t,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption11.copyWith(
+              fontSize: SizeConfig.ts(12.3),
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CategoryChip extends StatelessWidget {
   final String label;
 
@@ -248,7 +322,6 @@ class _CategoryChip extends StatelessWidget {
           SizeConfig.v(3),
           Text(
             label,
-            // ✅ كامل بدون ...
             maxLines: 2,
             softWrap: true,
             overflow: TextOverflow.clip,
@@ -266,58 +339,55 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
+class _VLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: SizeConfig.h(44),
+      margin: EdgeInsets.symmetric(horizontal: SizeConfig.w(10)),
+      color: Colors.grey.withValues(alpha: 0.18),
+    );
+  }
+}
+
 class _Stat extends StatelessWidget {
   final String value;
   final String label;
-  final IconData icon;
 
   const _Stat({
     required this.value,
     required this.label,
-    required this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: SizeConfig.padding(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F3F4),
-        borderRadius: BorderRadius.circular(SizeConfig.radius(14)),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.12)),
-      ),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: AppTextStyles.body16.copyWith(
-              fontSize: SizeConfig.ts(16),
-              fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary,
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: AppTextStyles.body16.copyWith(
+            fontSize: SizeConfig.ts(17),
+            fontWeight: FontWeight.w900,
+            color: AppColors.textPrimary,
           ),
-          SizeConfig.v(4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: SizeConfig.ts(16), color: AppColors.textSecondary),
-              SizeConfig.hSpace(6),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption11.copyWith(
-                    fontSize: SizeConfig.ts(11.8),
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
+        ),
+        SizeConfig.v(4),
+        Text(
+          label,
+          maxLines: 2, // ✅ كان 1
+          softWrap: true,
+          overflow: TextOverflow.visible, // ✅ بدل ellipsis عشان يبين كامل
+          textAlign: TextAlign.center, // ✅ أجمل مع سطرين
+          style: AppTextStyles.caption11.copyWith(
+            fontSize: SizeConfig.ts(11.4), // ✅ أصغر شوي عشان يركب دايمًا
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w700,
+            height: 1.15,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -2,8 +2,8 @@
 
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/routes/router_refresh_notifier.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_state.dart';
 
 import 'package:beitak_app/features/auth/presentation/views/login/login_view.dart';
 import 'package:beitak_app/features/auth/presentation/views/provider/provider_application_view.dart';
@@ -100,6 +100,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     AppRoutes.helpCenter,
     AppRoutes.search,
     AppRoutes.serviceDetail,
+        AppRoutes.providerApplication,
+
   };
 
   // ✅ لا تبدأ بـ "_" لأنها local داخل function
@@ -203,36 +205,43 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       }
 
       // 6) مسجّل دخول
-      if (auth.status == AuthStatus.authenticated) {
-        // ✅ Role Guards: امنع الدخول لصفحات الطرف الآخر
-        if (auth.isProvider && userOnlyRoutes.contains(path)) {
-          return AppRoutes.providerHome;
-        }
-        if (!auth.isProvider && providerOnlyRoutes.contains(path)) {
-          return AppRoutes.home;
-        }
+      // 6) مسجّل دخول
+if (auth.status == AuthStatus.authenticated) {
+  // ✅ Role Guards: امنع الدخول لصفحات الطرف الآخر
+  if (auth.isProvider && userOnlyRoutes.contains(path)) {
+    return AppRoutes.providerHome;
+  }
+  if (!auth.isProvider && providerOnlyRoutes.contains(path)) {
+    return AppRoutes.home;
+  }
 
-        // لو جاي من login ومعه from → رجّعه بشرط يكون مناسب للدور
-        if (path == AppRoutes.login) {
-          final from = state.uri.queryParameters['from'];
-          if (from != null && from.isNotEmpty) {
-            final decoded = Uri.decodeComponent(from);
-            final safe = safeFromForRole(
-              decodedFrom: decoded,
-              isProvider: auth.isProvider,
-            );
-            if (safe != null) return safe;
-          }
+  // ✅ استثناء مهم: اليوزر مسموحله يفتح صفحة طلب الانضمام كمزوّد
+  // (لكن لو هو Provider بالفعل، ما في داعي)
+  if (path == AppRoutes.providerApplication) {
+    return auth.isProvider ? AppRoutes.providerHome : null;
+  }
 
-          // لو ما في from صالح → وجهة افتراضية حسب الدور
-          return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
-        }
+  // لو جاي من login ومعه from → رجّعه بشرط يكون مناسب للدور
+  if (path == AppRoutes.login) {
+    final from = state.uri.queryParameters['from'];
+    if (from != null && from.isNotEmpty) {
+      final decoded = Uri.decodeComponent(from);
+      final safe = safeFromForRole(
+        decodedFrom: decoded,
+        isProvider: auth.isProvider,
+      );
+      if (safe != null) return safe;
+    }
 
-        // لا يرجع للـ public routes
-        if (publicRoutes.contains(path)) {
-          return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
-        }
-      }
+    // لو ما في from صالح → وجهة افتراضية حسب الدور
+    return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
+  }
+
+  // ✅ لا ترجع اليوزر عن public routes "عدا providerApplication"
+  if (publicRoutes.contains(path)) {
+    return auth.isProvider ? AppRoutes.providerHome : AppRoutes.home;
+  }
+}
 
       return null;
     },

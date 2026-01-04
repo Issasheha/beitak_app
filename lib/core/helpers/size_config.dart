@@ -8,7 +8,13 @@ class SizeConfig {
   static late double screenWidth;
   static late double screenHeight;
   static late double pixelRatio;
+
+  // ✅ بدل textScaleFactor deprecated
+  static late TextScaler textScaler;
+
+  // ✅ إذا بدك تظل تستخدم رقم جاهز مثل قبل (بدون تغيير سلوك)
   static late double textScaleFactor;
+
   static late Orientation orientation;
 
   static late double _scaleWidth;
@@ -23,7 +29,14 @@ class SizeConfig {
     screenWidth = _mediaQuery.size.width;
     screenHeight = _mediaQuery.size.height;
     pixelRatio = _mediaQuery.devicePixelRatio;
-    textScaleFactor = _mediaQuery.textScaleFactor;
+
+    // ✅ الجديد
+    textScaler = _mediaQuery.textScaler;
+
+    // ✅ نطلع scale كرقم مثل القديم (تقريباً نفس المعنى)
+    // scale(1.0) يعطينا قيمة تكبير النص بالنسبة للـ base
+    textScaleFactor = textScaler.scale(1.0);
+
     orientation = _mediaQuery.orientation;
 
     _scaleWidth = screenWidth / designWidth;
@@ -55,10 +68,14 @@ class SizeConfig {
   // Scaled font size
   static double ts(double fontSize) {
     _checkInit();
-    double scale = (_scaleWidth + _scaleHeight) / 2;
-    double result = fontSize * scale;
+    final scale = (_scaleWidth + _scaleHeight) / 2;
+    final result = fontSize * scale;
 
-    return result / (textScaleFactor > 1.4 ? 1.4 : textScaleFactor);
+    // ✅ نفس منطقك بالضبط: cap 1.4
+    final effective = textScaleFactor > 1.4 ? 1.4 : textScaleFactor;
+
+    // ✅ حماية إضافية بسيطة (لو صار 0 لأي سبب)
+    return effective <= 0 ? result : (result / effective);
   }
 
   // Padding/margin scaled

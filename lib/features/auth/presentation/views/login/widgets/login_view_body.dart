@@ -1,6 +1,6 @@
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/helpers/size_config.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 import 'package:beitak_app/features/auth/presentation/views/login/widgets/login_content.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

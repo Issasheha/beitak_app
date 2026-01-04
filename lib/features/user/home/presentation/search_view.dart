@@ -104,11 +104,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
     });
   }
 
-  Future<bool> _onWillPop() async {
-    _popPerfect();
-    return false;
-  }
-
   Future<void> _prefillCityFromProfileIfLoggedIn() async {
     try {
       final cityId = await _fetchProfileCityId();
@@ -169,6 +164,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
   }
 
   void _pushBrowse({required String? categoryKey, required String? q}) {
+    // ✅ مهم: أي navigation لازم يكون مع mounted
+    if (!mounted) return;
+    if (_selectedCity == null) return;
+
     final qp = <String, String>{
       'city_id': _selectedCity!.id.toString(),
       if (categoryKey != null && categoryKey.trim().isNotEmpty)
@@ -207,6 +206,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
     if (_selectedCity == null) {
       await _prefillFuture;
+      if (!mounted) return;
+
       if (_selectedCity == null) {
         final ok = await _pickCity();
         if (!ok) return;
@@ -232,6 +233,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
       final ai = ref.read(aiSearchControllerProvider);
       final aiRes = await ai.predictText(text);
+      if (!mounted) return;
 
       if (ai.shouldUseAiResult(aiRes)) {
         final key = aiRes.categoryKey.trim();
@@ -243,6 +245,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
       _pushBrowse(categoryKey: null, q: text);
     } catch (_) {
+      if (!mounted) return;
       _pushBrowse(categoryKey: null, q: text);
     } finally {
       _aiBusy = false;
@@ -256,6 +259,8 @@ class _SearchViewState extends ConsumerState<SearchView> {
     // بدل سناك بار: جرّب prefill ثم افتح picker لو لسه null
     if (_selectedCity == null) {
       await _prefillFuture;
+      if (!mounted) return;
+
       if (_selectedCity == null) {
         final ok = await _pickCity();
         if (!ok) return;
@@ -277,6 +282,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
       final ai = ref.read(aiSearchControllerProvider);
       final aiRes = await ai.predictVoice(file);
+      if (!mounted) return;
 
       if (ai.shouldUseAiResult(aiRes)) {
         _pushBrowse(categoryKey: aiRes.categoryKey, q: null);
@@ -304,6 +310,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
   Future<void> _autoVoiceFlow() async {
     // ✅ مهم: لا تفتح كيبورد، وابدأ صوت بعد ما تخلص محاولة prefill
     await _prefillFuture;
+    if (!mounted) return;
 
     // لو ما في مدينة، افتح picker مباشرة (بدون سناك)
     if (_selectedCity == null) {
@@ -340,8 +347,13 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
     return MediaQuery(
       data: frozenMq,
-      child: WillPopScope(
-        onWillPop: _onWillPop,
+      child: PopScope(
+        // ✅ نفس فكرة WillPopScope + _popPerfect
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+          _popPerfect();
+        },
         child: Directionality(
           textDirection: TextDirection.rtl,
           child: Scaffold(

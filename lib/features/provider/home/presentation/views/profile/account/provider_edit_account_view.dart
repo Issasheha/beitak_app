@@ -15,7 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 // ✅ لاستخدام local provider بدل إنشاء Impl جديد
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 
 class ProviderAccountEditView extends ConsumerStatefulWidget {
   const ProviderAccountEditView({super.key});
@@ -98,8 +98,20 @@ class _ProviderAccountEditViewState
 
     return Directionality(
       textDirection: TextDirection.rtl,
-      child: WillPopScope(
-        onWillPop: () async => await _confirmLeaveIfDirty(),
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) async {
+          if (didPop) return;
+
+          final ok = await _confirmLeaveIfDirty();
+
+          // ✅ الصحيح مع BuildContext بعد await
+          if (!context.mounted) return;
+
+          if (ok) {
+            context.pop();
+          }
+        },
         child: Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
@@ -112,7 +124,10 @@ class _ProviderAccountEditViewState
               ),
               onPressed: () async {
                 final ok = await _confirmLeaveIfDirty();
-                if (!mounted) return;
+
+                // ✅ الصحيح مع BuildContext بعد await
+                if (!context.mounted) return;
+
                 if (ok) context.pop();
               },
             ),
@@ -146,7 +161,8 @@ class _ProviderAccountEditViewState
                         emailCtrl: _emailCtrl,
                         phoneCtrl: _phoneCtrl,
                         listenable: _profileListen,
-                        onChangePhoneTap: () => _openChangePhoneFlow(state.phone),
+                        onChangePhoneTap: () =>
+                            _openChangePhoneFlow(state.phone),
                         onSave: _onSaveProfile,
                       ),
                       SizeConfig.v(18),
@@ -197,21 +213,25 @@ class _ProviderAccountEditViewState
 
     final res = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('تأكيد'),
         content: const Text('في تغييرات غير محفوظة. بدك تطلع بدون حفظ؟'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(_, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('إلغاء'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(_, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('نعم، اطلع'),
           ),
         ],
       ),
     );
+
+    // ✅ لو الصفحة انسكرت أثناء الديالوج
+    if (!context.mounted) return false;
+
     return res ?? false;
   }
 
@@ -232,7 +252,8 @@ class _ProviderAccountEditViewState
       phone: phone,
     );
 
-    if (!mounted) return;
+    // ✅ الصحيح: قبل استخدام context بعد await
+    if (!context.mounted) return;
 
     if (error == null) {
       final parts = fullName
@@ -249,6 +270,8 @@ class _ProviderAccountEditViewState
         email: email,
         phone: phone,
       );
+
+      if (!context.mounted) return;
 
       ref.read(providerHomeViewModelProvider).setProviderName('$first $last');
     }
@@ -269,7 +292,7 @@ class _ProviderAccountEditViewState
       confirmPassword: _confirmPassCtrl.text.trim(),
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (error == null) {
       _currentPassCtrl.clear();
@@ -305,7 +328,7 @@ class _ProviderAccountEditViewState
       },
     );
 
-    if (!mounted || normalizedPhone == null) return;
+    if (!context.mounted || normalizedPhone == null) return;
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -325,13 +348,16 @@ class _ProviderAccountEditViewState
           },
           onVerify: (otp) async {
             final notifier = ref.read(accountEditControllerProvider.notifier);
-            return await notifier.verifyPhoneOtp(phone: normalizedPhone, otp: otp);
+            return await notifier.verifyPhoneOtp(
+              phone: normalizedPhone,
+              otp: otp,
+            );
           },
         );
       },
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (ok == true) {
       _phoneCtrl.text = normalizedPhone;

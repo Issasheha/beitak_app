@@ -9,7 +9,6 @@ import 'package:beitak_app/core/utils/number_format.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/models/booking_list_item.dart';
 import 'package:beitak_app/features/user/home/presentation/views/my_service/viewmodels/service_details_providers.dart';
 
-import 'widgets_details/status_ui.dart';
 import 'widgets_details/booking_header_card.dart';
 import 'widgets_details/status_footer_box.dart';
 import 'widgets_details/cancel_button.dart';

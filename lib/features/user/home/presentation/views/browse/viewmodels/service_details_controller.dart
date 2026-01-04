@@ -131,7 +131,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
 
       selectedCity ??= _firstWhereOrNull(
         cities,
-        (c) => (c.slug ?? '').toLowerCase().trim() == 'amman',
+        (c) => (c.slug).toLowerCase().trim() == 'amman',
       );
       selectedCity ??= cities.isNotEmpty ? cities.first : null;
 
@@ -309,6 +309,7 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toSet();
+
       if (set.remove(date)) {
         final updated = set.toList()..sort();
         state = state.copyWith(availableDates: updated);
@@ -350,14 +351,17 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
           final dateOnly = DateTime(d.year, d.month, d.day);
           if (dateOnly.isBefore(start) || dateOnly.isAfter(end)) continue;
           best ??= dateOnly;
-          if (dateOnly.isBefore(best!)) best = dateOnly;
+          if (dateOnly.isBefore(best)) best = dateOnly;
         } catch (_) {}
       }
-      if (best != null) return best!;
+      if (best != null) return best;
     }
 
+    // ✅ هنا كان غالباً سبب dead_null_aware_expression عندك
+    // لأن s.provider مش nullable عندك، فـ ما بنستخدم ?. نهائياً
     final allow =
         s.provider.availableDays.map((e) => e.toLowerCase().trim()).toSet();
+
     DateTime cur = start;
     while (!cur.isAfter(end)) {
       final key = _weekdayKey(cur);
@@ -394,19 +398,16 @@ class ServiceDetailsController extends StateNotifier<ServiceDetailsState> {
   }
 
   Future<Response> _getAny(List<String> paths) async {
-    DioException? lastDio;
     for (final p in paths) {
       try {
         return await _dio.get(p);
       } on DioException catch (e) {
-        lastDio = e;
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('GET failed: $p -> ${e.response?.statusCode}');
+        }
       }
     }
-    throw Exception(
-      'تعذر جلب البيانات من السيرفر. حاول مرة أخرى.',
-    );
+    throw Exception('تعذر جلب البيانات من السيرفر. حاول مرة أخرى.');
   }
 
   UserLocationProfile? _parseProfileLoc(dynamic data) {

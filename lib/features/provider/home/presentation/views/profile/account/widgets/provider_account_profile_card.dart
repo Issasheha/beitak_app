@@ -41,6 +41,35 @@ class ProviderAccountProfileCard extends StatelessWidget {
     return name != _norm(state.fullName) || email != _norm(state.email);
   }
 
+  // ✅ نفس فكرة الباك: حروف + مسافات + - + '
+  // يدعم عربي/إنجليزي (بدون أرقام وبدون رموز ثانية)
+  static final RegExp _namePattern = RegExp(
+    r"^[A-Za-z\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+(?:[ '\-][A-Za-z\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+)*$",
+  );
+
+  String? _validateFullName(String? v) {
+    final s = _norm(v ?? '');
+    if (s.isEmpty) return 'الاسم مطلوب';
+    if (s.length < 3) return 'الاسم قصير جداً';
+
+    // ✅ لازم يكون في اسم أول + اسم عائلة (على الأقل كلمتين)
+    final parts = s.split(' ').where((x) => x.trim().isNotEmpty).toList();
+    if (parts.length < 2) return 'اكتب الاسم الأول واسم العائلة';
+
+    if (!_namePattern.hasMatch(s)) {
+      return "الاسم يجب أن يحتوي على أحرف فقط، ويمكن استخدام المسافات و - و '";
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'البريد الإلكتروني مطلوب';
+    final ok = RegExp(r'^\S+@\S+\.\S+$').hasMatch(s);
+    if (!ok) return 'صيغة البريد غير صحيحة';
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -69,30 +98,21 @@ class ProviderAccountProfileCard extends StatelessWidget {
                   hint: 'أحمد محمود',
                   textInputAction: TextInputAction.next,
                   keyboardType: TextInputType.name,
-                  validator: (v) {
-                    final s = (v ?? '').trim();
-                    if (s.isEmpty) return 'الاسم مطلوب';
-                    if (s.length < 3) return 'الاسم قصير جداً';
-                    return null;
-                  },
+                  validator: _validateFullName,
                 ),
                 SizeConfig.v(12),
 
                 const AccountFieldLabel(
-                    text: 'البريد الإلكتروني', requiredStar: true),
+                  text: 'البريد الإلكتروني',
+                  requiredStar: true,
+                ),
                 SizeConfig.v(6),
                 AccountTextInput(
                   controller: emailCtrl,
                   hint: 'ahmad@example.com',
                   textInputAction: TextInputAction.next,
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    final s = (v ?? '').trim();
-                    if (s.isEmpty) return 'البريد الإلكتروني مطلوب';
-                    final ok = RegExp(r'^\S+@\S+\.\S+$').hasMatch(s);
-                    if (!ok) return 'صيغة البريد غير صحيحة';
-                    return null;
-                  },
+                  validator: _validateEmail,
                 ),
                 SizeConfig.v(4),
                 AccountVerifiedRow(
@@ -105,7 +125,10 @@ class ProviderAccountProfileCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const AccountFieldLabel(text: 'رقم الهاتف', requiredStar: false),
+                    const AccountFieldLabel(
+                      text: 'رقم الهاتف',
+                      requiredStar: false,
+                    ),
                     TextButton.icon(
                       onPressed: onChangePhoneTap,
                       icon: const Icon(Icons.edit,
@@ -159,7 +182,9 @@ class ProviderAccountProfileCard extends StatelessWidget {
                       disabledBackgroundColor:
                           AppColors.lightGreen.withValues(alpha: 0.35),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+                        borderRadius: BorderRadius.circular(
+                          SizeConfig.radius(12),
+                        ),
                       ),
                     ),
                     child: state.isSavingProfile

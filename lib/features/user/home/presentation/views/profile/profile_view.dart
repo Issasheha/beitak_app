@@ -7,7 +7,7 @@ import 'package:beitak_app/core/helpers/size_config.dart';
 import 'package:beitak_app/core/routes/app_routes.dart';
 import 'package:beitak_app/core/utils/app_text_styles.dart';
 
-import 'package:beitak_app/features/auth/presentation/providers/auth_providers.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_providers.dart';
 import 'package:beitak_app/features/user/home/presentation/views/profile/viewmodels/profile_providers.dart';
 
 import 'package:beitak_app/features/user/home/presentation/views/profile/widgets/recent_activity_section.dart';
@@ -41,6 +41,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       context.go(AppRoutes.home);
     }
   }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig.init(context);
@@ -50,7 +51,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
 
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) {
+      onPopInvokedWithResult: (didPop, result) {
         if (!didPop) _smartBack(context);
       },
       child: Directionality(
@@ -117,7 +118,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                         },
                       ),
 
-                      SizedBox(height: SizeConfig.h(12)),                      
+                      SizedBox(height: SizeConfig.h(12)),
                       AccountSupportButtons(
                         onLogout: () async {
                           await ref

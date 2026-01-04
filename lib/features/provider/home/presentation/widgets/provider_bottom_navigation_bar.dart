@@ -19,7 +19,6 @@ class ProviderBottomNavigationBar extends StatelessWidget {
   }
 
   void _go(BuildContext context, String route) {
-    // ✅ بدل GoRouter.of(context).location
     final current = GoRouterState.of(context).uri.toString();
     if (current.startsWith(route)) return;
     context.go(route);
@@ -27,7 +26,6 @@ class ProviderBottomNavigationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ بدل GoRouter.of(context).location
     final location = GoRouterState.of(context).uri.toString();
     final selectedIndex = _indexFromLocation(location);
 
@@ -83,10 +81,7 @@ class ProviderBottomNavigationBar extends StatelessWidget {
                       isActive: selectedIndex == 1,
                       onTap: () => _go(context, items[1].route),
                     ),
-
-                    // فراغ لزر +
                     SizedBox(width: SizeConfig.w(80)),
-
                     _NavItem(
                       config: items[2],
                       isActive: selectedIndex == 2,
@@ -101,7 +96,6 @@ class ProviderBottomNavigationBar extends StatelessWidget {
                 ),
               ),
             ),
-
             Positioned(
               top: 0,
               left: 0,
@@ -151,25 +145,32 @@ class _GlassNavBar extends StatelessWidget {
 
   final Widget child;
 
+  // ✅ cache blur filter
+  static final ImageFilter _blur = ImageFilter.blur(sigmaX: 15, sigmaY: 15);
+
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(24))),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          height: SizeConfig.h(76),
-          decoration: BoxDecoration(
-            color: AppColors.white.withValues(alpha: 0.25),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 18,
-                offset: const Offset(0, -6),
-              ),
-            ],
+    return RepaintBoundary( // ✅ isolate navbar repaint cost
+      child: ClipRRect(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(SizeConfig.radius(24)),
+        ),
+        child: BackdropFilter(
+          filter: _blur,
+          child: Container(
+            height: SizeConfig.h(76),
+            decoration: BoxDecoration(
+              color: AppColors.white.withValues(alpha: 0.25),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 18,
+                  offset: const Offset(0, -6),
+                ),
+              ],
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );

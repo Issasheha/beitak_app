@@ -38,6 +38,7 @@ dependencies:
   # ✅ لازم للمايك (حفظ ملف مؤقت)
   path_provider: ^2.1.4
 
+  path: any
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1
   flutter_lints: ^3.0.0

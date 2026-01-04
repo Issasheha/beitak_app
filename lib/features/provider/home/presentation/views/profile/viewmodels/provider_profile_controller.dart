@@ -1,3 +1,6 @@
+// lib/features/provider/home/presentation/views/profile/viewmodels/provider_profile_controller.dart
+
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -9,12 +12,16 @@ import 'package:beitak_app/core/error/exceptions.dart';
 
 import 'provider_profile_state.dart';
 
-class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfileState>> {
+class ProviderProfileController
+    extends StateNotifier<AsyncValue<ProviderProfileState>> {
   ProviderProfileController(this.ref) : super(const AsyncLoading()) {
     load();
   }
 
   final Ref ref;
+
+  // ✅ لمنع "ضغطات متعددة" وتجاهل الردود القديمة
+  int _bioReqId = 0;
 
   // ---------- cache ----------
   final Map<int, Map<String, dynamic>> _categoriesById = {};
@@ -49,12 +56,18 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     if (data is String) {
       final s = data.toLowerCase();
       if (s.contains('<html') || s.contains('cloudflare')) {
-        throw const ServerException(message: 'يوجد عطل مؤقت في الخادم. حاول مرة أخرى بعد قليل.');
+        throw const ServerException(
+          message: 'يوجد عطل مؤقت في الخادم. حاول مرة أخرى بعد قليل.',
+        );
       }
-      throw ServerException(message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.');
+      throw ServerException(
+        message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.',
+      );
     }
 
-    throw ServerException(message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.');
+    throw ServerException(
+      message: fallback ?? 'استجابة غير متوقعة من الخادم. حاول مرة أخرى.',
+    );
   }
 
   Map<String, dynamic> _extractDataMap(Map<String, dynamic> root) {
@@ -122,7 +135,10 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       _cachedAuthUser = user;
       return user;
     } on DioException catch (e) {
-      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+      throw ServerException(
+        message: _friendlyDioError(e),
+        statusCode: e.response?.statusCode,
+      );
     } on ServerException {
       rethrow;
     } catch (_) {
@@ -131,13 +147,16 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
   }
 
   Future<int> _resolveProviderId() async {
-    if (_cachedProviderId != null && _cachedProviderId! > 0) return _cachedProviderId!;
+    if (_cachedProviderId != null && _cachedProviderId! > 0) {
+      return _cachedProviderId!;
+    }
 
     final u = await _fetchAuthUserCached();
     final pp = u['provider_profile'];
     final id = (pp is Map) ? pp['id'] : null;
 
-    final providerId = (id is num) ? id.toInt() : int.tryParse(id?.toString() ?? '');
+    final providerId =
+        (id is num) ? id.toInt() : int.tryParse(id?.toString() ?? '');
     if (providerId == null || providerId <= 0) {
       throw const ServerException(message: 'تعذر تحديد رقم مزود الخدمة.');
     }
@@ -172,22 +191,30 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       );
       final data = _extractDataMap(root);
 
-      final list = (data['categories'] ?? data['items']) ?? (root['categories'] ?? root['items']);
+      final list = (data['categories'] ?? data['items']) ??
+          (root['categories'] ?? root['items']);
 
       if (list is List) {
         for (final item in list) {
           if (item is Map) {
             final id = _i(item['id']);
-            if (id > 0) _categoriesById[id] = Map<String, dynamic>.from(item);
+            if (id > 0) {
+              _categoriesById[id] = Map<String, dynamic>.from(item);
+            }
           }
         }
       }
     } on DioException catch (e) {
-      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+      throw ServerException(
+        message: _friendlyDioError(e),
+        statusCode: e.response?.statusCode,
+      );
     } on ServerException {
       rethrow;
     } catch (_) {
-      throw const ServerException(message: 'تعذر تحميل التصنيفات. حاول مرة أخرى.');
+      throw const ServerException(
+        message: 'تعذر تحميل التصنيفات. حاول مرة أخرى.',
+      );
     }
   }
 
@@ -223,45 +250,102 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     return (lbl.trim().isEmpty) ? '—' : lbl;
   }
 
-  // ✅ server بده email (وأحيانًا غيره) موجودين دائمًا في PATCH
-  Future<Map<String, dynamic>> _enrichPatchPayload(Map<String, dynamic> payload) async {
+  // ✅ server بده حقول إضافية مع أي PATCH: business_name + experience_years
+  Future<Map<String, dynamic>> _enrichPatchPayload(
+    Map<String, dynamic> payload,
+  ) async {
     final enriched = Map<String, dynamic>.from(payload);
 
     final current = state.asData?.value;
-    Map? user;
-    if (current != null) {
-      final p = current.provider;
-      user = (p['user'] is Map) ? (p['user'] as Map) : null;
-    }
+    final provider = current?.provider;
+    final user = (provider?['user'] is Map) ? (provider!['user'] as Map) : null;
 
+    // 1) من الحالة الحالية أولاً
     String email = user != null ? _s(user['email']) : '';
     String phone = user != null ? _s(user['phone']) : '';
     String firstName = user != null ? _s(user['first_name']) : '';
     String lastName = user != null ? _s(user['last_name']) : '';
 
-    if (email.isEmpty || firstName.isEmpty || lastName.isEmpty || phone.isEmpty) {
+    String businessName = _s(provider?['business_name']);
+    int experienceYears = _i(provider?['experience_years']);
+
+    // 2) fallback من auth profile
+    if (email.isEmpty ||
+        phone.isEmpty ||
+        firstName.isEmpty ||
+        lastName.isEmpty ||
+        businessName.isEmpty ||
+        experienceYears <= 0) {
       try {
         final u = await _fetchAuthUserCached();
+
         email = email.isEmpty ? _s(u['email']) : email;
         phone = phone.isEmpty ? _s(u['phone']) : phone;
         firstName = firstName.isEmpty ? _s(u['first_name']) : firstName;
         lastName = lastName.isEmpty ? _s(u['last_name']) : lastName;
+
+        final pp = u['provider_profile'];
+        if (pp is Map) {
+          businessName =
+              businessName.isEmpty ? _s(pp['business_name']) : businessName;
+          if (experienceYears <= 0) {
+            experienceYears = _i(pp['experience_years']);
+          }
+        }
       } catch (_) {}
     }
 
-    void putIfMissing(String key, String value) {
-      if (!enriched.containsKey(key) && value.trim().isNotEmpty) {
-        enriched[key] = value.trim();
+    // 3) fallback أخير: providerById
+    if (businessName.isEmpty || experienceYears <= 0) {
+      try {
+        final pid = await _resolveProviderId();
+        final res = await ApiClient.dio.get(ApiConstants.providerById(pid));
+        final root = _expectMap(res.data, fallback: 'تعذر تحميل بيانات المزود.');
+        final data = _extractDataMap(root);
+        final p =
+            _expectMap(data['provider'], fallback: 'تعذر تحميل بيانات المزود.');
+        businessName =
+            businessName.isEmpty ? _s(p['business_name']) : businessName;
+        if (experienceYears <= 0) experienceYears = _i(p['experience_years']);
+      } catch (_) {}
+    }
+
+    void putIfMissing(String key, dynamic value) {
+      if (!enriched.containsKey(key)) {
+        if (value is String) {
+          if (value.trim().isNotEmpty) enriched[key] = value.trim();
+        } else if (value is int) {
+          if (value >= 0) enriched[key] = value;
+        } else if (value != null) {
+          enriched[key] = value;
+        }
       }
     }
 
+    // required by server
     putIfMissing('email', email);
     putIfMissing('phone', phone);
     putIfMissing('first_name', firstName);
     putIfMissing('last_name', lastName);
 
+    // ✅ required by server validation
+    putIfMissing('business_name', businessName);
+    putIfMissing('experience_years', experienceYears);
+
     if (_s(enriched['email']).isEmpty) {
-      throw const ServerException(message: 'تعذر تحديث البروفايل: البريد الإلكتروني غير متوفر محلياً.');
+      throw const ServerException(
+        message: 'تعذر تحديث البروفايل: البريد الإلكتروني غير متوفر محلياً.',
+      );
+    }
+    if (_s(enriched['business_name']).isEmpty) {
+      throw const ServerException(
+        message: 'تعذر تحديث البروفايل: الاسم التجاري غير متوفر.',
+      );
+    }
+    if (_i(enriched['experience_years']) <= 0) {
+      throw const ServerException(
+        message: 'تعذر تحديث البروفايل: سنوات الخبرة غير متوفرة.',
+      );
     }
 
     return enriched;
@@ -272,7 +356,9 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     if (u1 is Map && u1.containsKey('is_active')) return _b(u1['is_active']);
 
     final auth = _cachedAuthUser;
-    if (auth != null && auth.containsKey('is_active')) return _b(auth['is_active']);
+    if (auth != null && auth.containsKey('is_active')) {
+      return _b(auth['is_active']);
+    }
 
     return providerData['instant_booking'] == true;
   }
@@ -291,9 +377,12 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
 
     final displayName = (first.isNotEmpty || last.isNotEmpty)
         ? ('$first $last').trim()
-        : (_s(providerData['business_name']).isNotEmpty ? _s(providerData['business_name']) : 'مزود خدمة');
+        : (_s(providerData['business_name']).isNotEmpty
+            ? _s(providerData['business_name'])
+            : 'مزود خدمة');
 
-    final memberSinceLabel = _memberSinceLabelFromIso(_s(providerData['created_at']));
+    final memberSinceLabel =
+        _memberSinceLabelFromIso(_s(providerData['created_at']));
     final bio = _extractBio(providerData);
 
     final isAvailable = _resolveIsActive(providerData);
@@ -306,15 +395,20 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       final cityName = _s(city is Map ? city['name'] : null);
       final cityEn = _s(city is Map ? city['name_en'] : null);
 
-      if (cityAr.isNotEmpty) locationLabel = cityAr;
-      else if (cityName.isNotEmpty) locationLabel = cityName;
-      else if (cityEn.isNotEmpty) locationLabel = cityEn;
+      if (cityAr.isNotEmpty) {
+        locationLabel = cityAr;
+      } else if (cityName.isNotEmpty) {
+        locationLabel = cityName;
+      } else if (cityEn.isNotEmpty) {
+        locationLabel = cityEn;
+      }
     }
 
     final cityLabel = _cityOnlyLabel(locationLabel);
 
     final hasIdFile = _s(providerData['id_verified_image']).isNotEmpty;
-    final hasLicenseFile = _s(providerData['vocational_license_image']).isNotEmpty;
+    final hasLicenseFile =
+        _s(providerData['vocational_license_image']).isNotEmpty;
     final hasPoliceFile = _s(providerData['police_clearance_image']).isNotEmpty;
 
     final idVerified = _b(providerData['is_id_verified']);
@@ -324,21 +418,37 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     final isFullyVerified = idVerified && licenseVerified;
 
     final missingRequiredDocs = <String>[];
-    if (!idVerified) missingRequiredDocs.add('بطاقة الهوية');
-    if (!licenseVerified) missingRequiredDocs.add('الرخصة المهنية');
+    if (!idVerified) {
+      missingRequiredDocs.add('بطاقة الهوية');
+    }
+    if (!licenseVerified) {
+      missingRequiredDocs.add('الرخصة المهنية');
+    }
 
     final docs = <ProviderDocumentItem>[
       ProviderDocumentItem(
         title: 'الهوية الوطنية',
-        status: _docStatus(verified: idVerified, hasFile: hasIdFile, requiredDoc: true),
+        status: _docStatus(
+          verified: idVerified,
+          hasFile: hasIdFile,
+          requiredDoc: true,
+        ),
       ),
       ProviderDocumentItem(
         title: 'الرخصة التجارية',
-        status: _docStatus(verified: licenseVerified, hasFile: hasLicenseFile, requiredDoc: true),
+        status: _docStatus(
+          verified: licenseVerified,
+          hasFile: hasLicenseFile,
+          requiredDoc: true,
+        ),
       ),
       ProviderDocumentItem(
         title: 'فحص السجل الجنائي',
-        status: _docStatus(verified: policeVerified, hasFile: hasPoliceFile, requiredDoc: false),
+        status: _docStatus(
+          verified: policeVerified,
+          hasFile: hasPoliceFile,
+          requiredDoc: false,
+        ),
       ),
     ];
 
@@ -373,24 +483,40 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
 
         final providerId = await _resolveProviderId();
 
-        final providerFuture = ApiClient.dio.get(ApiConstants.providerById(providerId));
-        final statsFuture = ApiClient.dio.get(ApiConstants.providerDashboardStats).catchError((_) => null);
+        final providerFuture =
+            ApiClient.dio.get(ApiConstants.providerById(providerId));
+
+        // ✅ خلي statsFuture nullable حتى نقدر نرجع null بدون error type
+        final Future<Response<dynamic>?> statsFuture = ApiClient.dio
+            .get(ApiConstants.providerDashboardStats)
+            .then<Response<dynamic>?>((r) => r)
+            .catchError((_) => null);
 
         final providerRes = await providerFuture;
 
-        final root = _expectMap(providerRes.data, fallback: 'تعذر قراءة بيانات مزود الخدمة.');
+        final root = _expectMap(
+          providerRes.data,
+          fallback: 'تعذر قراءة بيانات مزود الخدمة.',
+        );
         final data = _extractDataMap(root);
 
-        final providerData = _expectMap(data['provider'], fallback: 'تعذر تحميل بيانات مزود الخدمة.');
+        final providerData = _expectMap(
+          data['provider'],
+          fallback: 'تعذر تحميل بيانات مزود الخدمة.',
+        );
 
         int totalBookings = _i(providerData['total_bookings']);
         int completedBookings = 0;
         double rating = _d(providerData['rating_avg']);
         int ratingCount = _i(providerData['rating_count']);
 
-        final statsRes = await statsFuture;
+        // ✅ stats ممكن يفشل ويرجع null — وقتها نكمل بالقيم اللي فوق
+        final Response<dynamic>? statsRes = await statsFuture;
         if (statsRes != null) {
-          final statsRoot = _expectMap(statsRes.data, fallback: 'تعذر قراءة إحصائيات المزود.');
+          final statsRoot = _expectMap(
+            statsRes.data,
+            fallback: 'تعذر قراءة إحصائيات المزود.',
+          );
           final statsData = _extractDataMap(statsRoot);
 
           final stats = (statsData['statistics'] is Map)
@@ -414,28 +540,70 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
           categoryLabel: categoryLabel,
         );
       } on DioException catch (e) {
-        throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+        throw ServerException(
+          message: _friendlyDioError(e),
+          statusCode: e.response?.statusCode,
+        );
       }
     });
   }
 
   Future<void> refresh() => load();
 
-  Future<Map<String, dynamic>> _patchProviderProfile(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> _patchProviderProfile(
+    Map<String, dynamic> payload,
+  ) async {
     final enriched = await _enrichPatchPayload(payload);
 
     try {
-      final res = await ApiClient.dio.patch(ApiConstants.providerProfilePatch, data: enriched);
+      final res = await ApiClient.dio.patch(
+        ApiConstants.providerProfilePatch,
+        data: enriched,
+      );
 
       final root = _expectMap(res.data, fallback: 'تعذر تحديث البيانات.');
       final data = _extractDataMap(root);
 
-      final provider = _expectMap(data['provider'], fallback: 'فشل تحديث البروفايل.');
-      if (provider.isEmpty) throw const ServerException(message: 'فشل تحديث البروفايل. حاول مرة أخرى.');
+      final provider =
+          _expectMap(data['provider'], fallback: 'فشل تحديث البروفايل.');
+      if (provider.isEmpty) {
+        throw const ServerException(
+          message: 'فشل تحديث البروفايل. حاول مرة أخرى.',
+        );
+      }
 
       return provider;
     } on DioException catch (e) {
-      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
+      // ✅ ترجمة Validation errors بدل ما تطلع إنجليزي
+      final data = e.response?.data;
+      if (e.response?.statusCode == 400 && data is Map) {
+        final errs = data['errors'];
+        if (errs is List && errs.isNotEmpty) {
+          final lines = <String>[];
+          for (final it in errs) {
+            if (it is Map) {
+              final field = (it['field'] ?? '').toString();
+              final msg = (it['message'] ?? '').toString();
+
+              if (field == 'business_name') {
+                lines.add('الاسم التجاري مطلوب.');
+              } else if (field == 'experience_years') {
+                lines.add('سنوات الخبرة مطلوبة.');
+              } else if (msg.trim().isNotEmpty) {
+                lines.add(msg);
+              }
+            }
+          }
+          if (lines.isNotEmpty) {
+            throw ServerException(message: lines.join('\n'), statusCode: 400);
+          }
+        }
+      }
+
+      throw ServerException(
+        message: _friendlyDioError(e),
+        statusCode: e.response?.statusCode,
+      );
     }
   }
 
@@ -447,16 +615,21 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     state = AsyncData(current.copyWith(isUpdatingAvailability: true));
 
     try {
-      final endpoint = value ? ApiConstants.providerActivate : ApiConstants.providerDeactivate;
+      final endpoint = value
+          ? ApiConstants.providerActivate
+          : ApiConstants.providerDeactivate;
 
       final res = await ApiClient.dio.patch(endpoint);
 
       final root = _expectMap(res.data, fallback: 'تعذر تحديث حالة الحساب.');
       final data = _extractDataMap(root);
 
-      final userMap = (data['user'] is Map) ? Map<String, dynamic>.from(data['user']) : <String, dynamic>{};
+      final userMap = (data['user'] is Map)
+          ? Map<String, dynamic>.from(data['user'])
+          : <String, dynamic>{};
       final serverActiveRaw = userMap['is_active'];
-      final finalActive = (serverActiveRaw == null) ? value : _b(serverActiveRaw);
+      final finalActive =
+          (serverActiveRaw == null) ? value : _b(serverActiveRaw);
 
       final updatedProvider = Map<String, dynamic>.from(current.provider);
       final user = (updatedProvider['user'] is Map)
@@ -477,10 +650,13 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       );
     } on DioException catch (e) {
       state = AsyncData(current.copyWith(isUpdatingAvailability: false));
-      throw ServerException(message: _friendlyDioError(e), statusCode: e.response?.statusCode);
-    } on ServerException catch (e) {
+      throw ServerException(
+        message: _friendlyDioError(e),
+        statusCode: e.response?.statusCode,
+      );
+    } on ServerException {
       state = AsyncData(current.copyWith(isUpdatingAvailability: false));
-      throw e;
+      rethrow;
     } catch (_) {
       state = AsyncData(current.copyWith(isUpdatingAvailability: false));
       throw const ServerException(message: 'حدث خطأ غير متوقع. حاول مرة أخرى.');
@@ -494,21 +670,33 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     final trimmed = newBio.trim();
     final optimisticBio = trimmed.isEmpty ? '—' : trimmed;
 
+    // ✅ لو نفس النص، لا نعمل طلب
+    if (current.bio.trim() == optimisticBio.trim()) return;
+
+    final reqId = ++_bioReqId;
+
+    // optimistic UI
     state = AsyncData(current.copyWith(bio: optimisticBio));
 
     try {
       final provider = await _patchProviderProfile({'bio': trimmed});
+      if (reqId != _bioReqId) return; // تجاهل الردود القديمة
+
       final categoryLabel = await _resolveCategoryLabel(provider);
 
-      state = AsyncData(_buildStateFromProviderSync(
-        providerData: provider,
-        totalBookings: current.totalBookings,
-        completedBookings: current.completedBookings,
-        rating: current.rating,
-        ratingCount: current.ratingCount,
-        categoryLabel: categoryLabel,
-      ));
+      state = AsyncData(
+        _buildStateFromProviderSync(
+          providerData: provider,
+          totalBookings: current.totalBookings,
+          completedBookings: current.completedBookings,
+          rating: current.rating,
+          ratingCount: current.ratingCount,
+          categoryLabel: categoryLabel,
+        ),
+      );
     } catch (e) {
+      if (reqId != _bioReqId) return;
+      // rollback
       state = AsyncData(current);
       rethrow;
     }
@@ -525,14 +713,16 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       final provider = await _patchProviderProfile({'experience_years': safe});
       final categoryLabel = await _resolveCategoryLabel(provider);
 
-      state = AsyncData(_buildStateFromProviderSync(
-        providerData: provider,
-        totalBookings: current.totalBookings,
-        completedBookings: current.completedBookings,
-        rating: current.rating,
-        ratingCount: current.ratingCount,
-        categoryLabel: categoryLabel,
-      ));
+      state = AsyncData(
+        _buildStateFromProviderSync(
+          providerData: provider,
+          totalBookings: current.totalBookings,
+          completedBookings: current.completedBookings,
+          rating: current.rating,
+          ratingCount: current.ratingCount,
+          categoryLabel: categoryLabel,
+        ),
+      );
     } catch (e) {
       state = AsyncData(current);
       rethrow;
@@ -565,7 +755,9 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
     if (e.type == DioExceptionType.cancel) return 'تم إلغاء الطلب.';
 
     // Status codes
-    if (code == 530) return 'يوجد عطل مؤقت في الخادم (530). حاول مرة أخرى بعد قليل.';
+    if (code == 530) {
+      return 'يوجد عطل مؤقت في الخادم (530). حاول مرة أخرى بعد قليل.';
+    }
     if (code == 502 || code == 503 || code == 504) {
       return 'الخدمة غير متاحة حالياً. حاول مرة أخرى بعد قليل.';
     }
@@ -587,7 +779,9 @@ class ProviderProfileController extends StateNotifier<AsyncValue<ProviderProfile
       return msg;
     }
 
-    if (code != null && code >= 500) return 'حدث خطأ من الخادم. حاول مرة أخرى لاحقاً.';
+    if (code != null && code >= 500) {
+      return 'حدث خطأ من الخادم. حاول مرة أخرى لاحقاً.';
+    }
     return 'حدث خطأ بالشبكة، حاول مرة أخرى.';
   }
 }

@@ -9,27 +9,34 @@ class GlassContainer extends StatelessWidget {
 
   const GlassContainer({super.key, required this.child});
 
+  // ✅ cache blur filter (avoid re-creating every build)
+  static final ImageFilter _blur = ImageFilter.blur(sigmaX: 6, sigmaY: 6);
+
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: SizeConfig.padding(all: 20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.lightGreen.withValues(alpha: 0.3),
-                AppColors.primaryGreen.withValues(alpha: 0.1),
-              ],
+    return RepaintBoundary( // ✅ isolate repaints
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(SizeConfig.radius(20)),
+        child: BackdropFilter(
+          filter: _blur,
+          child: Container(
+            padding: SizeConfig.padding(all: 20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  AppColors.lightGreen.withValues(alpha: 0.3),
+                  AppColors.primaryGreen.withValues(alpha: 0.1),
+                ],
+              ),
+              border: Border.all(
+                color: AppColors.white.withValues(alpha: 0.2),
+              ),
+              boxShadow: [AppColors.primaryShadow],
             ),
-            border: Border.all(color: AppColors.white.withValues(alpha: 0.2),),
-            boxShadow: [AppColors.primaryShadow],
+            child: child,
           ),
-          child: child,
         ),
       ),
     );

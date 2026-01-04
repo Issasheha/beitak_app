@@ -13,6 +13,12 @@ class AccountEditState {
   final bool isSavingProfile;
   final bool isChangingPassword;
 
+  // ✅ provider fields (مطلوبة للـ PATCH)
+  final int providerId;
+  final String businessName;
+  final String bio;
+  final int experienceYears;
+
   const AccountEditState({
     required this.fullName,
     required this.email,
@@ -21,6 +27,10 @@ class AccountEditState {
     required this.isPhoneVerified,
     required this.isSavingProfile,
     required this.isChangingPassword,
+    required this.providerId,
+    required this.businessName,
+    required this.bio,
+    required this.experienceYears,
   });
 
   factory AccountEditState.initial() {
@@ -32,6 +42,10 @@ class AccountEditState {
       isPhoneVerified: false,
       isSavingProfile: false,
       isChangingPassword: false,
+      providerId: 0,
+      businessName: '',
+      bio: '',
+      experienceYears: 0,
     );
   }
 
@@ -43,6 +57,10 @@ class AccountEditState {
     bool? isPhoneVerified,
     bool? isSavingProfile,
     bool? isChangingPassword,
+    int? providerId,
+    String? businessName,
+    String? bio,
+    int? experienceYears,
   }) {
     return AccountEditState(
       fullName: fullName ?? this.fullName,
@@ -52,6 +70,10 @@ class AccountEditState {
       isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
       isSavingProfile: isSavingProfile ?? this.isSavingProfile,
       isChangingPassword: isChangingPassword ?? this.isChangingPassword,
+      providerId: providerId ?? this.providerId,
+      businessName: businessName ?? this.businessName,
+      bio: bio ?? this.bio,
+      experienceYears: experienceYears ?? this.experienceYears,
     );
   }
 }

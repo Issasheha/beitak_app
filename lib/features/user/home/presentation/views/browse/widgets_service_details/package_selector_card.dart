@@ -13,7 +13,6 @@ class PackageSelectorCard extends StatelessWidget {
 
   final List<ServicePackage> packages;
 
-  /// null = بدون باقة (الخدمة الأساسية)
   final String? selectedPackageName;
 
   final ValueChanged<String?> onChanged;
@@ -35,7 +34,8 @@ class PackageSelectorCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.local_offer_outlined, color: AppColors.textSecondary),
+              const Icon(Icons.local_offer_outlined,
+                  color: AppColors.textSecondary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -68,9 +68,8 @@ class PackageSelectorCard extends StatelessWidget {
 
           ...packages.map((p) {
             final priceLabel = '${p.price.toStringAsFixed(0)} د.أ';
-            final subtitle = (p.description).trim().isEmpty
-                ? '—'
-                : p.description.trim();
+            final subtitle =
+                (p.description).trim().isEmpty ? '—' : p.description.trim();
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -121,17 +120,23 @@ class _PackageRadioTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColors.lightGreen.withValues(alpha: 0.7) : Colors.white,
+          color: selected
+              ? AppColors.lightGreen.withValues(alpha: 0.7)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? AppColors.lightGreen.withValues(alpha: 0.35) : AppColors.borderLight,
+            color: selected
+                ? AppColors.lightGreen.withValues(alpha: 0.35)
+                : AppColors.borderLight,
           ),
         ),
         child: Row(
           children: [
             Radio<String?>(
               value: value,
+              // ignore: deprecated_member_use
               groupValue: groupValue,
+              // ignore: deprecated_member_use
               onChanged: (v) => onChanged(v),
               activeColor: AppColors.lightGreen,
             ),
@@ -166,11 +171,14 @@ class _PackageRadioTile extends StatelessWidget {
             const SizedBox(width: 10),
             if (priceLabel != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppColors.lightGreen.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.lightGreen.withValues(alpha: 0.20),),
+                  border: Border.all(
+                    color: AppColors.lightGreen.withValues(alpha: 0.20),
+                  ),
                 ),
                 child: Text(
                   priceLabel!,
@@ -181,7 +189,8 @@ class _PackageRadioTile extends StatelessWidget {
                 ),
               )
             else if (isDefault)
-              const Icon(Icons.check_circle_outline, color: AppColors.textSecondary),
+              const Icon(Icons.check_circle_outline,
+                  color: AppColors.textSecondary),
           ],
         ),
       ),

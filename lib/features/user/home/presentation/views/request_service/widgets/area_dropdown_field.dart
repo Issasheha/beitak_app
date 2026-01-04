@@ -46,9 +46,9 @@ class AreaDropdownField extends StatelessWidget {
       return Container(
         padding: SizeConfig.padding(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.05),
+          color: Colors.red.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.red.withOpacity(0.15)),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.15)),
         ),
         child: Row(
           children: [
@@ -79,7 +79,7 @@ class AreaDropdownField extends StatelessWidget {
     }
 
     return DropdownButtonFormField<AreaModel>(
-      value: selected,
+      initialValue: selected,
       isExpanded: true,
       items: areas
           .map(

@@ -10,6 +10,14 @@ class ProviderBookingModel {
   final String bookingTime;
   final double totalPrice;
 
+  /// ✅ NEW: payment
+  final String? paymentStatus; // paid / pending / ...
+  final double? amountPaid; // may be null
+
+  /// ✅ NEW: timestamps (useful later)
+  final String? completedAt;
+  final String? cancelledAt;
+
   /// غالباً جايين slug مثل: amman / abdoun
   final String serviceCity;
   final String? serviceArea;
@@ -21,8 +29,9 @@ class ProviderBookingModel {
   final String? packageSelected;
   final List<String> addOnsSelected;
 
-  final _PersonModel customer;
-  final _ServiceModel service;
+  // ✅ was private types -> make them public to fix analyzer info
+  final PersonModel customer;
+  final ServiceModel service;
 
   const ProviderBookingModel({
     required this.id,
@@ -36,6 +45,12 @@ class ProviderBookingModel {
     required this.durationHours,
     required this.customer,
     required this.service,
+
+    this.paymentStatus,
+    this.amountPaid,
+    this.completedAt,
+    this.cancelledAt,
+
     this.serviceAddress,
     this.customerNotes,
     this.packageSelected,
@@ -48,7 +63,8 @@ class ProviderBookingModel {
         const <String, dynamic>{};
 
     final serviceJson =
-        (json['service'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        (json['service'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{};
 
     final rawAddons = (json['add_ons_selected'] as List?) ?? const [];
     final addons = rawAddons.map((e) => e.toString()).toList();
@@ -58,8 +74,12 @@ class ProviderBookingModel {
       if (s.isEmpty) return null;
 
       final lower = s.toLowerCase();
-      if (lower == 'n/a' || lower == 'na' || lower == 'none' || lower == 'null') return null;
-
+      if (lower == 'n/a' ||
+          lower == 'na' ||
+          lower == 'none' ||
+          lower == 'null') {
+        return null;
+      }
       return s;
     }
 
@@ -70,6 +90,14 @@ class ProviderBookingModel {
       bookingDate: (json['booking_date'] ?? '').toString(),
       bookingTime: (json['booking_time'] ?? '').toString(),
       totalPrice: _asDouble(json['total_price']),
+
+      // ✅ NEW
+      paymentStatus: nullableString(json['payment_status']),
+      amountPaid:
+          json['amount_paid'] == null ? null : _asDouble(json['amount_paid']),
+      completedAt: nullableString(json['completed_at']),
+      cancelledAt: nullableString(json['cancelled_at']),
+
       serviceCity: (json['service_city'] ?? '').toString(),
       serviceArea: nullableString(json['service_area']),
       durationHours: _asDouble(json['duration_hours']),
@@ -77,16 +105,18 @@ class ProviderBookingModel {
       customerNotes: nullableString(json['customer_notes']),
       packageSelected: nullableString(json['package_selected']),
       addOnsSelected: addons,
-      customer: _PersonModel.fromJson(customerJson),
-      service: _ServiceModel.fromJson(serviceJson),
+      customer: PersonModel.fromJson(customerJson),
+      service: ServiceModel.fromJson(serviceJson),
     );
   }
 
   // ---------------- UI helpers ----------------
 
   String get customerName => customer.fullName.isEmpty ? 'عميل' : customer.fullName;
-  String? get customerPhone => customer.phone?.trim().isEmpty == true ? null : customer.phone;
-  String? get customerEmail => customer.email?.trim().isEmpty == true ? null : customer.email;
+  String? get customerPhone =>
+      customer.phone?.trim().isEmpty == true ? null : customer.phone;
+  String? get customerEmail =>
+      customer.email?.trim().isEmpty == true ? null : customer.email;
 
   /// raw (قد تكون cleaning)
   String get serviceName => service.name.isEmpty ? 'خدمة' : service.name;
@@ -103,18 +133,19 @@ class ProviderBookingModel {
     return hasArabic ? raw : raw;
   }
 
-  String? get serviceDescription => service.description.trim().isEmpty ? null : service.description;
+  String? get serviceDescription =>
+      service.description.trim().isEmpty ? null : service.description;
 
-  /// ✅ raw "amman - abdoun" لكن بدون تكرار
-  /// Examples:
-  /// - serviceCity="amman", area="abdoun" => "amman - abdoun"
-  /// - serviceCity="amman - abdoun", area="abdoun" => "amman - abdoun" (بدون تكرار)
   String get locationText {
     String clean(String s) {
       final x = s.trim();
       if (x.isEmpty) return '';
       final lower = x.toLowerCase();
-      if (lower == 'n/a' || lower == 'na' || lower == 'none' || lower == 'null' || lower == '-') {
+      if (lower == 'n/a' ||
+          lower == 'na' ||
+          lower == 'none' ||
+          lower == 'null' ||
+          lower == '-') {
         return '';
       }
       return x;
@@ -123,12 +154,11 @@ class ProviderBookingModel {
     final cityRaw = clean(serviceCity);
     final areaRaw = clean(serviceArea ?? '');
 
-    // اجمع أجزاء city + area (حتى لو city أصلاً فيه "-")
     final parts = <String>[];
 
     void addParts(String s) {
       final tokens = s
-          .split(RegExp(r'\s*-\s*|\s*,\s*|\s*\/\s*')) // يفصل " - " أو "," أو "/"
+          .split(RegExp(r'\s*-\s*|\s*,\s*|\s*\/\s*'))
           .map((e) => clean(e))
           .where((e) => e.isNotEmpty);
       parts.addAll(tokens);
@@ -139,7 +169,6 @@ class ProviderBookingModel {
 
     if (parts.isEmpty) return '—';
 
-    // إزالة التكرار (case-insensitive)
     final seen = <String>{};
     final unique = <String>[];
     for (final p in parts) {
@@ -163,20 +192,20 @@ class ProviderBookingModel {
 }
 
 @immutable
-class _PersonModel {
+class PersonModel {
   final String firstName;
   final String lastName;
   final String? phone;
   final String? email;
 
-  const _PersonModel({
+  const PersonModel({
     required this.firstName,
     required this.lastName,
     this.phone,
     this.email,
   });
 
-  factory _PersonModel.fromJson(Map<String, dynamic> json) => _PersonModel(
+  factory PersonModel.fromJson(Map<String, dynamic> json) => PersonModel(
         firstName: (json['first_name'] ?? '').toString(),
         lastName: (json['last_name'] ?? '').toString(),
         phone: (json['phone'] ?? '').toString(),
@@ -187,16 +216,16 @@ class _PersonModel {
 }
 
 @immutable
-class _ServiceModel {
+class ServiceModel {
   final String name;
   final String description;
 
-  const _ServiceModel({
+  const ServiceModel({
     required this.name,
     required this.description,
   });
 
-  factory _ServiceModel.fromJson(Map<String, dynamic> json) => _ServiceModel(
+  factory ServiceModel.fromJson(Map<String, dynamic> json) => ServiceModel(
         name: (json['name'] ?? '').toString(),
         description: (json['description'] ?? '').toString(),
       );

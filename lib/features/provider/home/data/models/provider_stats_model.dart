@@ -49,12 +49,34 @@ class ProviderStatsModel {
     );
   }
 
+  /// ✅ NEW: copyWith (عشان نقدر نعمل patch من bookings بدون ما نخرب أي UI)
+  ProviderStatsModel copyWith({
+    int? todayBookings,
+    double? rating,
+    int? ratingCount,
+    double? thisMonthEarnings,
+    int? totalBookings,
+    int? completedBookings,
+    int? upcomingBookings,
+    double? totalEarnings,
+  }) {
+    return ProviderStatsModel(
+      todayBookings: todayBookings ?? this.todayBookings,
+      rating: rating ?? this.rating,
+      ratingCount: ratingCount ?? this.ratingCount,
+      thisMonthEarnings: thisMonthEarnings ?? this.thisMonthEarnings,
+      totalBookings: totalBookings ?? this.totalBookings,
+      completedBookings: completedBookings ?? this.completedBookings,
+      upcomingBookings: upcomingBookings ?? this.upcomingBookings,
+      totalEarnings: totalEarnings ?? this.totalEarnings,
+    );
+  }
+
   static const empty = ProviderStatsModel(
     todayBookings: 0,
     rating: 0,
     ratingCount: 0,
     thisMonthEarnings: 0,
-
     totalBookings: 0,
     completedBookings: 0,
     upcomingBookings: 0,

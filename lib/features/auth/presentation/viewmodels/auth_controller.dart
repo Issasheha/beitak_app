@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:beitak_app/core/error/exceptions.dart';
 import 'package:beitak_app/features/auth/domain/repositories/auth_repository.dart';
-import 'package:beitak_app/features/auth/presentation/providers/auth_state.dart';
+import 'package:beitak_app/features/auth/presentation/viewmodels/auth_state.dart';
 
 class AuthController extends StateNotifier<AuthState> {
   final AuthRepository _repo;

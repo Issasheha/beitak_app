@@ -48,6 +48,57 @@ class _ProviderChangePhoneSheetState extends State<ProviderChangePhoneSheet> {
     }
   }
 
+  Future<void> _handleSubmit() async {
+    final raw = _phoneC.text.trim();
+    final normalized = AccountPhoneUtils.normalizeJordanPhone(raw);
+
+    if (normalized == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'رقم غير صحيح. لازم يكون أردني ويبدأ 077/078/079',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final currentNormalized =
+        AccountPhoneUtils.normalizeJordanPhone(widget.currentPhone) ??
+            widget.currentPhone.trim().replaceAll(' ', '');
+
+    if (normalized == currentNormalized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الرقم الجديد نفس الرقم الحالي'),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _runWithLoading(() async {
+        final err = await widget.onRequestOtp(normalized);
+        if (err != null) {
+          throw Exception(err);
+        }
+      });
+
+      if (!mounted) return;
+      // ✅ رجّع الرقم للـView
+      Navigator.pop(context, normalized);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', '').trim(),
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -124,58 +175,7 @@ class _ProviderChangePhoneSheetState extends State<ProviderChangePhoneSheet> {
                       borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
                     ),
                   ),
-                  onPressed: _loading
-                      ? null
-                      : () async {
-                          final raw = _phoneC.text.trim();
-                          final normalized =
-                              AccountPhoneUtils.normalizeJordanPhone(raw);
-
-                          if (normalized == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'رقم غير صحيح. لازم يكون أردني ويبدأ 077/078/079',
-                                ),
-                              ),
-                            );
-                            return;
-                          }
-
-                          final currentNormalized =
-                              AccountPhoneUtils.normalizeJordanPhone(
-                                    widget.currentPhone,
-                                  ) ??
-                                  widget.currentPhone.trim().replaceAll(' ', '');
-
-                          if (normalized == currentNormalized) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('الرقم الجديد نفس الرقم الحالي'),
-                              ),
-                            );
-                            return;
-                          }
-
-                          await _runWithLoading(() async {
-                            final err = await widget.onRequestOtp(normalized);
-                            if (err != null) {
-                              throw Exception(err);
-                            }
-                          }).then((_) {
-                            if (!mounted) return;
-                            Navigator.pop(context, normalized); // ✅ رجّع الرقم للـView
-                          }).catchError((e) {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  e.toString().replaceFirst('Exception: ', ''),
-                                ),
-                              ),
-                            );
-                          });
-                        },
+                  onPressed: _loading ? null : _handleSubmit,
                   child: _loading
                       ? const SizedBox(
                           height: 18,

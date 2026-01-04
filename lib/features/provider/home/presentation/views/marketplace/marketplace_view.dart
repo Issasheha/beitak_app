@@ -264,8 +264,8 @@ class _MarketplaceFourFilterChips extends ConsumerWidget {
 
     String fmt(double v) => v.toStringAsFixed(0);
 
-    if (hasMin && hasMax) return '${fmt(min!)}-${fmt(max!)} د.أ';
-    if (hasMin) return 'من ${fmt(min!)} د.أ';
+    if (hasMin && hasMax) return '${fmt(min)}-${fmt(max)} د.أ';
+    if (hasMin) return 'من ${fmt(min)} د.أ';
     return 'إلى ${fmt(max!)} د.أ';
   }
 

@@ -1,6 +1,6 @@
 class ApiConstants {
   static const String baseUrl =
-      'https://instrument-earned-police-pure.trycloudflare.com';
+      'https://kyle-about-bacterial-islands.trycloudflare.com';
   static const String apiBase = '$baseUrl/api';
 
   // =========================
@@ -35,6 +35,7 @@ class ApiConstants {
   static const String providerDashboardStats = '/providers/dashboard/stats';
   static const String providerProfile = '/providers/profile';
   static const String providerProfilePatch = '/providers/profile';
+  static const userProfilePassword = '/users/profile/password';
 
   static const String providerRequestPhoneOtp =
       '/providers/profile/phone/request-otp';

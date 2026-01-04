@@ -31,6 +31,7 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
   final FocusNode _msgFocus = FocusNode();
   final FocusNode _amountFocus = FocusNode();
 
+  final GlobalKey _starsKey = GlobalKey();
   final GlobalKey _msgKey = GlobalKey();
   final GlobalKey _amountKey = GlobalKey();
 
@@ -51,6 +52,7 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
     final ctx = key.currentContext;
     if (ctx == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       Scrollable.ensureVisible(
         ctx,
         duration: const Duration(milliseconds: 220),
@@ -58,6 +60,85 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
         alignment: 0.15,
       );
     });
+  }
+
+  Future<void> _dialog({
+    required String title,
+    required String message,
+    IconData icon = Icons.info_outline,
+    Color? iconColor,
+    String buttonText = 'تمام',
+  }) async {
+    if (!mounted) return;
+
+    // نخفي الكيبورد عشان الديالوج يطلع واضح
+    FocusScope.of(context).unfocus();
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SizeConfig.radius(16)),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          title: Row(
+            children: [
+              Icon(
+                icon,
+                color: iconColor ?? AppColors.lightGreen,
+                size: SizeConfig.ts(20),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTextStyles.body16.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            message,
+            style: AppTextStyles.body14.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SizeConfig.radius(12)),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  buttonText,
+                  style: AppTextStyles.body14.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -78,17 +159,42 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
   Future<void> _submit() async {
     if (isSubmitting) return;
 
+    // ✅ 1) rating required
     if (rating <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('اختر التقييم أولاً')),
+      _ensureVisible(_starsKey);
+      await _dialog(
+        title: 'تنبيه',
+        message: 'يرجى اختيار التقييم قبل الإرسال',
+        icon: Icons.star_border_rounded,
+        iconColor: const Color(0xFFFFC107),
       );
       return;
     }
 
+    // ✅ 2) amount required
+    final amountText = amountCtrl.text.trim();
     final amount = _parseAmount();
+
+    if (amountText.isEmpty) {
+      _ensureVisible(_amountKey);
+      _amountFocus.requestFocus();
+      await _dialog(
+        title: 'تنبيه',
+        message: 'يرجى إدخال المبلغ المدفوع',
+        icon: Icons.payments_outlined,
+        iconColor: AppColors.lightGreen,
+      );
+      return;
+    }
+
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('أدخل مبلغاً صحيحاً')),
+      _ensureVisible(_amountKey);
+      _amountFocus.requestFocus();
+      await _dialog(
+        title: 'قيمة غير صحيحة',
+        message: 'يرجى إدخال مبلغ صحيح (مثال: 25.0)',
+        icon: Icons.error_outline,
+        iconColor: const Color(0xFFE53935),
       );
       return;
     }
@@ -96,7 +202,9 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
     setState(() => isSubmitting = true);
 
     try {
-      await ref.read(providerHistoryControllerProvider.notifier).submitProviderRating(
+      await ref
+          .read(providerHistoryControllerProvider.notifier)
+          .submitProviderRating(
             bookingId: widget.bookingId,
             providerRating: rating,
             amountPaid: amount,
@@ -104,13 +212,28 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
           );
 
       if (!mounted) return;
+
+      // ✅ نجاح: نعرض Dialog واضح ثم نغلق الشيت
+      await _dialog(
+        title: 'تم الإرسال',
+        message: 'تم إرسال تقييمك بنجاح. شكراً لك!',
+        icon: Icons.check_circle_rounded,
+        iconColor: AppColors.lightGreen,
+        buttonText: 'تم',
+      );
+
+      if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorText(e))),
-      );
       setState(() => isSubmitting = false);
+
+      await _dialog(
+        title: 'تعذر الإرسال',
+        message: errorText(e),
+        icon: Icons.error_outline,
+        iconColor: const Color(0xFFE53935),
+      );
     }
   }
 
@@ -130,7 +253,9 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
             margin: EdgeInsets.only(top: SizeConfig.h(60)),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(SizeConfig.radius(22))),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(SizeConfig.radius(22)),
+              ),
             ),
             child: SafeArea(
               top: false,
@@ -165,7 +290,6 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                       ),
                     ),
 
-                    // ✅ المحتوى قابل للتمرير (حتى ما الكيبورد يغطي)
                     Expanded(
                       child: SingleChildScrollView(
                         controller: sheetScrollController,
@@ -243,7 +367,7 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                             SizeConfig.v(14),
 
                             Text(
-                              'التقييم',
+                              'التقييم *',
                               style: AppTextStyles.body14.copyWith(
                                 fontSize: SizeConfig.ts(13.2),
                                 fontWeight: FontWeight.w900,
@@ -252,20 +376,24 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                             ),
                             SizeConfig.v(8),
 
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(5, (i) {
-                                final idx = i + 1;
-                                final filled = idx <= rating;
-                                return IconButton(
-                                  onPressed: isSubmitting ? null : () => setState(() => rating = idx),
-                                  icon: Icon(
-                                    filled ? Icons.star_rounded : Icons.star_border_rounded,
-                                    size: SizeConfig.ts(34),
-                                    color: filled ? const Color(0xFFFFC107) : AppColors.textSecondary,
-                                  ),
-                                );
-                              }),
+                            Container(
+                              key: _starsKey,
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (i) {
+                                  final idx = i + 1;
+                                  final filled = idx <= rating;
+                                  return IconButton(
+                                    onPressed: isSubmitting ? null : () => setState(() => rating = idx),
+                                    icon: Icon(
+                                      filled ? Icons.star_rounded : Icons.star_border_rounded,
+                                      size: SizeConfig.ts(34),
+                                      color: filled ? const Color(0xFFFFC107) : AppColors.textSecondary,
+                                    ),
+                                  );
+                                }),
+                              ),
                             ),
 
                             SizeConfig.v(10),
@@ -280,7 +408,6 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                             ),
                             SizeConfig.v(6),
 
-                            // ✅ Key + FocusNode لعمل ensureVisible
                             Container(
                               key: _msgKey,
                               child: TextField(
@@ -295,7 +422,7 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                             SizeConfig.v(12),
 
                             Text(
-                              'المبلغ المدفوع (د.أ)',
+                              'المبلغ المدفوع (د.أ) *',
                               style: AppTextStyles.body14.copyWith(
                                 fontSize: SizeConfig.ts(13.2),
                                 fontWeight: FontWeight.w900,
@@ -315,14 +442,12 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                               ),
                             ),
 
-                            // مساحة إضافية لطيفة بالأسفل
                             SizeConfig.v(16),
                           ],
                         ),
                       ),
                     ),
 
-                    // ✅ أزرار ثابتة تحت وتطلع فوق الكيبورد
                     Padding(
                       padding: SizeConfig.padding(horizontal: 16, vertical: 12),
                       child: Row(
@@ -362,7 +487,10 @@ class _ProviderRatingSheetState extends ConsumerState<ProviderRatingSheet> {
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
                                     )
                                   : Text(
                                       'إرسال التقييم',

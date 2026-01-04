@@ -21,7 +21,23 @@ import 'package:image_picker/image_picker.dart';
 class ProviderDocumentsView extends ConsumerWidget {
   const ProviderDocumentsView({super.key});
 
-  static const int _maxFilesPerDoc = DocumentFilePicker.maxFilesPerDoc;
+  int _limitForDoc(ProviderDocument doc) {
+    // الهوية فقط 2، غيرها 1
+    return doc.kind == ProviderDocKind.idCard
+        ? DocumentFilePicker.maxFilesForIdCard
+        : DocumentFilePicker.maxFilesForSingleDoc;
+  }
+
+  String _hintForDoc(ProviderDocument doc) {
+    if (doc.kind == ProviderDocKind.idCard) {
+      return 'الهوية فقط: مسموح رفع ملفين كحد أقصى (صورة أمامية + خلفية) أو PDF.';
+    }
+    return 'هذه الوثيقة: مسموح رفع ملف واحد فقط (صورة أو PDF).';
+  }
+
+  String _pickerTitleForDoc(ProviderDocument doc) {
+    return doc.kind == ProviderDocKind.idCard ? 'حتى 2' : 'ملف واحد';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,7 +86,6 @@ class ProviderDocumentsView extends ConsumerWidget {
                   itemCount: state.docs.length + 1, // + hint box
                   separatorBuilder: (_, __) => SizedBox(height: SizeConfig.h(12)),
                   itemBuilder: (ctx, index) {
-                    // آخر عنصر: hint box
                     if (index == state.docs.length) {
                       return Column(
                         children: [
@@ -110,7 +125,7 @@ class ProviderDocumentsView extends ConsumerWidget {
   ) async {
     if (doc.fileNames.isEmpty) return;
 
-    // لو ملف واحد
+    // ملف واحد
     if (doc.fileNames.length == 1) {
       await ProviderDocViewer.open(
         context: context,
@@ -120,7 +135,7 @@ class ProviderDocumentsView extends ConsumerWidget {
       return;
     }
 
-    // لو أكثر من ملف: اختار
+    // أكثر من ملف (مفروض فقط للهوية)
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -129,8 +144,8 @@ class ProviderDocumentsView extends ConsumerWidget {
           top: Radius.circular(SizeConfig.radius(20)),
         ),
       ),
-      builder: (_) {
-        final files = doc.fileNames.take(_maxFilesPerDoc).toList();
+      builder: (sheetCtx) {
+        final files = doc.fileNames.toList(); // نعرض اللي موجود كله
 
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -182,9 +197,11 @@ class ProviderDocumentsView extends ConsumerWidget {
                       ),
                       trailing: const Icon(Icons.open_in_new),
                       onTap: () async {
-                        Navigator.of(context).pop();
+                        Navigator.of(sheetCtx).pop();
+
+                        if (!sheetCtx.mounted) return;
                         await ProviderDocViewer.open(
-                          context: context,
+                          context: sheetCtx,
                           fileName: name,
                           title: doc.title,
                         );
@@ -209,6 +226,7 @@ class ProviderDocumentsView extends ConsumerWidget {
     ProviderDocument doc,
   ) async {
     final picker = ImagePicker();
+    final maxFiles = _limitForDoc(doc);
 
     await showModalBottomSheet(
       context: context,
@@ -218,7 +236,7 @@ class ProviderDocumentsView extends ConsumerWidget {
           top: Radius.circular(SizeConfig.radius(20)),
         ),
       ),
-      builder: (ctx) {
+      builder: (sheetCtx) {
         return Directionality(
           textDirection: TextDirection.rtl,
           child: SafeArea(
@@ -246,10 +264,12 @@ class ProviderDocumentsView extends ConsumerWidget {
                   ),
                   SizeConfig.v(6),
                   Text(
-                    'يمكنك رفع ملفين كحد أقصى لنفس الوثيقة (PDF أو صور)',
+                    _hintForDoc(doc),
+                    textAlign: TextAlign.center,
                     style: AppTextStyles.caption11.copyWith(
                       fontSize: SizeConfig.ts(11.5),
                       color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   SizeConfig.v(12),
@@ -257,64 +277,81 @@ class ProviderDocumentsView extends ConsumerWidget {
                   ListTile(
                     leading: const Icon(Icons.photo_camera_outlined),
                     title: Text(
-                      'التقاط صور بالكاميرا',
+                      'التقاط بالكاميرا',
                       style: AppTextStyles.body14.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
+                    subtitle: Text(
+                      maxFiles == 2 ? 'يمكنك التقاط صورتين كحد أقصى' : 'صورة واحدة فقط',
+                      style: AppTextStyles.caption11.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     onTap: () async {
-                      Navigator.of(ctx).pop();
+                      Navigator.of(sheetCtx).pop();
+                      if (!sheetCtx.mounted) return;
 
-                      final files =
-                          await DocumentFilePicker.captureUpToTwoFromCamera(
+                      final files = await DocumentFilePicker.captureFromCamera(
                         picker,
-                        askAddMore: () => _askAddMoreImage(context),
+                        maxFiles: maxFiles,
+                        askAddMore: () => maxFiles > 1
+                            ? _askAddMoreImage(sheetCtx)
+                            : Future.value(false),
                       );
+
                       if (files.isEmpty) return;
 
-                      await _uploadFiles(context, ref, doc, files);
+                      await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },
                   ),
 
                   ListTile(
                     leading: const Icon(Icons.photo_library_outlined),
                     title: Text(
-                      'اختيار صور من المعرض (حتى 2)',
+                      'اختيار من المعرض (${_pickerTitleForDoc(doc)})',
                       style: AppTextStyles.body14.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     onTap: () async {
-                      Navigator.of(ctx).pop();
+                      Navigator.of(sheetCtx).pop();
+                      if (!sheetCtx.mounted) return;
 
-                      final files =
-                          await DocumentFilePicker.pickUpToTwoFromGallery(
+                      final files = await DocumentFilePicker.pickFromGallery(
                         picker,
+                        maxFiles: maxFiles,
                       );
+
                       if (files.isEmpty) return;
 
-                      await _uploadFiles(context, ref, doc, files);
+                      await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },
                   ),
 
                   ListTile(
                     leading: const Icon(Icons.insert_drive_file_outlined),
                     title: Text(
-                      'اختيار ملفات (PDF / صور) حتى 2',
+                      'اختيار ملفات (PDF / صور) (${_pickerTitleForDoc(doc)})',
                       style: AppTextStyles.body14.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
                       ),
                     ),
                     onTap: () async {
-                      Navigator.of(ctx).pop();
+                      Navigator.of(sheetCtx).pop();
+                      if (!sheetCtx.mounted) return;
 
-                      final files = await DocumentFilePicker.pickWithFilePicker();
+                      final files = await DocumentFilePicker.pickWithFilePicker(
+                        maxFiles: maxFiles,
+                      );
+
                       if (files.isEmpty) return;
 
-                      await _uploadFiles(context, ref, doc, files);
+                      await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },
                   ),
 
@@ -332,7 +369,7 @@ class ProviderDocumentsView extends ConsumerWidget {
     final res = await showDialog<bool>(
           context: context,
           barrierDismissible: true,
-          builder: (_) => AlertDialog(
+          builder: (ctx) => AlertDialog(
             title: Text(
               'تم التقاط الصورة',
               style: AppTextStyles.body16.copyWith(
@@ -341,14 +378,14 @@ class ProviderDocumentsView extends ConsumerWidget {
               ),
             ),
             content: Text(
-              'هل تريد إضافة صورة أخرى؟ (الحد الأقصى: 2)',
+              'هل تريد إضافة صورة أخرى؟ (الحد الأقصى: 2 للهوية)',
               style: AppTextStyles.body14.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context, false),
+                onPressed: () => Navigator.pop(ctx, false),
                 child: Text(
                   'تم',
                   style: AppTextStyles.body14.copyWith(
@@ -361,7 +398,7 @@ class ProviderDocumentsView extends ConsumerWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.lightGreen,
                 ),
-                onPressed: () => Navigator.pop(context, true),
+                onPressed: () => Navigator.pop(ctx, true),
                 child: Text(
                   'إضافة صورة',
                   style: AppTextStyles.body14.copyWith(
@@ -383,10 +420,15 @@ class ProviderDocumentsView extends ConsumerWidget {
     WidgetRef ref,
     ProviderDocument doc,
     List<File> files,
+    int maxFiles,
   ) async {
-    final trimmed = files.take(_maxFilesPerDoc).toList();
+    final trimmed = files.take(maxFiles).toList();
 
-    final validation = await DocumentFilePicker.validateFiles(trimmed);
+    final validation = await DocumentFilePicker.validateFiles(
+      trimmed,
+      maxFiles: maxFiles,
+    );
+
     if (validation != null) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -412,7 +454,7 @@ class ProviderDocumentsView extends ConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          error == null ? 'تم رفع ${doc.title} بنجاح' : error,
+          error ?? 'تم رفع ${doc.title} بنجاح',
           style: AppTextStyles.body14.copyWith(color: Colors.white),
         ),
       ),

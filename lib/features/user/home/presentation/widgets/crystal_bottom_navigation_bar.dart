@@ -13,10 +13,12 @@ import 'package:go_router/go_router.dart';
 class CrystalBottomNavigationBar extends ConsumerWidget {
   const CrystalBottomNavigationBar({super.key});
 
+  // ✅ cache blur filter (avoid re-creating every build)
+  static final ImageFilter _blur = ImageFilter.blur(sigmaX: 15, sigmaY: 15);
+
   void _onItemTapped(BuildContext context, WidgetRef ref, int index) {
     ref.read(homeBottomNavIndexProvider.notifier).state = index;
 
-    // ✅ بس عنصرين الآن
     if (index == 0) context.go(AppRoutes.home);
     if (index == 1) context.push(AppRoutes.myServices);
   }
@@ -54,7 +56,6 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
         ),
       );
 
-      // ✅ شكل الكليكابل: active = pill background + border
       final child = AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
@@ -95,59 +96,53 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // ✅ الخلفية الزجاجية للـ Bottom Bar
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
-            child: ClipRRect(
-              borderRadius: BorderRadius.vertical(
-                top: Radius.circular(SizeConfig.radius(24)),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.white.withValues(alpha: 0.25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 18,
-                        offset: const Offset(0, -6),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    textDirection: TextDirection.rtl,
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // ✅ يمين: الرئيسية (زي الصورة)
-                      buildNavItem(
-                        icon: Icons.home_outlined,
-                        activeIcon: Icons.home_rounded,
-                        label: "الرئيسية",
-                        index: 0,
-                      ),
-
-                      // ✅ مسافة للدائرة الوسطية
-                      const SizedBox(width: 84),
-
-                      // ✅ يسار: حجوزاتي
-                      buildNavItem(
-                        icon: Icons.calendar_today_outlined,
-                        activeIcon: Icons.calendar_month_rounded,
-                        label: "حجوزاتي",
-                        index: 1,
-                      ),
-                    ],
+            child: RepaintBoundary( // ✅ isolate navbar repaints
+              child: ClipRRect(
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(SizeConfig.radius(24)),
+                ),
+                child: BackdropFilter(
+                  filter: _blur,
+                  child: Container(
+                    height: 76,
+                    decoration: BoxDecoration(
+                      color: AppColors.white.withValues(alpha: 0.25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 18,
+                          offset: const Offset(0, -6),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      textDirection: TextDirection.rtl,
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        buildNavItem(
+                          icon: Icons.home_outlined,
+                          activeIcon: Icons.home_rounded,
+                          label: "الرئيسية",
+                          index: 0,
+                        ),
+                        const SizedBox(width: 84),
+                        buildNavItem(
+                          icon: Icons.calendar_today_outlined,
+                          activeIcon: Icons.calendar_month_rounded,
+                          label: "حجوزاتي",
+                          index: 1,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-
-          // ✅ زر + بالنص (Floating)
           Positioned(
             top: -8,
             left: 0,
@@ -159,6 +154,7 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
                   onTap: () {
                     showModalBottomSheet(
                       context: context,
+                      useRootNavigator: true,
                       isScrollControlled: true,
                       backgroundColor: AppColors.white,
                       shape: RoundedRectangleBorder(
@@ -166,7 +162,9 @@ class CrystalBottomNavigationBar extends ConsumerWidget {
                           top: Radius.circular(SizeConfig.radius(24)),
                         ),
                       ),
-                      builder: (_) => const QuickActionsRow(),
+                      builder: (_) => QuickActionsRow(
+                        parentContext: context,
+                      ),
                     );
                   },
                   borderRadius: BorderRadius.circular(999),

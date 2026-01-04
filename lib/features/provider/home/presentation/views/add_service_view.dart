@@ -24,6 +24,9 @@ class AddServiceView extends ConsumerStatefulWidget {
 class _AddServiceViewState extends ConsumerState<AddServiceView> {
   final _formKey = GlobalKey<FormState>();
 
+  // ✅ Service Name field (فاضي + فقط hint)
+  final _serviceName = TextEditingController();
+
   final _price = TextEditingController();
   final _desc = TextEditingController();
 
@@ -42,16 +45,24 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
   static const int _descMin = 10;
   static const int _descMax = 250;
 
+  // service name limits
+  static const int _nameMin = 2;
+  static const int _nameMax = 50;
+
   @override
   void initState() {
     super.initState();
     _initialCategoryKey = FixedServiceCategories.all.first.key;
     _selectedCategoryKey = _initialCategoryKey;
     _initialPriceType = _priceType;
+
+    // ✅ مهم: لا نعبّي الاسم أبداً (بس hint)
+    _serviceName.clear();
   }
 
   @override
   void dispose() {
+    _serviceName.dispose();
     _price.dispose();
     _desc.dispose();
     super.dispose();
@@ -60,9 +71,11 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
   String _labelFromKey(String k) => FixedServiceCategories.labelArFromKey(k);
 
   bool get _isDirty {
-    return _price.text.trim().isNotEmpty ||
+    return _serviceName.text.trim().isNotEmpty ||
+        _price.text.trim().isNotEmpty ||
         _desc.text.trim().isNotEmpty ||
-        (_selectedCategoryKey != null && _selectedCategoryKey != _initialCategoryKey) ||
+        (_selectedCategoryKey != null &&
+            _selectedCategoryKey != _initialCategoryKey) ||
         _priceType != _initialPriceType;
   }
 
@@ -83,7 +96,8 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.lightGreen),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.lightGreen),
               child: const Text('تجاهل', style: TextStyle(color: Colors.white)),
             ),
           ],
@@ -114,6 +128,16 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
   }
 
   // ===== Validators =====
+
+  String? _validateServiceName(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return 'اسم الخدمة مطلوب';
+    if (s.length < _nameMin) {
+      return 'اسم الخدمة لازم يكون على الأقل $_nameMin أحرف';
+    }
+    if (s.length > _nameMax) return 'اسم الخدمة لازم يكون أقل من $_nameMax حرف';
+    return null;
+  }
 
   String? _validatePrice(String? v) {
     final s = (v ?? '').trim();
@@ -161,12 +185,10 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
     setState(() => _submitting = true);
 
     try {
-      // ✅ هاد أهم جزء: نجيب category_id الحقيقي من /api/categories
       final idMap = await ref.read(categoriesIdMapProvider.future);
       final categoryId = idMap[key];
 
       if (categoryId == null) {
-        // إذا ما لقيناه (مش المفروض يصير عندك) بنوقف عشان ما يرجع null ويخرب accept
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -182,20 +204,25 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
 
       final basePrice = double.tryParse(_price.text.trim()) ?? 0;
 
-      final serviceNameKey = key; // ✅ نخلي name = key ثابت (plumbing, cleaning...)
-      final categoryOther = _labelFromKey(key); // ✅ عربي للعرض
+      final serviceName = _serviceName.text.trim();
+      final categoryOther = _labelFromKey(key);
 
       final data = <String, dynamic>{
-        // ✅ نرسل الاثنين: category_id الحقيقي + category_other
         'category_id': categoryId,
         'category_other': categoryOther,
 
-        'name': serviceNameKey,
+        // ✅ من الحقل فقط (بدون تعبئة مسبقة)
+        'name': key, // internal key ثابت (متوافق مع النظام)
+        'name_ar': serviceName, // ✅ اسم المستخدم العربي
+        'name_en': key, // احتياط
+
         'description': _desc.text.trim(),
+        'description_ar': _desc.text.trim(),
+        'description_en': _desc.text.trim(),
+
         'base_price': basePrice,
         'price_type': _priceType,
 
-        // اختياري: خليهم فاضيين واضح
         'packages': [],
         'add_ons': [],
       };
@@ -244,7 +271,7 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
 
     return PopScope(
       canPop: false,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         await _exit();
       },
@@ -290,25 +317,35 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                             label: Text(
                               c.labelAr,
                               style: AppTextStyles.body14.copyWith(
-                                color: selected ? Colors.white : AppColors.textPrimary,
+                                color: selected
+                                    ? Colors.white
+                                    : AppColors.textPrimary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             selected: selected,
                             selectedColor: AppColors.lightGreen,
-                            onSelected: (v) => setState(() => _selectedCategoryKey = v ? c.key : null),
+                            onSelected: (v) {
+                              setState(() {
+                                _selectedCategoryKey = v ? c.key : null;
+                                // ✅ لا تغيّر اسم الخدمة أبداً (بس hint)
+                              });
+                            },
                           );
                         }).toList(),
                       ),
-
                       SizeConfig.v(18),
-
+                      _label('اسم الخدمة *'),
+                      _input(
+                        _serviceName,
+                        'مثال: تنظيف شقق / صيانة مكيفات...',
+                        validator: _validateServiceName,
+                      ),
+                      SizeConfig.v(18),
                       _label('نوع السعر *'),
                       SizeConfig.v(6),
                       _priceTypeSelector(),
-
                       SizeConfig.v(18),
-
                       _label('السعر (د.أ) *'),
                       _input(
                         _price,
@@ -316,9 +353,7 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                         keyboardType: TextInputType.number,
                         validator: _validatePrice,
                       ),
-
                       SizeConfig.v(18),
-
                       _label('الوصف *'),
                       _input(
                         _desc,
@@ -326,9 +361,7 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                         maxLines: 4,
                         validator: _validateDesc,
                       ),
-
                       SizeConfig.v(26),
-
                       Row(
                         children: [
                           Expanded(
@@ -336,14 +369,16 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                               onPressed: _save,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.lightGreen,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
                                 padding: SizeConfig.padding(vertical: 14),
                               ),
                               child: _submitting
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
                                     )
                                   : Text(
                                       'حفظ الخدمة',
@@ -359,8 +394,10 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
                             child: OutlinedButton(
                               onPressed: _exit,
                               style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                side: const BorderSide(color: AppColors.buttonBackground),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                side: const BorderSide(
+                                    color: AppColors.buttonBackground),
                                 padding: SizeConfig.padding(vertical: 14),
                               ),
                               child: Text(
@@ -450,9 +487,11 @@ class _AddServiceViewState extends ConsumerState<AddServiceView> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
-      validator: validator ?? (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
+      validator:
+          validator ?? (v) => (v == null || v.trim().isEmpty) ? 'مطلوب' : null,
     );
   }
 }
