@@ -44,7 +44,7 @@ import 'package:beitak_app/features/user/notifications/presentation/views/notifi
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beitak_app/core/cache/prefs_cache.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   final refresh = RouterRefreshNotifier();
@@ -151,11 +151,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: true,
     refreshListenable: refresh,
-    redirect: (context, state) async {
-      final prefs = await SharedPreferences.getInstance();
-
-      final seenSplash = prefs.getBool('seen_splash') ?? false;
-      final seenOnboarding = prefs.getBool('seen_onboarding') ?? false;
+    // ✅ P1: Use sync redirect with pre-warmed PrefsCache (no async blocking)
+    redirect: (context, state) {
+      // ✅ Use PrefsCache (pre-warmed in main.dart) - NO async!
+      final seenSplash = PrefsCache.seenSplash;
+      final seenOnboarding = PrefsCache.seenOnboarding;
 
       // الأفضل نستخدم path للمقارنات
       final path = state.uri.path;
@@ -359,8 +359,13 @@ if (auth.status == AuthStatus.authenticated) {
         path: AppRoutes.serviceDetail,
         name: AppRoutes.serviceDetail,
         builder: (context, state) {
-          final item = state.extra as BookingListItem;
-          return ServiceDetailsView(initialItem: item);
+          // ✅ P2: Safe deep-link handling with null/type check and fallback
+          final extra = state.extra;
+          if (extra is BookingListItem) {
+            return ServiceDetailsView(initialItem: extra);
+          }
+          // Fallback: If deep-linked without valid extra, go back to services
+          return const MyServicesView();
         },
       ),
       GoRoute(

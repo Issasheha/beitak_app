@@ -51,6 +51,7 @@ class _BrowseRequestRowState extends State<BrowseRequestRow> {
   }
 
   Future<void> _fetchCities({bool forceRefresh = false}) async {
+    // ✅ P2: Batch setState calls to reduce rebuilds
     setState(() {
       _loadingCities = true;
       _citiesError = null;
@@ -61,21 +62,26 @@ class _BrowseRequestRowState extends State<BrowseRequestRow> {
           ? await LocationsCache.refreshCities()
           : await LocationsCache.getCities();
 
-      setState(() {
-        _cities = parsed;
-        _selectedCity = null; // لا تفرض محافظة
-      });
-
+      // ✅ P2: Single setState for all updates
+      if (mounted) {
+        setState(() {
+          _cities = parsed;
+          _selectedCity = null;
+          _loadingCities = false;
+        });
+      }
       _recalcCanSearch();
     } catch (_) {
-      setState(() {
-        _citiesError = 'تعذر تحميل المحافظات';
-        _cities = const [];
-        _selectedCity = null;
-      });
+      // ✅ P2: Single setState for error state
+      if (mounted) {
+        setState(() {
+          _citiesError = 'تعذر تحميل المحافظات';
+          _cities = const [];
+          _selectedCity = null;
+          _loadingCities = false;
+        });
+      }
       _recalcCanSearch();
-    } finally {
-      if (mounted) setState(() => _loadingCities = false);
     }
   }
 

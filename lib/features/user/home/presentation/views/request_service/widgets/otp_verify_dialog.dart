@@ -52,16 +52,13 @@ class _OtpVerifyDialogState extends State<OtpVerifyDialog> {
       Navigator.of(context).pop(otp);
     } catch (e) {
       if (!mounted) return;
+      // ✅ P2: Batch error + loading update
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '').trim();
         if (_error!.isEmpty) _error = 'فشل التحقق من الرمز';
+        _loading = false;
       });
-    } finally {
-      // ✅ بدون return داخل finally: فقط setState إذا mounted
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+    } 
   }
 
   Future<void> _handleResend() async {
@@ -72,17 +69,18 @@ class _OtpVerifyDialogState extends State<OtpVerifyDialog> {
 
     try {
       await widget.onResend();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '').trim();
-        if (_error!.isEmpty) _error = 'فشل إعادة الإرسال';
-      });
-    } finally {
-      // ✅ نفس الفكرة هنا
+      // ✅ P2: Update loading state on success
       if (mounted) {
         setState(() => _loading = false);
       }
+    } catch (e) {
+      if (!mounted) return;
+      // ✅ P2: Batch error + loading update
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '').trim();
+        if (_error!.isEmpty) _error = 'فشل إعادة الإرسال';
+        _loading = false;
+      });
     }
   }
 

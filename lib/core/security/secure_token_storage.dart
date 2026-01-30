@@ -14,6 +14,9 @@ class SecureTokenStorage {
   static const _tokenKey = 'auth_token';
   static const _sessionKey = 'auth_session';
 
+  /// ✅ P0: Token expiry buffer (refresh 5 minutes before expiry)
+  static const _expiryBufferMinutes = 5;
+
   /// Android: Uses EncryptedSharedPreferences
   /// iOS: Uses Keychain with first_unlock accessibility
   static const _storage = FlutterSecureStorage(
@@ -42,6 +45,85 @@ class SecureTokenStorage {
         debugPrint('SecureTokenStorage.getToken error: $e');
       }
       return null;
+    }
+  }
+
+  /// ✅ P0: Get token only if it's still valid (not expired or near-expiry)
+  static Future<String?> getValidToken() async {
+    try {
+      final session = await getSession();
+      if (session == null) return null;
+
+      final token = session['token']?.toString().trim();
+      if (token == null || token.isEmpty) return null;
+
+      // Check expiry
+      final expiresAtStr = session['expires_at']?.toString();
+      if (expiresAtStr != null && expiresAtStr.isNotEmpty) {
+        final expiresAt = DateTime.tryParse(expiresAtStr);
+        if (expiresAt != null) {
+          const buffer = Duration(minutes: _expiryBufferMinutes);
+          if (DateTime.now().isAfter(expiresAt.subtract(buffer))) {
+            if (kDebugMode) {
+              debugPrint('SecureTokenStorage: Token expired or expiring soon');
+            }
+            return null; // Token expired or will expire soon
+          }
+        }
+      }
+
+      return token;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('SecureTokenStorage.getValidToken error: $e');
+      }
+      return null;
+    }
+  }
+
+  /// ✅ P0: Check if token is expired or will expire within buffer time
+  static Future<bool> isTokenExpired() async {
+    try {
+      final session = await getSession();
+      if (session == null) return true;
+
+      final expiresAtStr = session['expires_at']?.toString();
+      if (expiresAtStr == null || expiresAtStr.isEmpty) {
+        // No expiry info - assume valid but log warning
+        if (kDebugMode) {
+          debugPrint('SecureTokenStorage: No expires_at in session');
+        }
+        return false;
+      }
+
+      final expiresAt = DateTime.tryParse(expiresAtStr);
+      if (expiresAt == null) return false;
+
+      const buffer = Duration(minutes: _expiryBufferMinutes);
+      return DateTime.now().isAfter(expiresAt.subtract(buffer));
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('SecureTokenStorage.isTokenExpired error: $e');
+      }
+      return true; // Assume expired on error
+    }
+  }
+
+  /// ✅ P0: Check if token will expire within specified minutes
+  static Future<bool> isTokenExpiringSoon({int withinMinutes = 10}) async {
+    try {
+      final session = await getSession();
+      if (session == null) return true;
+
+      final expiresAtStr = session['expires_at']?.toString();
+      if (expiresAtStr == null || expiresAtStr.isEmpty) return false;
+
+      final expiresAt = DateTime.tryParse(expiresAtStr);
+      if (expiresAt == null) return false;
+
+      return DateTime.now().isAfter(expiresAt.subtract(Duration(minutes: withinMinutes)));
+    } catch (e) {
+      return true;
     }
   }
 
@@ -92,6 +174,37 @@ class SecureTokenStorage {
     }
   }
 
+  /// ✅ P0: Get session only if token is valid
+  static Future<Map<String, dynamic>?> getValidSession() async {
+    try {
+      final session = await getSession();
+      if (session == null) return null;
+
+      // Check if it's a guest session (invalid for auth)
+      final isGuest = session['is_guest'] == true;
+      if (isGuest) return null;
+
+      // Check token exists
+      final token = session['token']?.toString().trim();
+      if (token == null || token.isEmpty) return null;
+
+      // Check expiry
+      if (await isTokenExpired()) {
+        if (kDebugMode) {
+          debugPrint('SecureTokenStorage: Session expired, returning null');
+        }
+        return null;
+      }
+
+      return session;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('SecureTokenStorage.getValidSession error: $e');
+      }
+      return null;
+    }
+  }
+
   /// Save session data securely
   static Future<void> saveSession(Map<String, dynamic> session) async {
     try {
@@ -104,8 +217,8 @@ class SecureTokenStorage {
     }
   }
 
-  /// Update session with new token while preserving user data
-  static Future<void> updateSessionToken(String token) async {
+  /// Update session with new token and expiry while preserving user data
+  static Future<void> updateSessionToken(String token, {DateTime? expiresAt}) async {
     final t = token.trim();
     if (t.isEmpty) return;
 
@@ -118,6 +231,9 @@ class SecureTokenStorage {
       if (session != null) {
         session['token'] = t;
         session['is_guest'] = false;
+        if (expiresAt != null) {
+          session['expires_at'] = expiresAt.toIso8601String();
+        }
         await saveSession(session);
       }
     } catch (e) {
@@ -154,5 +270,61 @@ class SecureTokenStorage {
   static Future<bool> hasToken() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
+  }
+
+  /// ✅ P0: Check if we have a valid (non-expired) token
+  static Future<bool> hasValidToken() async {
+    final token = await getValidToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  // ========================
+  // ✅ P0: Migration & Cleanup
+  // ========================
+
+  /// Clean up any stale/legacy session data.
+  /// Call this during app startup to ensure clean state.
+  static Future<void> migrateAndCleanup() async {
+    try {
+      final session = await getSession();
+      if (session == null) return;
+
+      bool needsCleanup = false;
+
+      // Check for guest sessions that shouldn't persist
+      if (session['is_guest'] == true) {
+        if (kDebugMode) {
+          debugPrint('SecureTokenStorage: Clearing stale guest session');
+        }
+        needsCleanup = true;
+      }
+
+      // Check for empty/null tokens
+      final token = session['token']?.toString().trim();
+      if (token == null || token.isEmpty) {
+        if (kDebugMode) {
+          debugPrint('SecureTokenStorage: Clearing session with empty token');
+        }
+        needsCleanup = true;
+      }
+
+      // Check for expired sessions
+      if (await isTokenExpired()) {
+        if (kDebugMode) {
+          debugPrint('SecureTokenStorage: Clearing expired session');
+        }
+        needsCleanup = true;
+      }
+
+      if (needsCleanup) {
+        await clearSession();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('SecureTokenStorage.migrateAndCleanup error: $e');
+      }
+      // On error, clear everything to ensure clean state
+      await clearSession();
+    }
   }
 }

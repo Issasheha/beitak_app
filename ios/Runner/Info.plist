@@ -48,5 +48,16 @@
 	<!-- P1: Microphone permission for voice search -->
 	<key>NSMicrophoneUsageDescription</key>
 	<string>بيتك يحتاج صلاحية المايكروفون للبحث الصوتي عن الخدمات</string>
+	<!-- P2: Camera permission for taking photos -->
+	<key>NSCameraUsageDescription</key>
+	<string>بيتك يحتاج صلاحية الكاميرا لالتقاط صور للخدمات والمستندات</string>
+	<!-- P2: Photo Library permission for selecting photos -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>بيتك يحتاج صلاحية الوصول للصور لاختيار صور من المعرض</string>
+	<!-- P2: Location permission for showing nearby services -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>بيتك يحتاج صلاحية الموقع لعرض الخدمات القريبة منك</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>بيتك يحتاج صلاحية الموقع لعرض الخدمات القريبة منك</string>
 </dict>
 </plist>

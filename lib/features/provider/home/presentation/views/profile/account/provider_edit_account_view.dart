@@ -253,7 +253,7 @@ class _ProviderAccountEditViewState
     );
 
     // ✅ الصحيح: قبل استخدام context بعد await
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (error == null) {
       final parts = fullName
@@ -271,10 +271,13 @@ class _ProviderAccountEditViewState
         phone: phone,
       );
 
-      if (!context.mounted) return;
+      if (!mounted) return;
 
       ref.read(providerHomeViewModelProvider).setProviderName('$first $last');
     }
+
+    // ✅ P2: Extra mounted check for linter safety
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(error ?? 'تم حفظ بيانات الحساب بنجاح')),
@@ -292,13 +295,15 @@ class _ProviderAccountEditViewState
       confirmPassword: _confirmPassCtrl.text.trim(),
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (error == null) {
       _currentPassCtrl.clear();
       _newPassCtrl.clear();
       _confirmPassCtrl.clear();
     }
+
+    if (!mounted) return; // ✅ Extra mounted check
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(error ?? 'تم تغيير كلمة المرور بنجاح')),
@@ -328,7 +333,9 @@ class _ProviderAccountEditViewState
       },
     );
 
-    if (!context.mounted || normalizedPhone == null) return;
+    // ✅ P2: Split check for cleaner flow analysis
+    if (!mounted) return;
+    if (normalizedPhone == null) return;
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -357,13 +364,17 @@ class _ProviderAccountEditViewState
       },
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     if (ok == true) {
       _phoneCtrl.text = normalizedPhone;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تم تحديث رقم الهاتف بنجاح')),
-      );
+      
+      // ✅ Extra check
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم تحديث رقم الهاتف بنجاح')),
+        );
+      }
     }
   }
 }

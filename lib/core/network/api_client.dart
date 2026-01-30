@@ -1,9 +1,9 @@
 // lib/core/network/api_client.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart'; // ✅ For kDebugMode
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart'; // ✅ For IOHttpClientAdapter
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -112,27 +112,24 @@ class ApiClient {
 
   // ----------------- Refresh guard -----------------
 
-  static bool _isRefreshing = false;
-  static final List<void Function(String)> _refreshQueue = [];
+  /// ✅ P1: Single-flight refresh using Completer (replaces fragile polling)
+  static Completer<String>? _refreshCompleter;
 
   static bool _isRefreshRequest(RequestOptions o) {
     final p = o.path.toLowerCase();
     return p.contains('/auth/refresh-token');
   }
 
+  /// ✅ P1: Thread-safe single-flight token refresh
+  /// If a refresh is already in progress, all callers wait for the same result.
   static Future<String> _refreshToken() async {
-    // ✅ لو refresh شغال حالياً: استنى نتيجته بدل ما تبعت 10 refresh بنفس الوقت
-    if (_isRefreshing) {
-      String? token;
-      _refreshQueue.add((t) => token = t);
-
-      while (token == null) {
-        await Future.delayed(const Duration(milliseconds: 30));
-      }
-      return token!;
+    // If refresh already in progress, wait for it
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
     }
 
-    _isRefreshing = true;
+    // Start new refresh
+    _refreshCompleter = Completer<String>();
 
     try {
       // ✅ مهم: skipAuth حتى ما يدخل في 401 loop
@@ -142,23 +139,34 @@ class ApiClient {
       );
 
       final data = res.data;
-      final token = (data is Map && data['data'] is Map)
-          ? (data['data']['token']?.toString() ?? '')
-          : '';
+      String token = '';
+      DateTime? expiresAt;
 
-      if (token.trim().isEmpty) {
+      if (data is Map && data['data'] is Map) {
+        final dataMap = data['data'] as Map;
+        token = dataMap['token']?.toString().trim() ?? '';
+        
+        // ✅ P0: Also extract expiry for client-side validation
+        final expiresAtStr = dataMap['expires_at']?.toString();
+        if (expiresAtStr != null) {
+          expiresAt = DateTime.tryParse(expiresAtStr);
+        }
+      }
+
+      if (token.isEmpty) {
         throw Exception('Refresh-token response missing token');
       }
 
-      // ✅ أي طلبات ناطرين refresh نعطيهم نفس التوكن
-      for (final fn in _refreshQueue) {
-        fn(token);
-      }
-      _refreshQueue.clear();
+      // ✅ P0: Save with expiry for client-side expiry validation
+      await TokenProvider.saveToken(token, expiresAt: expiresAt);
 
+      _refreshCompleter!.complete(token);
       return token;
+    } catch (e) {
+      _refreshCompleter!.completeError(e);
+      rethrow;
     } finally {
-      _isRefreshing = false;
+      _refreshCompleter = null;
     }
   }
 

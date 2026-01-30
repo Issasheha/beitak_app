@@ -1,8 +1,8 @@
 // lib/core/cache/session_store.dart
+// ✅ P0: Updated to use SecureTokenStorage (not SharedPreferences) for session data
 
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:beitak_app/core/cache/prefs_cache.dart';
+import 'package:beitak_app/core/security/secure_token_storage.dart';
 
 class SessionSnapshot {
   final bool isLoggedIn;
@@ -23,44 +23,40 @@ class SessionSnapshot {
 /// - هل هو ضيف؟
 /// - ما هو اسمه؟
 /// - ما هو رقم هاتفه؟
+/// 
+/// ✅ P0: Now uses SecureTokenStorage for session data (not SharedPreferences)
 class SessionStore {
-  static const String _sessionKey = 'auth_session';
-  static const String _isLoggedInKey = 'is_logged_in';
-  static const String _isGuestKey = 'is_guest';
-
+  /// ✅ Read session from secure storage (not stale SharedPreferences)
   static Future<SessionSnapshot> read() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
-    final isGuest = prefs.getBool(_isGuestKey) ?? false;
+    // Use PrefsCache for flags (pre-warmed, fast)
+    final isLoggedIn = PrefsCache.isLoggedIn;
+    final isGuest = PrefsCache.isGuest;
 
     String? phone;
     String? fullName;
 
-    final rawSession = prefs.getString(_sessionKey);
-    if (rawSession != null) {
-      try {
-        final decoded = jsonDecode(rawSession);
+    try {
+      // ✅ P0: Read from SecureTokenStorage (not SharedPreferences)
+      final session = await SecureTokenStorage.getSession();
 
-        if (decoded is Map) {
-          final user = decoded['user'];
-          if (user is Map) {
-            final firstName = user['first_name']?.toString() ?? '';
-            final lastName = user['last_name']?.toString() ?? '';
-            final combined = '$firstName $lastName'.trim();
-            if (combined.isNotEmpty) {
-              fullName = combined;
-            }
+      if (session != null) {
+        final user = session['user'];
+        if (user is Map) {
+          final firstName = user['first_name']?.toString() ?? '';
+          final lastName = user['last_name']?.toString() ?? '';
+          final combined = '$firstName $lastName'.trim();
+          if (combined.isNotEmpty) {
+            fullName = combined;
+          }
 
-            final p = user['phone']?.toString();
-            if (p != null && p.trim().isNotEmpty) {
-              phone = p.trim();
-            }
+          final p = user['phone']?.toString();
+          if (p != null && p.trim().isNotEmpty) {
+            phone = p.trim();
           }
         }
-      } catch (_) {
-        // لو فشل الـ decode ما بنكسر التطبيق
       }
+    } catch (_) {
+      // لو فشل الـ decode ما بنكسر التطبيق
     }
 
     return SessionSnapshot(

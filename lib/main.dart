@@ -1,6 +1,8 @@
 // lib/main.dart
+import 'package:beitak_app/core/cache/prefs_cache.dart';
 import 'package:beitak_app/core/constants/colors.dart';
 import 'package:beitak_app/core/routes/app_router.dart'; // فيه goRouterProvider
+import 'package:beitak_app/core/security/secure_token_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ P1: Pre-warm SharedPreferences to avoid blocking I/O in routes
+  await PrefsCache.init();
+
+  // ✅ P0: Clean up stale/expired sessions on startup
+  await SecureTokenStorage.migrateAndCleanup();
 
   await SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.immersiveSticky,

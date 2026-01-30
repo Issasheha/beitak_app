@@ -72,6 +72,7 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
         .whereType<Map<String, dynamic>>()
         .map(CategoryModel.fromJson)
         .toList();
+  }
 
   @override
   Future<List<ServiceModel>> getServices({
@@ -150,6 +151,7 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
         .whereType<Map<String, dynamic>>()
         .map(ServiceModel.fromJson)
         .toList();
+  }
 
   // ===================== Helpers =====================
 

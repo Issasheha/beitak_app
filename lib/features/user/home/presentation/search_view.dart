@@ -263,6 +263,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
 
       if (_selectedCity == null) {
         final ok = await _pickCity();
+        if (!mounted) return; // ✅ Fix async gap
         if (!ok) return;
       }
     }

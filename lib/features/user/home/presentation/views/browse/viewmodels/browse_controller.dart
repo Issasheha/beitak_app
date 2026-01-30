@@ -179,15 +179,46 @@ class BrowseController extends StateNotifier<BrowseState> {
 
   Future<void> refresh() => loadInitial();
 
+  // ✅ P2: Debounce timer to prevent API flooding during typing
+  Timer? _debounceTimer;
+
+  /// ✅ P2: Debounced search - waits 400ms after last keystroke before searching
+  void debouncedSearch(String value) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 400), () {
+      submitSearch(value);
+    });
+  }
+
   void submitSearch(String value) {
+    // Cancel any pending debounce
+    _debounceTimer?.cancel();
+    
+    // Cancel any in-flight requests
+    _requestId++;
+    
     final v = value.trim();
     state = state.copyWith(searchTerm: v);
     unawaited(loadInitial());
   }
 
   void clearSearch() {
+    _debounceTimer?.cancel();
+    _requestId++;
     state = state.copyWith(searchTerm: '');
     unawaited(loadInitial());
+  }
+
+  /// ✅ P1: Cancel pending requests when disposing
+  void cancelPendingRequests() {
+    _debounceTimer?.cancel();
+    _requestId++;
+  }
+
+  @override
+  void dispose() {
+    cancelPendingRequests();
+    super.dispose();
   }
 
   void applyFilters({

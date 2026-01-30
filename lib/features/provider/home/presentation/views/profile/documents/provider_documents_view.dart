@@ -303,6 +303,7 @@ class ProviderDocumentsView extends ConsumerWidget {
                       );
 
                       if (files.isEmpty) return;
+                      if (!sheetCtx.mounted) return; // ✅ Extra check
 
                       await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },
@@ -327,6 +328,7 @@ class ProviderDocumentsView extends ConsumerWidget {
                       );
 
                       if (files.isEmpty) return;
+                      if (!sheetCtx.mounted) return; // ✅ Extra check
 
                       await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },
@@ -350,6 +352,7 @@ class ProviderDocumentsView extends ConsumerWidget {
                       );
 
                       if (files.isEmpty) return;
+                      if (!sheetCtx.mounted) return; // ✅ Extra check
 
                       await _uploadFiles(sheetCtx, ref, doc, files, maxFiles);
                     },

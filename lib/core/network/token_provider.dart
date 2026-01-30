@@ -1,32 +1,20 @@
 // lib/core/network/token_provider.dart
 // P0: Now uses SecureTokenStorage for encrypted token storage
+// P1: Uses PrefsCache for non-blocking UI flag access
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../cache/prefs_cache.dart';
 import '../security/secure_token_storage.dart';
 
 /// Token provider for the ApiClient interceptor.
-/// Uses secure storage for token, but still uses SharedPreferences for UI flags.
+/// Uses secure storage for token, PrefsCache for UI flags.
 class TokenProvider {
   TokenProvider._();
 
-  // Cache SharedPreferences instance to avoid repeated async calls
-  static SharedPreferences? _prefsCache;
-
-  // Keys for non-sensitive flags (OK in SharedPreferences)
-  static const String _isLoggedInKey = 'is_logged_in';
-  static const String _isGuestKey = 'is_guest';
-  static const String _userRoleKey = 'user_role';
-
-  /// Get cached SharedPreferences instance
-  static Future<SharedPreferences> get _prefs async {
-    return _prefsCache ??= await SharedPreferences.getInstance();
-  }
-
-  /// Get token from secure storage
+  /// ✅ P0: Get token only if valid (not expired or near-expiry)
   static Future<String?> getToken() async {
     try {
-      return await SecureTokenStorage.getToken();
+      return await SecureTokenStorage.getValidToken();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('TokenProvider.getToken error: $e');
@@ -35,19 +23,30 @@ class TokenProvider {
     }
   }
 
-  /// Save token to secure storage and update flags
-  static Future<void> saveToken(String token) async {
+  /// Get token regardless of expiry (for refresh flow)
+  static Future<String?> getRawToken() async {
+    try {
+      return await SecureTokenStorage.getToken();
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('TokenProvider.getRawToken error: $e');
+      }
+      return null;
+    }
+  }
+
+  /// ✅ P0: Save token with expiry to secure storage and update flags
+  static Future<void> saveToken(String token, {DateTime? expiresAt}) async {
     final t = token.trim();
     if (t.isEmpty) return;
 
     try {
-      // Save token securely
-      await SecureTokenStorage.updateSessionToken(t);
+      // Save token securely with expiry
+      await SecureTokenStorage.updateSessionToken(t, expiresAt: expiresAt);
 
-      // Update UI flags in SharedPreferences
-      final prefs = await _prefs;
-      await prefs.setBool(_isLoggedInKey, true);
-      await prefs.setBool(_isGuestKey, false);
+      // Update UI flags via PrefsCache (non-blocking)
+      await PrefsCache.setLoggedIn(true);
+      await PrefsCache.setGuest(false);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('TokenProvider.saveToken error: $e');
@@ -61,11 +60,8 @@ class TokenProvider {
       // Clear secure storage
       await SecureTokenStorage.clearSession();
 
-      // Clear UI flags
-      final prefs = await _prefs;
-      await prefs.setBool(_isLoggedInKey, false);
-      await prefs.setBool(_isGuestKey, false);
-      await prefs.remove(_userRoleKey);
+      // Clear UI flags via PrefsCache
+      await PrefsCache.clearSessionFlags();
     } catch (e) {
       if (kDebugMode) {
         debugPrint('TokenProvider.clearToken error: $e');
@@ -73,8 +69,13 @@ class TokenProvider {
     }
   }
 
-  /// Check if user has valid token
+  /// Check if user has valid (non-expired) token
   static Future<bool> hasValidToken() async {
-    return await SecureTokenStorage.hasToken();
+    return await SecureTokenStorage.hasValidToken();
+  }
+
+  /// ✅ P0: Check if token is expired or expiring soon
+  static Future<bool> isTokenExpired() async {
+    return await SecureTokenStorage.isTokenExpired();
   }
 }

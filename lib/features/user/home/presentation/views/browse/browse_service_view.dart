@@ -190,6 +190,13 @@ class _BrowseServiceViewState extends ConsumerState<BrowseServiceView> {
             children: [
               _SearchBar(
                 controller: _searchController,
+                // ✅ P2: Use debounced search on text change (400ms delay)
+                onChanged: (v) {
+                  ref
+                      .read(browseControllerProvider(_args).notifier)
+                      .debouncedSearch(v);
+                },
+                // Submit immediately on keyboard "search" button
                 onSubmitted: (v) {
                   ref
                       .read(browseControllerProvider(_args).notifier)
@@ -271,11 +278,13 @@ class _SearchBar extends StatelessWidget {
     required this.controller,
     required this.onSubmitted,
     required this.onClear,
+    this.onChanged,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
+  final ValueChanged<String>? onChanged; // ✅ P2: For debounced search
 
   @override
   Widget build(BuildContext context) {
@@ -294,6 +303,7 @@ class _SearchBar extends StatelessWidget {
             controller: controller,
             textInputAction: TextInputAction.search,
             onSubmitted: onSubmitted,
+            onChanged: onChanged, // ✅ P2: Fire debounced search on typing
             style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
             decoration: InputDecoration(
               hintText: 'ابحث عن خدمة…',

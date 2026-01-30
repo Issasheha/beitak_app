@@ -1,9 +1,9 @@
 // lib/features/auth/data/datasources/auth_local_datasource.dart
-// P0: Updated to use SecureTokenStorage for token, SharedPreferences for flags
+// P0: Updated to use SecureTokenStorage for token, PrefsCache for flags
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/cache/prefs_cache.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/security/secure_token_storage.dart';
 import '../models/auth_session_model.dart';
@@ -29,25 +29,17 @@ abstract class AuthLocalDataSource {
 }
 
 class AuthLocalDataSourceImpl implements AuthLocalDataSource {
-  // Cache SharedPreferences instance
-  static SharedPreferences? _prefsCache;
+  // ✅ P1: Use PrefsCache (pre-warmed in main.dart) instead of getInstance()
 
   // مفاتيح للمنطق المركزي في AppRouter (non-sensitive, OK in SharedPreferences)
   static const _isLoggedInKey = 'is_logged_in';
   static const _isGuestKey = 'is_guest';
   static const _seenOnboardingKey = 'seen_onboarding';
-
-  // 🔹 مفتاح لتخزين role المستخدم (customer / provider / ..)
   static const _userRoleKey = 'user_role';
-
-  /// Get cached SharedPreferences instance
-  Future<SharedPreferences> get _prefs async {
-    return _prefsCache ??= await SharedPreferences.getInstance();
-  }
 
   @override
   Future<void> cacheAuthSession(AuthSessionModel session) async {
-    final prefs = await _prefs;
+    final prefs = PrefsCache.instance;
 
     // ✅ تنظيف التوكن
     final raw = (session.token ?? '').trim();
@@ -102,7 +94,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<AuthSessionModel?> getCachedAuthSession() async {
-    final prefs = await _prefs;
+    final prefs = PrefsCache.instance;
 
     try {
       // ✅ P0: Get session from secure storage
@@ -161,7 +153,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
 
   @override
   Future<void> clearSession() async {
-    final prefs = await _prefs;
+    final prefs = PrefsCache.instance;
     
     // ✅ P0: Clear secure storage
     await SecureTokenStorage.clearSession();
