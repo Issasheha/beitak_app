@@ -10,15 +10,13 @@ import 'package:beitak_app/features/user/home/presentation/search_widgets/search
 import 'package:beitak_app/features/user/home/presentation/search_widgets/search_recent_store.dart';
 import 'package:beitak_app/features/user/home/presentation/search_widgets/search_sections.dart';
 import 'package:beitak_app/features/user/home/presentation/search_widgets/search_widgets.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:beitak_app/core/network/api_client.dart';
-import 'package:beitak_app/core/network/api_constants.dart';
-
+// ✅ P1: Removed direct Dio/ApiClient imports
 import 'package:beitak_app/features/user/home/presentation/providers/ai_search_providers.dart';
+import 'package:beitak_app/features/user/home/presentation/providers/user_profile_provider.dart';
 
 class SearchView extends ConsumerStatefulWidget {
   const SearchView({super.key});
@@ -123,44 +121,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
     } catch (_) {}
   }
 
+  // ✅ P1: Use UserProfileService instead of direct Dio access (DIP)
   Future<int?> _fetchProfileCityId() async {
-    final Dio dio = ApiClient.dio;
-
-    try {
-      final res = await dio.get(ApiConstants.authProfile);
-      final root = res.data;
-
-      if (root is Map) {
-        final data = root['data'];
-        if (data is Map) {
-          final user = data['user'] ?? data;
-          if (user is Map) {
-            final v = user['city_id'];
-            if (v is num) return v.toInt();
-            return int.tryParse(v?.toString() ?? '');
-          }
-        }
-      }
-    } catch (_) {}
-
-    try {
-      final res = await dio.get(ApiConstants.userProfile);
-      final root = res.data;
-
-      if (root is Map) {
-        final data = root['data'];
-        if (data is Map) {
-          final user = data['user'] ?? data;
-          if (user is Map) {
-            final v = user['city_id'];
-            if (v is num) return v.toInt();
-            return int.tryParse(v?.toString() ?? '');
-          }
-        }
-      }
-    } catch (_) {}
-
-    return null;
+    return UserProfileService.fetchCityId();
   }
 
   void _pushBrowse({required String? categoryKey, required String? q}) {

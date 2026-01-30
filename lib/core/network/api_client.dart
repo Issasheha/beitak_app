@@ -1,13 +1,17 @@
 // lib/core/network/api_client.dart
+// P1: Added retry strategy with exponential backoff for idempotent requests
+// P1: Enhanced error handling and sanitized logging
+// P2: Added compute() support for large JSON payloads
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart'; // ✅ For kDebugMode
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 
+import '../constants/network_constants.dart';
 import 'api_constants.dart';
 import 'token_provider.dart';
 
@@ -20,9 +24,9 @@ class ApiClient {
   // ✅ Dio واحد أساسي
   static final Dio dio = Dio(
     BaseOptions(
-      baseUrl: ApiConstants.apiBase, // http://.../api
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
+      baseUrl: ApiConstants.apiBase,
+      connectTimeout: const Duration(seconds: NetworkConstants.connectTimeoutSeconds),
+      receiveTimeout: const Duration(seconds: NetworkConstants.receiveTimeoutSeconds),
       headers: {
         'Accept': 'application/json',
       },
@@ -66,27 +70,42 @@ class ApiClient {
         },
         onResponse: (response, handler) {
           _logResponse(response);
-
-          // ✅ (اختياري للتأكد): اطبع Set-Cookie لو موجود
-          // final setCookie = response.headers.map['set-cookie'];
-          // if (setCookie != null && setCookie.isNotEmpty) {
-          //   // ignore: avoid_print
-          //   print('│ Set-Cookie: ${setCookie.join(' | ')}');
-          // }
-
           handler.next(response);
         },
         onError: (DioException e, handler) async {
           _logError(e);
 
-          // ✅ فقط 401 => جرّب refresh + retry
-          final status = e.response?.statusCode;
           final req = e.requestOptions;
+          final status = e.response?.statusCode;
 
-          // لا تعمل refresh لو هذا الطلب نفسه هو refresh أو إذا في flag منع
-          final isRefreshCall = _isRefreshRequest(req);
+          // ✅ P1: Check if request is retryable (idempotent methods only)
+          final isRetryable = _isRetryableRequest(req);
+          final retryCount = (req.extra['retryCount'] as int?) ?? 0;
           final alreadyRetried = req.extra['retried'] == true;
+          final isRefreshCall = _isRefreshRequest(req);
 
+          // ✅ P1: Retry for transient errors (timeout, connection, specific status codes)
+          if (isRetryable && 
+              !isRefreshCall && 
+              retryCount < NetworkConstants.maxRetryAttempts &&
+              _isTransientError(e)) {
+            
+            if (kDebugMode) {
+              debugPrint('│ Retrying request (attempt ${retryCount + 1}/${NetworkConstants.maxRetryAttempts})...');
+            }
+
+            try {
+              final response = await _retryWithBackoff(req, retryCount + 1);
+              return handler.resolve(response);
+            } catch (retryError) {
+              // If retry fails, continue with original error handling
+              if (kDebugMode) {
+                debugPrint('│ Retry failed: $retryError');
+              }
+            }
+          }
+
+          // ✅ فقط 401 => جرّب refresh + retry
           if (status == 401 && !isRefreshCall && !alreadyRetried) {
             try {
               final newToken = await _refreshToken();
@@ -110,7 +129,93 @@ class ApiClient {
       ),
     );
 
-  // ----------------- Refresh guard -----------------
+  // ========================
+  // P1: Retry Logic
+  // ========================
+
+  /// Check if the request method is idempotent and safe to retry
+  static bool _isRetryableRequest(RequestOptions options) {
+    final method = options.method.toUpperCase();
+    
+    // Check if method is in the retryable set
+    if (!NetworkConstants.retryableMethods.contains(method)) {
+      return false;
+    }
+    
+    // Check if explicitly marked as non-retryable
+    if (options.extra['noRetry'] == true) {
+      return false;
+    }
+    
+    return true;
+  }
+
+  /// Check if the error is transient and worth retrying
+  static bool _isTransientError(DioException e) {
+    // Connection and timeout errors
+    if (e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.connectionError) {
+      return true;
+    }
+
+    // Specific HTTP status codes that are retryable
+    final status = e.response?.statusCode;
+    if (status != null && NetworkConstants.retryableStatusCodes.contains(status)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Retry with exponential backoff
+  static Future<Response<dynamic>> _retryWithBackoff(
+    RequestOptions original,
+    int attempt,
+  ) async {
+    // Calculate delay: 500ms, 1000ms, 2000ms
+    final delayMs = NetworkConstants.baseRetryDelayMs * (1 << (attempt - 1));
+    await Future.delayed(Duration(milliseconds: delayMs));
+
+    if (kDebugMode) {
+      debugPrint('│ Waited ${delayMs}ms before retry attempt $attempt');
+    }
+
+    final headers = Map<String, dynamic>.from(original.headers);
+    
+    // Refresh token if needed before retry
+    final token = await TokenProvider.getToken();
+    if (token != null && token.trim().isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${token.trim()}';
+    }
+
+    final opts = Options(
+      method: original.method,
+      headers: headers,
+      responseType: original.responseType,
+      contentType: original.contentType,
+      followRedirects: original.followRedirects,
+      validateStatus: original.validateStatus,
+      receiveDataWhenStatusError: original.receiveDataWhenStatusError,
+      extra: Map<String, dynamic>.from(original.extra)
+        ..['retryCount'] = attempt,
+    );
+
+    return dio.request<dynamic>(
+      original.path,
+      data: original.data,
+      queryParameters: original.queryParameters,
+      options: opts,
+      cancelToken: original.cancelToken,
+      onReceiveProgress: original.onReceiveProgress,
+      onSendProgress: original.onSendProgress,
+    );
+  }
+
+  // ========================
+  // Refresh guard
+  // ========================
 
   /// ✅ P1: Single-flight refresh using Completer (replaces fragile polling)
   static Completer<String>? _refreshCompleter;
@@ -135,7 +240,7 @@ class ApiClient {
       // ✅ مهم: skipAuth حتى ما يدخل في 401 loop
       final res = await dio.post(
         '/auth/refresh-token',
-        options: Options(extra: {'skipAuth': true}),
+        options: Options(extra: {'skipAuth': true, 'noRetry': true}),
       );
 
       final data = res.data;
@@ -200,9 +305,29 @@ class ApiClient {
     );
   }
 
-  // ----------------- Logs -----------------
+  // ========================
+  // P2: Compute for large JSON
+  // ========================
 
-  // ----------------- Logs (Guarded for Release) -----------------
+  /// Parse JSON using compute() for large payloads
+  /// Use this for heavy endpoints that return large responses
+  static Future<dynamic> parseJsonInBackground(String jsonString) async {
+    if (jsonString.length < NetworkConstants.computeThresholdBytes) {
+      // Small payload, parse synchronously
+      return jsonDecode(jsonString);
+    }
+
+    // Large payload, use compute isolate
+    return compute(_parseJson, jsonString);
+  }
+
+  static dynamic _parseJson(String jsonString) {
+    return jsonDecode(jsonString);
+  }
+
+  // ========================
+  // Logs (Guarded for Release)
+  // ========================
 
   static void _logRequest(RequestOptions o) {
     // ✅ P0: Disable logs in release mode to prevent token leakage
@@ -216,7 +341,7 @@ class ApiClient {
       headers['Authorization'] = maskedAuth;
     }
 
-    final dataPreview = _previewBody(o.data);
+    final dataPreview = _sanitizeAndPreviewBody(o.data);
 
     // ignore: avoid_print
     print('┌────────────────────────── REQUEST ──────────────────────────');
@@ -266,7 +391,7 @@ class ApiClient {
       headers['Authorization'] = maskedAuth;
     }
 
-    final reqBody = _previewBody(ro.data);
+    final reqBody = _sanitizeAndPreviewBody(ro.data);
     final respBody = _previewResponse(e.response?.data);
 
     // ignore: avoid_print
@@ -308,16 +433,33 @@ class ApiClient {
     return 'Bearer $start...$end';
   }
 
-  static String? _previewBody(dynamic data) {
+  /// ✅ P1: Sanitize sensitive data before logging
+  static String? _sanitizeAndPreviewBody(dynamic data) {
     if (data == null) return null;
 
     if (data is FormData) {
-      final fields = data.fields.map((e) => '${e.key}=${e.value}').toList();
+      // Sanitize form data fields
+      final fields = data.fields.map((e) {
+        final key = e.key.toLowerCase();
+        if (_isSensitiveKey(key)) {
+          return '${e.key}=***';
+        }
+        return '${e.key}=${e.value}';
+      }).toList();
       final files = data.files.map((e) => e.key).toList();
       return 'FormData(fields=${fields.take(20).toList()}, files=$files)';
     }
 
-    if (data is Map || data is List) {
+    if (data is Map) {
+      final sanitized = _sanitizeMap(Map<String, dynamic>.from(data));
+      try {
+        return jsonEncode(sanitized);
+      } catch (_) {
+        return sanitized.toString();
+      }
+    }
+
+    if (data is List) {
       try {
         return jsonEncode(data);
       } catch (_) {
@@ -326,6 +468,40 @@ class ApiClient {
     }
 
     return data.toString();
+  }
+
+  /// Sanitize a map by masking sensitive values
+  static Map<String, dynamic> _sanitizeMap(Map<String, dynamic> data) {
+    final result = <String, dynamic>{};
+    for (final entry in data.entries) {
+      if (_isSensitiveKey(entry.key.toLowerCase())) {
+        result[entry.key] = '***';
+      } else if (entry.value is Map) {
+        result[entry.key] = _sanitizeMap(Map<String, dynamic>.from(entry.value));
+      } else {
+        result[entry.key] = entry.value;
+      }
+    }
+    return result;
+  }
+
+  /// Check if a key name indicates sensitive data
+  static bool _isSensitiveKey(String key) {
+    const sensitiveKeys = {
+      'password',
+      'current_password',
+      'new_password',
+      'confirm_password',
+      'old_password',
+      'token',
+      'access_token',
+      'refresh_token',
+      'secret',
+      'api_key',
+      'apikey',
+      'authorization',
+    };
+    return sensitiveKeys.contains(key);
   }
 
   static String? _previewResponse(dynamic data) {

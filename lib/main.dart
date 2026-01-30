@@ -1,7 +1,10 @@
 // lib/main.dart
+// P1: Added GlobalErrorHandler for centralized error handling
+
 import 'package:beitak_app/core/cache/prefs_cache.dart';
 import 'package:beitak_app/core/constants/colors.dart';
-import 'package:beitak_app/core/routes/app_router.dart'; // فيه goRouterProvider
+import 'package:beitak_app/core/error/global_error_handler.dart';
+import 'package:beitak_app/core/routes/app_router.dart';
 import 'package:beitak_app/core/security/secure_token_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +13,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ✅ P1: Initialize global error handler first
+  GlobalErrorHandler.init();
 
   // ✅ P1: Pre-warm SharedPreferences to avoid blocking I/O in routes
   await PrefsCache.init();
@@ -21,9 +27,12 @@ void main() async {
     SystemUiMode.immersiveSticky,
   );
 
-  runApp(
-    const ProviderScope(
-      child: BeitakApp(),
+  // ✅ P1: Run app in guarded zone to catch async errors
+  GlobalErrorHandler.runGuarded(
+    () => runApp(
+      const ProviderScope(
+        child: BeitakApp(),
+      ),
     ),
   );
 }

@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../constants/network_constants.dart';
+
 /// Secure storage wrapper for authentication tokens and sensitive session data.
 /// Uses encrypted storage (Keychain on iOS, EncryptedSharedPreferences on Android).
 class SecureTokenStorage {
@@ -14,8 +16,8 @@ class SecureTokenStorage {
   static const _tokenKey = 'auth_token';
   static const _sessionKey = 'auth_session';
 
-  /// ✅ P0: Token expiry buffer (refresh 5 minutes before expiry)
-  static const _expiryBufferMinutes = 5;
+  // ✅ P2: Use centralized constant for token expiry buffer
+  static int get _expiryBufferMinutes => NetworkConstants.tokenExpiryBufferMinutes;
 
   /// Android: Uses EncryptedSharedPreferences
   /// iOS: Uses Keychain with first_unlock accessibility
@@ -62,7 +64,7 @@ class SecureTokenStorage {
       if (expiresAtStr != null && expiresAtStr.isNotEmpty) {
         final expiresAt = DateTime.tryParse(expiresAtStr);
         if (expiresAt != null) {
-          const buffer = Duration(minutes: _expiryBufferMinutes);
+          final buffer = Duration(minutes: _expiryBufferMinutes);
           if (DateTime.now().isAfter(expiresAt.subtract(buffer))) {
             if (kDebugMode) {
               debugPrint('SecureTokenStorage: Token expired or expiring soon');
@@ -99,7 +101,7 @@ class SecureTokenStorage {
       final expiresAt = DateTime.tryParse(expiresAtStr);
       if (expiresAt == null) return false;
 
-      const buffer = Duration(minutes: _expiryBufferMinutes);
+      final buffer = Duration(minutes: _expiryBufferMinutes);
       return DateTime.now().isAfter(expiresAt.subtract(buffer));
     } catch (e) {
       if (kDebugMode) {
